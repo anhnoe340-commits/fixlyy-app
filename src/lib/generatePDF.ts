@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import { Profile } from '@/contexts/ProfileContext'
+import type { Profile } from '@/contexts/ProfileContext'
 
 export interface QuoteLine {
   id: number
