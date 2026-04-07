@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfile } from '@/contexts/ProfileContext'
-import { generateQuotePDF, QuoteLine, QuoteData } from '@/lib/generatePDF'
+import { generateQuotePDF, type QuoteLine, type QuoteData } from '@/lib/generatePDF'
 
 type Page = 'calls' | 'contacts' | 'quotes' | 'assistant' | 'hours' | 'settings' | 'subscription'
 
@@ -16,7 +16,7 @@ const ACCENT_COLORS = [
 
 export default function Dashboard() {
   const { user, signOut } = useAuth()
-  const { profile, updateProfile, uploadLogo } = useProfile()
+  const { profile, uploadLogo } = useProfile()
   const [page, setPage] = useState<Page>('calls')
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
@@ -541,7 +541,7 @@ function HoursPage({ accent }: { accent: string }) {
 }
 
 // ── Settings Page ─────────────────────────────────────────────────────────────
-function SettingsPage({ accent, uploadLogo }: { accent: string; uploadLogo: (f: File) => Promise<string | null> }) {
+function SettingsPage({ accent: _accent, uploadLogo: _uploadLogo }: { accent: string; uploadLogo: (f: File) => Promise<string | null> }) {
   const { profile, updateProfile } = useProfile()
   if (!profile) return null
   return (
