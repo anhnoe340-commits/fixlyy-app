@@ -1,9 +1,12 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfile } from '@/contexts/ProfileContext'
 import { generateQuotePDF, type QuoteLine, type QuoteData } from '@/lib/generatePDF'
+import { supabase } from '@/lib/supabase'
 
 type Page = 'calls' | 'contacts' | 'quotes' | 'assistant' | 'hours' | 'settings' | 'subscription'
+
+const BRAND = '#2850c8'
 
 const ACCENT_COLORS = [
   { label: 'Orange Fixlyy', value: '#FF6B35' },
@@ -22,19 +25,21 @@ export default function Dashboard() {
 
   if (!profile) return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="w-6 h-6 border-2 border-[#FF6B35] border-t-transparent rounded-full animate-spin" />
+      <div className="w-6 h-6 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin" />
     </div>
   )
 
-  const accent = profile.quote_color || '#FF6B35'
+  const accent = BRAND
 
   return (
     <div className="flex min-h-screen bg-[#F5F5F4] text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? 'w-56' : 'w-14'} bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-200 fixed top-0 left-0 h-screen z-20`}>
-        <div className="p-4 border-b border-gray-100 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: accent }}>F</div>
-          {sidebarOpen && <span className="font-semibold text-[15px] tracking-tight">Fixlyy</span>}
+        <div className="p-4 border-b border-gray-100 flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0" style={{ background: BRAND }}>
+            {(profile.company_name || 'A')[0].toUpperCase()}
+          </div>
+          {sidebarOpen && <span className="font-semibold text-[14px] tracking-tight truncate">{profile.company_name || 'Mon entreprise'}</span>}
         </div>
         {sidebarOpen && (
           <div className="px-3 py-2 border-b border-gray-100">
@@ -55,7 +60,8 @@ export default function Dashboard() {
           <NavItem icon={<GearIcon />} label="Paramètres" active={page === 'settings'} onClick={() => setPage('settings')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} open={sidebarOpen} accent={accent} />
         </nav>
-        <button onClick={signOut} className="m-3 text-xs text-gray-400 hover:text-red-500 transition-colors text-left px-2 py-1.5">
+        {sidebarOpen && <p className="px-4 pb-1 text-[10px] text-gray-300">Propulsé par Fixlyy</p>}
+        <button onClick={signOut} className="m-3 mt-0 text-xs text-gray-400 hover:text-red-500 transition-colors text-left px-2 py-1.5">
           {sidebarOpen ? 'Se déconnecter' : '→'}
         </button>
       </aside>
@@ -72,7 +78,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs px-3 py-1.5 rounded-md font-medium" style={{ background: accent + '20', color: accent }}>
-              Essai — 7 jours
+              Essai — 14 jours
             </span>
             <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-600">
               {user?.email?.[0]?.toUpperCase()}
@@ -118,87 +124,203 @@ function NavItem({ icon, label, active, onClick, open, accent }: { icon: React.R
 }
 
 // ── Calls Page ────────────────────────────────────────────────────────────────
+type CallRow = { id: string; caller_name: string | null; caller_phone: string | null; summary: string | null; status: string; created_at: string }
+
 function CallsPage({ accent }: { accent: string }) {
-  const calls = [
-    { init: 'JD', name: 'Jean Dupont', detail: 'Fuite sous évier — intervention urgent ce soir', time: '14:32', badge: 'urgent' },
-    { init: 'SM', name: 'Sophie Martin', detail: 'Devis pose robinetterie salle de bain', time: '13:15', badge: 'pending' },
-    { init: 'PL', name: 'Pierre Laurent', detail: 'Panne électrique tableau — rappel 17h', time: '11:08', badge: 'new' },
-    { init: 'AB', name: 'Alice Bernard', detail: 'Installation chauffe-eau — devis envoyé', time: '09:44', badge: 'done' },
-    { init: 'MG', name: 'Marc Girard', detail: 'Entartrage chauffe-eau — intervention demain', time: '08:20', badge: 'done' },
-  ]
+  const { user } = useAuth()
+  const { profile } = useProfile()
+  const [calls, setCalls] = useState<CallRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<string>('all')
+
+  useEffect(() => {
+    if (!user) return
+    setLoading(true)
+    supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(50)
+      .then(({ data }) => { setCalls(data || []); setLoading(false) })
+
+    // Temps réel — nouveaux appels insérés par Vapi
+    const sub = supabase.channel('calls-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
+        payload => setCalls(prev => [payload.new as CallRow, ...prev])
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(sub) }
+  }, [user])
+
+  const updateStatus = async (id: string, status: string) => {
+    setCalls(prev => prev.map(c => c.id === id ? { ...c, status } : c))
+    await supabase.from('calls').update({ status }).eq('id', id)
+  }
+
+  const filtered = filter === 'all' ? calls : calls.filter(c => c.status === filter)
+  const todayCalls = calls.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString())
+  const urgentCount = calls.filter(c => c.status === 'urgent').length
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const initials = (name: string | null) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?'
+
   return (
     <div>
       <PageHeader title="Appels" sub="Gérez et consultez vos appels reçus" />
       <div className="grid grid-cols-4 gap-3 mb-5">
-        <StatCard label="Appels aujourd'hui" value="7" trend="+3 vs hier" trendUp />
-        <StatCard label="Récupérés par Mia" value="5" trend="71 % taux" trendUp />
-        <StatCard label="Devis générés" value="3" trend="ce mois" />
-        <StatCard label="CA récupéré est." value="2 400 €" trend="appels manqués évités" trendUp accent={accent} />
+        <StatCard label="Appels aujourd'hui" value={String(todayCalls.length)} trend="via votre assistante" trendUp={todayCalls.length > 0} />
+        <StatCard label="Appels urgents" value={String(urgentCount)} trend={urgentCount > 0 ? 'à traiter' : 'aucun en attente'} trendUp={false} />
+        <StatCard label="Total appels" value={String(calls.length)} trend="depuis le début" />
+        <StatCard label="Assistante" value={profile?.assistant_name || 'Mia'} trend="active 24/7" trendUp accent={accent} />
       </div>
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Derniers appels et leur statut</p></div>
-          <button className="text-xs border border-gray-200 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors">Filtrer</button>
+          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Cliquez sur un statut pour le modifier</p></div>
+          <div className="flex gap-1.5">
+            {['all', 'new', 'pending', 'urgent', 'done'].map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${filter === f ? 'text-white font-medium' : 'border border-gray-200 hover:bg-gray-50'}`}
+                style={filter === f ? { background: accent } : {}}>
+                {f === 'all' ? 'Tous' : f === 'new' ? 'Nouveau' : f === 'pending' ? 'En attente' : f === 'urgent' ? 'Urgent' : 'Traité'}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="divide-y divide-gray-100">
-          {calls.map((c, i) => (
-            <div key={i} className="flex items-center gap-3 py-2.5">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0" style={{ background: accent + '20', color: accent }}>{c.init}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{c.name}</p>
-                <p className="text-xs text-gray-400 truncate mt-0.5">{c.detail}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-xs text-gray-400">{c.time}</p>
-                <Badge type={c.badge as any} />
-              </div>
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-10">
+            <p className="text-sm text-gray-400">Aucun appel pour l'instant</p>
+            <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici dès que votre assistante aura traité un appel</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filtered.map(c => (
+              <CallRow key={c.id} call={c} accent={accent} onStatusChange={updateStatus} />
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )
 }
 
 // ── Contacts Page ─────────────────────────────────────────────────────────────
+type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string }
+
 function ContactsPage({ accent }: { accent: string }) {
-  const contacts = [
-    { init: 'JD', name: 'Jean Dupont', info: '+33 6 12 34 56 78 · jean.dupont@gmail.com', badge: 'urgent' },
-    { init: 'SM', name: 'Sophie Martin', info: '+33 6 87 65 43 21 · sophie.m@orange.fr', badge: 'pending' },
-    { init: 'PL', name: 'Pierre Laurent', info: '+33 7 11 22 33 44 · p.laurent@sfr.fr', badge: 'new' },
-    { init: 'AB', name: 'Alice Bernard', info: '+33 6 55 44 33 22 · alice.b@free.fr', badge: 'done' },
-  ]
+  const { user } = useAuth()
+  const [contacts, setContacts] = useState<ContactRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ name: '', phone: '', email: '', address: '' })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('contacts').select('*').eq('artisan_id', user.id).order('name')
+      .then(({ data }) => { setContacts(data || []); setLoading(false) })
+  }, [user])
+
+  const filtered = contacts.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.phone || '').includes(search) ||
+    (c.email || '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  const handleAdd = async () => {
+    if (!user || !form.name.trim()) return
+    setSaving(true)
+    const { data } = await supabase.from('contacts').insert({ artisan_id: user.id, ...form }).select().single()
+    if (data) setContacts(prev => [...prev, data as ContactRow].sort((a, b) => a.name.localeCompare(b.name)))
+    setForm({ name: '', phone: '', email: '', address: '' })
+    setAdding(false)
+    setSaving(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    setContacts(prev => prev.filter(c => c.id !== id))
+    await supabase.from('contacts').delete().eq('id', id)
+  }
+
+  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+
   return (
     <div>
       <PageHeader title="Contacts" sub="Gérez votre base de données clients" />
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">Liste des contacts</p>
+          <p className="text-sm font-semibold">Contacts ({contacts.length})</p>
           <div className="flex gap-2">
-            <input placeholder="Rechercher..." className="border border-gray-200 rounded-md px-3 py-1.5 text-xs outline-none focus:border-gray-400 w-44" />
-            <button className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>+ Ajouter</button>
+            <input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
+              className="border border-gray-200 rounded-md px-3 py-1.5 text-xs outline-none focus:border-gray-400 w-44" />
+            <button onClick={() => setAdding(!adding)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+              {adding ? '✕ Annuler' : '+ Ajouter'}
+            </button>
           </div>
         </div>
-        <div className="flex flex-col gap-2">
-          {contacts.map((c, i) => (
-            <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg hover:bg-orange-50 transition-colors cursor-pointer" style={{ ['--hover-bg' as any]: accent + '10' }}>
-              <div className="w-9 h-9 rounded-full border flex items-center justify-center text-sm font-semibold flex-shrink-0" style={{ background: accent + '15', color: accent, borderColor: accent + '30' }}>{c.init}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{c.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{c.info}</p>
-              </div>
-              <Badge type={c.badge as any} />
+
+        {adding && (
+          <div className="mb-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <p className="text-xs font-semibold text-gray-600 mb-3">Nouveau contact</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <input placeholder="Nom *" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
+              <input placeholder="Téléphone" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
+              <input placeholder="Email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
+              <input placeholder="Adresse" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
             </div>
-          ))}
-        </div>
+            <div className="flex justify-end">
+              <button onClick={handleAdd} disabled={saving || !form.name.trim()}
+                className="text-xs px-4 py-1.5 rounded-md text-white font-medium disabled:opacity-50 flex items-center gap-2"
+                style={{ background: accent }}>
+                {saving && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-10">
+            <p className="text-sm text-gray-400">{search ? 'Aucun résultat' : 'Aucun contact encore'}</p>
+            {!search && <p className="text-xs text-gray-300 mt-1">Ajoutez vos clients pour les retrouver rapidement</p>}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {filtered.map(c => (
+              <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors">
+                <div className="w-9 h-9 rounded-full border flex items-center justify-center text-sm font-semibold flex-shrink-0"
+                  style={{ background: accent + '15', color: accent, borderColor: accent + '30' }}>
+                  {initials(c.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{c.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
+                </div>
+                <button onClick={() => handleDelete(c.id)}
+                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm">
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )
 }
 
 // ── Quotes Page ───────────────────────────────────────────────────────────────
-function QuotesPage({ accent }: { accent: string }) {
+function QuotesPage({ accent: _accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
+  const quoteColor = profile?.quote_color || BRAND
   const [lines, setLines] = useState<QuoteLine[]>([
     { id: 1, desig: "Main d'œuvre", qty: 2, unit: 'h', pu: profile?.hourly_rate || 65, vat: profile?.vat_rate || 20 },
     { id: 2, desig: 'Déplacement', qty: 1, unit: 'forfait', pu: profile?.travel_rate || 25, vat: profile?.vat_rate || 20 },
@@ -209,11 +331,24 @@ function QuotesPage({ accent }: { accent: string }) {
   const [clientEmail, setClientEmail] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [quoteObject, setQuoteObject] = useState('')
-  const [notes, setNotes] = useState('Paiement à réception de facture. Garantie main d\'œuvre 3 mois.')
+  const [notes, setNotes] = useState('Devis valable 30 jours. Paiement à réception de facture, sans escompte. En cas de retard, pénalités de 3× le taux légal + indemnité forfaitaire de recouvrement de 40€. Garantie main d\'œuvre 3 mois. TVA non applicable, art. 293B du CGI (si micro-entreprise).')
   const [generating, setGenerating] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendSuccess, setSendSuccess] = useState(false)
+  const [signature, setSignature] = useState<string | null>(null)
+  const [emailModal, setEmailModal] = useState<{ quoteData: ReturnType<typeof buildQuoteData>; subject: string; body: string } | null>(null)
   const [customColor, setCustomColor] = useState(profile?.quote_color || '#FF6B35')
   const fileRef = useRef<HTMLInputElement>(null)
   const { uploadLogo } = useProfile()
+  const { user } = useAuth()
+  const [savedQuotes, setSavedQuotes] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('quotes').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(30)
+      .then(({ data }) => { setSavedQuotes(data || []); setHistoryLoading(false) })
+  }, [user])
 
   const totalHT = lines.reduce((s, l) => s + l.qty * l.pu, 0)
   const totalVAT = lines.reduce((s, l) => s + l.qty * l.pu * l.vat / 100, 0)
@@ -238,18 +373,91 @@ function QuotesPage({ accent }: { accent: string }) {
   const fmt = (d: Date) => d.toLocaleDateString('fr-FR')
   const validUntil = new Date(today); validUntil.setDate(validUntil.getDate() + 30)
 
-  async function handleGeneratePDF() {
-    if (!profile) return
-    setGenerating(true)
-    const quoteData: QuoteData = {
-      number: `D${today.getFullYear()}-001`,
+  function buildQuoteData(): QuoteData {
+    return {
+      number: `D${today.getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date: fmt(today),
       validity: fmt(validUntil),
       object: quoteObject || 'Prestation de services',
       clientName, clientAddress, clientEmail, clientPhone, notes, lines,
+      signature: signature || undefined,
     }
-    await generateQuotePDF(profile, quoteData)
+  }
+
+  async function handleGeneratePDF() {
+    if (!profile) return
+    setGenerating(true)
+    const qd = buildQuoteData()
+    await generateQuotePDF(profile, qd)
+    if (user) {
+      const { data } = await supabase.from('quotes').insert({
+        artisan_id: user.id, number: qd.number, client_name: qd.clientName,
+        client_email: qd.clientEmail, object: qd.object, total_ht: totalHT, total_ttc: totalTTC, status: 'draft',
+      }).select().single()
+      if (data) setSavedQuotes(prev => [data, ...prev])
+    }
     setGenerating(false)
+  }
+
+  function handleOpenEmailModal() {
+    if (!profile || !clientEmail) return
+    const quoteData = buildQuoteData()
+    const fmtEur = (v: number) => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+    const mainLines = lines.filter(l => l.desig).map(l => `  • ${l.desig} — ${fmtEur(l.qty * l.pu)} HT`).join('\n')
+    const subject = `Votre devis ${quoteData.number} — ${profile.company_name}`
+    const body = `Bonjour ${clientName || ''},
+
+Suite à notre échange, veuillez trouver ci-joint votre devis n° ${quoteData.number} concernant : ${quoteData.object}.
+
+Détail de la prestation :
+${mainLines}
+
+Montant total TTC : ${fmtEur(totalTTC)}
+
+Ce devis est valable jusqu'au ${quoteData.validity}. Pour l'accepter, il vous suffit de le signer et de me le renvoyer par email, ou de me le remettre lors de l'intervention.
+
+N'hésitez pas à me contacter si vous avez des questions.
+
+Cordialement,
+${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.email ? '\n' + profile.email : ''}`
+
+    setEmailModal({ quoteData, subject, body })
+  }
+
+  async function handleConfirmSend() {
+    if (!profile || !emailModal) return
+    setSending(true); setSendSuccess(false)
+    try {
+      const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
+      const { data: { session } } = await supabase.auth.getSession()
+      await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/send-quote-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          pdfBase64: base64,
+          clientEmail,
+          clientName,
+          companyName: profile.company_name,
+          quoteNumber: emailModal.quoteData.number,
+          subject: emailModal.subject,
+          body: emailModal.body,
+          artisanEmail: profile.email || undefined,
+        }),
+      })
+      setSendSuccess(true)
+      if (user) {
+        const { data } = await supabase.from('quotes').insert({
+          artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
+          client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
+          total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
+        }).select().single()
+        if (data) setSavedQuotes(prev => [data, ...prev])
+      }
+      setEmailModal(null)
+      setTimeout(() => setSendSuccess(false), 4000)
+    } finally {
+      setSending(false)
+    }
   }
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -315,8 +523,8 @@ function QuotesPage({ accent }: { accent: string }) {
       </div>
 
       {/* Tarifs de base */}
-      <div className="rounded-xl border px-4 py-3 mb-5" style={{ background: accent + '12', borderColor: accent + '30' }}>
-        <p className="text-sm font-semibold mb-3" style={{ color: accent }}>Tarifs de base (pré-remplit les lignes automatiquement)</p>
+      <div className="rounded-xl border px-4 py-3 mb-5" style={{ background: quoteColor + '12', borderColor: quoteColor + '30' }}>
+        <p className="text-sm font-semibold mb-3" style={{ color: quoteColor }}>Tarifs de base (pré-remplit les lignes automatiquement)</p>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Taux horaire main d'œuvre">
             <div className="flex items-center gap-2">
@@ -349,12 +557,18 @@ function QuotesPage({ accent }: { accent: string }) {
             <p className="text-[15px] font-semibold">Nouveau devis</p>
             <p className="text-xs text-gray-400 mt-0.5">Devis n° D{today.getFullYear()}-001</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {sendSuccess && <span className="text-xs text-emerald-600 font-medium">✓ Devis envoyé</span>}
             <button onClick={handleGeneratePDF} disabled={generating}
+              className="text-sm px-4 py-2 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center gap-2">
+              {generating && <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
+              {generating ? 'Génération...' : '↓ Télécharger'}
+            </button>
+            <button onClick={handleOpenEmailModal} disabled={sending || !clientEmail}
               className="text-sm px-4 py-2 rounded-lg text-white font-medium transition-opacity disabled:opacity-50 flex items-center gap-2"
-              style={{ background: accent }}>
-              {generating && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {generating ? 'Génération...' : 'Télécharger PDF'}
+              style={{ background: quoteColor }}>
+              {sending && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {sending ? 'Envoi...' : '✉ Envoyer par email'}
             </button>
           </div>
         </div>
@@ -388,7 +602,7 @@ function QuotesPage({ accent }: { accent: string }) {
           <div className="border border-gray-200 rounded-lg overflow-hidden mb-4">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ background: accent }}>
+                <tr style={{ background: quoteColor }}>
                   {['Désignation', 'Qté', 'Unité', 'P.U. HT', 'TVA', 'Total HT', ''].map((h, i) => (
                     <th key={i} className="text-left text-white text-xs font-semibold px-3 py-2.5" style={{ textAlign: i > 0 && i < 6 ? 'right' : 'left' }}>{h}</th>
                   ))}
@@ -438,21 +652,147 @@ function QuotesPage({ accent }: { accent: string }) {
             <div className="w-72">
               <div className="flex justify-between text-sm text-gray-500 mb-2"><span>Total HT</span><span>{totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span></div>
               <div className="flex justify-between text-sm text-gray-500 mb-3"><span>TVA {lines[0]?.vat ?? 20} %</span><span>{totalVAT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span></div>
-              <div className="flex justify-between items-center text-base font-semibold px-4 py-3 rounded-xl" style={{ background: accent + '15' }}>
+              <div className="flex justify-between items-center text-base font-semibold px-4 py-3 rounded-xl" style={{ background: quoteColor + '15' }}>
                 <span>Total TTC</span>
-                <span style={{ color: accent }}>{totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span>
+                <span style={{ color: quoteColor }}>{totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Signature */}
+          <div className="mt-5 pt-4 border-t border-gray-100">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1.5">Signature de l'artisan</label>
+                <SignaturePad onChange={setSignature} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1.5">Signature du client (sur document imprimé)</label>
+                <div className="h-[80px] border border-dashed border-gray-200 rounded-lg flex items-center justify-center">
+                  <span className="text-xs text-gray-300">Bon pour accord</span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Notes */}
-          <div className="mt-5 pt-4 border-t border-gray-100">
+          <div className="pt-4 border-t border-gray-100">
             <label className="text-xs text-gray-500 block mb-1.5">Notes / Conditions</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400 resize-none" />
           </div>
         </div>
       </div>
+
+      {/* Historique des devis */}
+      <div className="mt-5">
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold">Historique des devis</p>
+              <p className="text-xs text-gray-400 mt-0.5">{savedQuotes.length} devis enregistrés</p>
+            </div>
+          </div>
+          {historyLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : savedQuotes.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-400">Aucun devis enregistré</p>
+              <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici après génération ou envoi</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {savedQuotes.map(q => (
+                <div key={q.id} className="group flex items-center gap-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium font-mono">{q.number}</p>
+                      <QuoteBadge status={q.status} />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{q.client_name || 'Client non renseigné'}{q.object ? ` · ${q.object}` : ''}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold" style={{ color: quoteColor }}>
+                      {q.total_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                    </p>
+                    <p className="text-xs text-gray-400">{new Date(q.created_at).toLocaleDateString('fr-FR')}</p>
+                  </div>
+                  <select value={q.status}
+                    onChange={async e => {
+                      const s = e.target.value
+                      setSavedQuotes(prev => prev.map(sq => sq.id === q.id ? { ...sq, status: s } : sq))
+                      await supabase.from('quotes').update({ status: s }).eq('id', q.id)
+                    }}
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none ml-2 cursor-pointer">
+                    <option value="draft">Brouillon</option>
+                    <option value="sent">Envoyé</option>
+                    <option value="accepted">Accepté</option>
+                    <option value="refused">Refusé</option>
+                  </select>
+                  <button
+                    onClick={async () => {
+                      setSavedQuotes(prev => prev.filter(sq => sq.id !== q.id))
+                      await supabase.from('quotes').delete().eq('id', q.id)
+                    }}
+                    className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Email preview modal */}
+      {emailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEmailModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div>
+                <p className="font-semibold text-[15px]">Aperçu du mail</p>
+                <p className="text-xs text-gray-400 mt-0.5">Relisez et modifiez avant d'envoyer</p>
+              </div>
+              <button onClick={() => setEmailModal(null)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors text-lg">×</button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-4 flex-1 overflow-y-auto flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">À</label>
+                <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50">{clientEmail}</div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Objet</label>
+                <input value={emailModal.subject} onChange={e => setEmailModal(m => m ? { ...m, subject: e.target.value } : m)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+              </div>
+              <div className="flex-1">
+                <label className="text-xs font-medium text-gray-500 block mb-1">Corps du message</label>
+                <textarea value={emailModal.body} onChange={e => setEmailModal(m => m ? { ...m, body: e.target.value } : m)}
+                  rows={12} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400 resize-none font-mono leading-relaxed" />
+              </div>
+              <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                <span>📎</span> Le devis PDF sera automatiquement joint à ce mail.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
+              <button onClick={() => setEmailModal(null)} className="text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">Annuler</button>
+              <button onClick={handleConfirmSend} disabled={sending}
+                className="text-sm px-5 py-2 rounded-lg text-white font-medium transition-opacity disabled:opacity-50 flex items-center gap-2"
+                style={{ background: quoteColor }}>
+                {sending && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {sending ? 'Envoi en cours...' : 'Envoyer le devis'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -496,36 +836,65 @@ function AssistantPage({ accent }: { accent: string }) {
 }
 
 // ── Hours Page ────────────────────────────────────────────────────────────────
+type DaySlot = { day: string; open: string; close: string; on: boolean }
+
+const DEFAULT_HOURS: DaySlot[] = [
+  { day: 'Lundi', open: '08:00', close: '18:00', on: true },
+  { day: 'Mardi', open: '08:00', close: '18:00', on: true },
+  { day: 'Mercredi', open: '08:00', close: '18:00', on: true },
+  { day: 'Jeudi', open: '08:00', close: '18:00', on: true },
+  { day: 'Vendredi', open: '08:00', close: '17:00', on: true },
+  { day: 'Samedi', open: '09:00', close: '12:00', on: false },
+  { day: 'Dimanche', open: '', close: '', on: false },
+]
+
 function HoursPage({ accent }: { accent: string }) {
-  const days = [
-    { day: 'Lundi', open: '08:00', close: '18:00', on: true },
-    { day: 'Mardi', open: '08:00', close: '18:00', on: true },
-    { day: 'Mercredi', open: '08:00', close: '18:00', on: true },
-    { day: 'Jeudi', open: '08:00', close: '18:00', on: true },
-    { day: 'Vendredi', open: '08:00', close: '17:00', on: true },
-    { day: 'Samedi', open: '09:00', close: '12:00', on: false },
-    { day: 'Dimanche', open: '', close: '', on: false },
-  ]
+  const { profile, updateProfile } = useProfile()
+  const [days, setDays] = useState<DaySlot[]>(() => {
+    try { return (profile as any)?.hours ? JSON.parse((profile as any).hours) : DEFAULT_HOURS }
+    catch { return DEFAULT_HOURS }
+  })
+  const [saved, setSaved] = useState(false)
+
+  const updateDay = (i: number, field: keyof DaySlot, value: any) => {
+    setDays(prev => prev.map((d, idx) => idx === i ? { ...d, [field]: value } : d))
+  }
+
+  const handleSave = async () => {
+    await updateProfile({ hours: JSON.stringify(days) } as any)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
   return (
     <div>
       <PageHeader title="Horaires d'ouverture" sub="Configurez les heures de disponibilité de votre assistante" />
       <Card className="mb-4">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold">Plages horaires</p>
-          <button className="text-xs px-3 py-1.5 rounded-md text-white" style={{ background: accent }}>Enregistrer</button>
+          <div className="flex items-center gap-3">
+            {saved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
+            <button onClick={handleSave} className="text-xs px-3 py-1.5 rounded-md text-white" style={{ background: accent }}>Enregistrer</button>
+          </div>
         </div>
         <div className="flex flex-col gap-3">
           {days.map((d, i) => (
-            <div key={i} className="flex items-center gap-4">
+            <div key={d.day} className="flex items-center gap-4">
               <span className="text-sm font-medium w-24">{d.day}</span>
               {d.on
                 ? <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <input defaultValue={d.open} className="w-18 border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
+                    <input type="time" value={d.open} onChange={e => updateDay(i, 'open', e.target.value)}
+                      className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
                     <span>à</span>
-                    <input defaultValue={d.close} className="w-18 border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
+                    <input type="time" value={d.close} onChange={e => updateDay(i, 'close', e.target.value)}
+                      className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
                   </div>
                 : <span className="text-sm text-gray-300 italic">Fermé</span>}
-              <Toggle defaultOn={d.on} accent={accent} className="ml-auto" />
+              <button onClick={() => updateDay(i, 'on', !d.on)}
+                className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ml-auto`}
+                style={{ background: d.on ? accent : '#D1D5DB' }}>
+                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+              </button>
             </div>
           ))}
         </div>
@@ -563,6 +932,8 @@ function SettingsPage({ accent: _accent, uploadLogo: _uploadLogo }: { accent: st
           <Field label="Téléphone"><input value={profile.phone} onChange={e => updateProfile({ phone: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
           <div className="h-3" />
           <Field label="SIRET"><input value={profile.siret} onChange={e => updateProfile({ siret: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
+          <div className="h-3" />
+          <Field label="N° RC Pro (assurance)"><input value={(profile as any).rc_pro || ''} onChange={e => updateProfile({ rc_pro: e.target.value } as any)} placeholder="Ex: MRB-2024-XXXXXXX" className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
         </Card>
         <Card>
           <p className="text-sm font-semibold mb-4">Zone d'intervention</p>
@@ -647,6 +1018,64 @@ function Field({ label, children, className = '' }: { label: string; children: R
   return <div className={className}><label className="text-xs text-gray-500 block mb-1">{label}</label>{children}</div>
 }
 
+function CallRow({ call: c, accent, onStatusChange }: { call: CallRow; accent: string; onStatusChange: (id: string, status: string) => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const initials = (name: string | null) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?'
+  const statusColors = {
+    urgent: { bg: '#FEE2E2', text: '#B91C1C' },
+    pending: { bg: '#FEF3C7', text: '#92400E' },
+    new: { bg: '#DBEAFE', text: '#1D4ED8' },
+    done: { bg: '#D1FAE5', text: '#065F46' },
+  }
+  const sc = statusColors[c.status as keyof typeof statusColors] || statusColors.new
+
+  return (
+    <div className="py-2.5">
+      <div className="flex items-start gap-3 cursor-pointer" onClick={() => c.summary && setExpanded(!expanded)}>
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5" style={{ background: accent + '20', color: accent }}>
+          {initials(c.caller_name)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
+          <p className={`text-xs text-gray-400 mt-0.5 ${expanded ? '' : 'truncate'}`}>
+            {c.summary || 'Résumé non disponible'}
+          </p>
+          {c.summary && (
+            <button className="text-[10px] text-gray-300 hover:text-gray-500 mt-0.5 transition-colors">
+              {expanded ? '▲ Réduire' : '▼ Voir le résumé complet'}
+            </button>
+          )}
+        </div>
+        <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
+          <p className="text-xs text-gray-400">{fmtTime(c.created_at)}</p>
+          <select value={c.status}
+            onChange={e => { e.stopPropagation(); onStatusChange(c.id, e.target.value) }}
+            onClick={e => e.stopPropagation()}
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 cursor-pointer outline-none"
+            style={{ background: sc.bg, color: sc.text }}>
+            <option value="new">Nouveau</option>
+            <option value="pending">En attente</option>
+            <option value="urgent">Urgent</option>
+            <option value="done">Traité</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function QuoteBadge({ status }: { status: string }) {
+  const cfg: Record<string, { bg: string; text: string; label: string }> = {
+    draft: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Brouillon' },
+    sent: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Envoyé' },
+    accepted: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Accepté' },
+    refused: { bg: 'bg-red-100', text: 'text-red-700', label: 'Refusé' },
+  }
+  const s = cfg[status] || cfg.draft
+  return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
+}
+
 function Badge({ type }: { type: 'urgent' | 'pending' | 'new' | 'done' }) {
   const styles: Record<string, string> = {
     urgent: 'bg-red-100 text-red-700',
@@ -672,6 +1101,44 @@ function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: st
     <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
       <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-gray-400 mt-0.5">{desc}</p></div>
       <Toggle defaultOn={defaultOn} accent={accent} className="ml-4" />
+    </div>
+  )
+}
+
+// ── Signature Pad ─────────────────────────────────────────────────────────────
+function SignaturePad({ onChange }: { onChange: (v: string | null) => void }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  const drawing = useRef(false)
+  const getXY = (e: React.MouseEvent | React.TouchEvent) => {
+    const r = ref.current!.getBoundingClientRect()
+    const src = 'touches' in e.nativeEvent ? e.nativeEvent.touches[0] : e.nativeEvent as MouseEvent
+    return [src.clientX - r.left, src.clientY - r.top]
+  }
+  const start = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); drawing.current = true
+    const ctx = ref.current!.getContext('2d')!
+    const [x, y] = getXY(e); ctx.beginPath(); ctx.moveTo(x, y)
+  }
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!drawing.current) return; e.preventDefault()
+    const ctx = ref.current!.getContext('2d')!
+    const [x, y] = getXY(e)
+    ctx.lineTo(x, y); ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke()
+  }
+  const stop = () => { drawing.current = false; onChange(ref.current!.toDataURL()) }
+  const clear = () => {
+    const c = ref.current!; c.getContext('2d')!.clearRect(0, 0, c.width, c.height); onChange(null)
+  }
+  useEffect(() => {
+    const c = ref.current!
+    c.width = c.offsetWidth; c.height = 80
+  }, [])
+  return (
+    <div>
+      <canvas ref={ref} className="border border-gray-200 rounded-lg cursor-crosshair w-full touch-none" style={{ height: 80 }}
+        onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}
+        onTouchStart={start} onTouchMove={draw} onTouchEnd={stop} />
+      <button type="button" onClick={clear} className="text-[10px] text-gray-400 hover:text-gray-600 mt-1">Effacer</button>
     </div>
   )
 }
