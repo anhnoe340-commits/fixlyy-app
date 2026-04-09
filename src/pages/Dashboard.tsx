@@ -157,9 +157,6 @@ function CallsPage({ accent }: { accent: string }) {
   const filtered = filter === 'all' ? calls : calls.filter(c => c.status === filter)
   const todayCalls = calls.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString())
   const urgentCount = calls.filter(c => c.status === 'urgent').length
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-  const initials = (name: string | null) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?'
-
   return (
     <div>
       <PageHeader title="Appels" sub="Gérez et consultez vos appels reçus" />
@@ -335,7 +332,7 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
   const [generating, setGenerating] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendSuccess, setSendSuccess] = useState(false)
-  const [signature, setSignature] = useState<string | null>(null)
+  const [_signature, setSignature] = useState<string | null>(null)
   const [emailModal, setEmailModal] = useState<{ quoteData: ReturnType<typeof buildQuoteData>; subject: string; body: string } | null>(null)
   const [customColor, setCustomColor] = useState(profile?.quote_color || '#FF6B35')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -380,7 +377,6 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
       validity: fmt(validUntil),
       object: quoteObject || 'Prestation de services',
       clientName, clientAddress, clientEmail, clientPhone, notes, lines,
-      signature: signature || undefined,
     }
   }
 

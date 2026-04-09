@@ -34,7 +34,7 @@ function fmtEur(v: number): string {
   return v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 }
 
-export async function generateQuotePDF(profile: Profile, quote: QuoteData) {
+export async function generateQuotePDF(profile: Profile, quote: QuoteData, returnBase64?: boolean): Promise<string | void> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const W = 210
   const margin = 15
@@ -266,6 +266,9 @@ export async function generateQuotePDF(profile: Profile, quote: QuoteData) {
     W / 2, pageH - 9, { align: 'center' }
   )
 
+  if (returnBase64) {
+    return doc.output('datauristring').split(',')[1]
+  }
   doc.save(`devis-${quote.number}.pdf`)
 }
 
