@@ -39,11 +39,10 @@ function AppContent() {
       return
     }
 
-    // Vérifier si le profil est complet + assistant provisionné
+    // Vérifier si le profil est complet
     supabase.from('profiles').select('id, company_name, vapi_assistant_id').eq('id', user.id).single()
       .then(({ data }) => {
         if (!data?.company_name) setStatus('onboarding')
-        else if (!data?.vapi_assistant_id) setStatus('provisioning')
         else setStatus('dashboard')
       })
   }, [user])

@@ -143,10 +143,14 @@ export default function Onboarding() {
           <div className="mt-6 p-4 bg-red-50 rounded-xl border border-red-100">
             <p className="text-sm text-red-700 font-medium mb-1">Une erreur est survenue</p>
             <p className="text-xs text-red-500">{error}</p>
-            <button onClick={() => window.location.reload()}
-              className="mt-3 text-xs text-red-600 underline">
-              Continuer quand même →
-            </button>
+            <div className="flex gap-3 mt-3">
+              <button onClick={run} className="text-xs text-red-600 underline">
+                Réessayer
+              </button>
+              <button onClick={() => window.location.reload()} className="text-xs text-gray-500 underline">
+                Accéder au dashboard →
+              </button>
+            </div>
           </div>
         )}
       </div>
