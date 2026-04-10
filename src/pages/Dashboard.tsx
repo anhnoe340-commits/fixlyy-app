@@ -359,7 +359,8 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
   const [generating, setGenerating] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendSuccess, setSendSuccess] = useState(false)
-  const [_signature, setSignature] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [signature, setSignature] = useState<string | null>(null)
   const [emailModal, setEmailModal] = useState<{ quoteData: ReturnType<typeof buildQuoteData>; subject: string; body: string } | null>(null)
   const [customColor, setCustomColor] = useState(profile?.quote_color || '#FF6B35')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -404,6 +405,7 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
       validity: fmt(validUntil),
       object: quoteObject || 'Prestation de services',
       clientName, clientAddress, clientEmail, clientPhone, notes, lines,
+      signatureDataUrl: signature || undefined,
     }
   }
 
@@ -449,7 +451,8 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
 
   async function handleConfirmSend() {
     if (!profile || !emailModal) return
-    setSending(true); setSendSuccess(false)
+    setSending(true); setSendSuccess(false); setSendError(null)
+    let insertedQuoteId: string | null = null
     try {
       const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
       const { data: { session } } = await supabase.auth.getSession()
@@ -465,11 +468,12 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
         if (data) {
           setSavedQuotes(prev => [data, ...prev])
           quoteToken = data.quote_token
+          insertedQuoteId = data.id
         }
       }
 
       // Envoyer l'email avec le lien d'acceptation
-      await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/send-quote-email', {
+      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/send-quote-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
         body: JSON.stringify({
@@ -485,9 +489,20 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
         }),
       })
 
+      if (!res.ok) {
+        const errText = await res.text().catch(() => `Erreur HTTP ${res.status}`)
+        throw new Error(errText || `Erreur HTTP ${res.status}`)
+      }
+
       setSendSuccess(true)
       setEmailModal(null)
       setTimeout(() => setSendSuccess(false), 4000)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erreur inconnue lors de l'envoi"
+      setSendError(msg)
+      if (insertedQuoteId) {
+        setSavedQuotes(prev => prev.map(sq => sq.id === insertedQuoteId ? { ...sq, status: 'error' } : sq))
+      }
     } finally {
       setSending(false)
     }
@@ -592,6 +607,7 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
           </div>
           <div className="flex gap-2 items-center">
             {sendSuccess && <span className="text-xs text-emerald-600 font-medium">✓ Devis envoyé</span>}
+            {sendError && <span className="text-xs text-red-600 font-medium">✗ {sendError}</span>}
             <button onClick={handleGeneratePDF} disabled={generating}
               className="text-sm px-4 py-2 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center gap-2">
               {generating && <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
@@ -738,40 +754,51 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
           ) : (
             <div className="divide-y divide-gray-100">
               {savedQuotes.map(q => (
-                <div key={q.id} className="group flex items-center gap-3 py-2.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium font-mono">{q.number}</p>
-                      <QuoteBadge status={q.status} />
+                <div key={q.id} className="group py-3 border-b border-gray-100 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium font-mono">{q.number}</p>
+                        <QuoteBadge status={q.status} />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{q.client_name || 'Client non renseigné'}{q.object ? ` · ${q.object}` : ''}</p>
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{q.client_name || 'Client non renseigné'}{q.object ? ` · ${q.object}` : ''}</p>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold" style={{ color: quoteColor }}>
+                        {q.total_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                      </p>
+                      {q.status !== 'draft' && q.updated_at ? (
+                        <p className="text-xs text-gray-400">
+                          Envoyé le {new Date(q.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400">{new Date(q.created_at).toLocaleDateString('fr-FR')}</p>
+                      )}
+                    </div>
+                    <select value={q.status}
+                      onChange={async e => {
+                        const s = e.target.value
+                        setSavedQuotes(prev => prev.map(sq => sq.id === q.id ? { ...sq, status: s } : sq))
+                        await supabase.from('quotes').update({ status: s }).eq('id', q.id)
+                      }}
+                      className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none ml-2 cursor-pointer">
+                      <option value="draft">Brouillon</option>
+                      <option value="sent">Envoyé</option>
+                      <option value="accepted">Accepté</option>
+                      <option value="refused">Refusé</option>
+                    </select>
+                    <button
+                      onClick={async () => {
+                        setSavedQuotes(prev => prev.filter(sq => sq.id !== q.id))
+                        await supabase.from('quotes').delete().eq('id', q.id)
+                      }}
+                      className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">
+                      ×
+                    </button>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold" style={{ color: quoteColor }}>
-                      {q.total_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
-                    </p>
-                    <p className="text-xs text-gray-400">{new Date(q.created_at).toLocaleDateString('fr-FR')}</p>
+                  <div className="mt-2 ml-0.5">
+                    <QuoteTimeline status={q.status} />
                   </div>
-                  <select value={q.status}
-                    onChange={async e => {
-                      const s = e.target.value
-                      setSavedQuotes(prev => prev.map(sq => sq.id === q.id ? { ...sq, status: s } : sq))
-                      await supabase.from('quotes').update({ status: s }).eq('id', q.id)
-                    }}
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none ml-2 cursor-pointer">
-                    <option value="draft">Brouillon</option>
-                    <option value="sent">Envoyé</option>
-                    <option value="accepted">Accepté</option>
-                    <option value="refused">Refusé</option>
-                  </select>
-                  <button
-                    onClick={async () => {
-                      setSavedQuotes(prev => prev.filter(sq => sq.id !== q.id))
-                      await supabase.from('quotes').delete().eq('id', q.id)
-                    }}
-                    className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">
-                    ×
-                  </button>
                 </div>
               ))}
             </div>
@@ -1242,13 +1269,59 @@ function CallRow({ call: c, accent, onStatusChange }: { call: CallRow; accent: s
 
 function QuoteBadge({ status }: { status: string }) {
   const cfg: Record<string, { bg: string; text: string; label: string }> = {
-    draft: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Brouillon' },
-    sent: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Envoyé' },
-    accepted: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Accepté' },
-    refused: { bg: 'bg-red-100', text: 'text-red-700', label: 'Refusé' },
+    draft:    { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'Brouillon' },
+    sent:     { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Envoyé' },
+    accepted: { bg: 'bg-emerald-100',text: 'text-emerald-700',label: 'Accepté' },
+    refused:  { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Refusé' },
+    error:    { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Erreur envoi' },
   }
   const s = cfg[status] || cfg.draft
   return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
+}
+
+function QuoteTimeline({ status }: { status: string }) {
+  const step2Active = status === 'sent' || status === 'accepted' || status === 'refused'
+  const step3Color =
+    status === 'accepted' ? '#16a34a' :
+    status === 'refused'  ? '#dc2626' :
+    '#d1d5db'
+  const step3Filled = status === 'accepted' || status === 'refused'
+
+  const dot = (filled: boolean, color: string) => (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        background: filled ? color : 'white',
+        border: `2px solid ${color}`,
+        flexShrink: 0,
+      }}
+    />
+  )
+  const line = (active: boolean) => (
+    <span style={{ flex: 1, height: 2, background: active ? '#2850c8' : '#e5e7eb', display: 'inline-block', margin: '0 4px', verticalAlign: 'middle' }} />
+  )
+
+  const labels = ['Créé', 'Envoyé', status === 'refused' ? 'Refusé' : 'Accepté']
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', width: 160 }}>
+        {dot(true, '#2850c8')}
+        {line(step2Active)}
+        {dot(step2Active, '#2850c8')}
+        {line(step3Filled)}
+        {dot(step3Filled, step3Color)}
+      </div>
+      <div style={{ display: 'flex', width: 160, justifyContent: 'space-between' }}>
+        {labels.map((l, i) => (
+          <span key={i} style={{ fontSize: 10, color: '#9ca3af', lineHeight: 1 }}>{l}</span>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function Badge({ type }: { type: 'urgent' | 'pending' | 'new' | 'done' }) {

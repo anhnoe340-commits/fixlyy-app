@@ -21,6 +21,7 @@ export interface QuoteData {
   clientPhone: string
   notes: string
   lines: QuoteLine[]
+  signatureDataUrl?: string
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -231,18 +232,26 @@ export async function generateQuotePDF(profile: Profile, quote: QuoteData, retur
   y += 6
 
   // ── SIGNATURE BOX ─────────────────────────────────────────────────────────
-  const sigW = contentW * 0.55, dateW = contentW * 0.4
+  const sigBoxW = (contentW - 5) / 2
   doc.setFillColor(255, 255, 255)
   doc.setDrawColor(...borderColor)
   doc.setLineWidth(0.3)
-  doc.rect(margin, y, sigW, 24)
-  doc.rect(margin + sigW + 5, y, dateW, 24)
 
+  // Boîte gauche : Signature de l'artisan
+  doc.rect(margin, y, sigBoxW, 28)
   doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...gray)
-  doc.text('Bon pour accord — Signature client', margin + 3, y + 5)
-  doc.text('Date', margin + sigW + 8, y + 5)
+  doc.text("Signature de l'artisan", margin + 3, y + 5)
+  if (quote.signatureDataUrl) {
+    doc.addImage(quote.signatureDataUrl, 'PNG', margin + 2, y + 8, sigBoxW - 4, 14)
+  }
 
-  y += 30
+  // Boîte droite : Bon pour accord + Date
+  const rightX = margin + sigBoxW + 5
+  doc.rect(rightX, y, sigBoxW, 28)
+  doc.text('Bon pour accord — Signature client', rightX + 3, y + 5)
+  doc.text('Date', rightX + 3, y + 20)
+
+  y += 34
 
   // ── NOTES ─────────────────────────────────────────────────────────────────
   if (quote.notes) {
