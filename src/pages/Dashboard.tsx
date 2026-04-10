@@ -467,24 +467,24 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
       const session = sessionData?.session
       if (!session) throw new Error('[Auth] Session expirée — reconnectez-vous')
 
-      // Générer le token côté client — ne pas dépendre du retour Supabase
-      const quoteToken = crypto.randomUUID()
+      // Utiliser l'id UUID du devis comme token d'acceptation (pas besoin de colonne séparée)
+      let quoteToken: string | undefined
       if (user) {
         if (draftQuoteId) {
           const { data, error } = await supabase.from('quotes')
-            .update({ status: 'sent', quote_token: quoteToken, client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
+            .update({ status: 'sent', client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
             .eq('id', draftQuoteId).select().single()
           setDraftQuoteId(null)
           if (error) console.warn('[DB] Update draft failed:', error.message)
-          if (data) { insertedQuoteId = data.id; setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? { ...data, quote_token: quoteToken } : sq)) }
+          if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? data : sq)) }
         } else {
           const { data, error } = await supabase.from('quotes').insert({
             artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
             client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
-            total_ht: totalHT, total_ttc: totalTTC, status: 'sent', quote_token: quoteToken,
+            total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
           }).select().single()
           if (error) console.warn('[DB] Insert quote failed:', error.message)
-          if (data) { insertedQuoteId = data.id; setSavedQuotes(prev => [{ ...data, quote_token: quoteToken }, ...prev]) }
+          if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => [data, ...prev]) }
         }
       }
 
