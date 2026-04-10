@@ -368,6 +368,7 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
   const { user } = useAuth()
   const [savedQuotes, setSavedQuotes] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
+  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -418,8 +419,11 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
       const { data } = await supabase.from('quotes').insert({
         artisan_id: user.id, number: qd.number, client_name: qd.clientName,
         client_email: qd.clientEmail, object: qd.object, total_ht: totalHT, total_ttc: totalTTC, status: 'draft',
-      }).select().single()
-      if (data) setSavedQuotes(prev => [data, ...prev])
+      }).select('*, quote_token').single()
+      if (data) {
+        setSavedQuotes(prev => [data, ...prev])
+        setDraftQuoteId(data.id)
+      }
     }
     setGenerating(false)
   }
@@ -457,19 +461,29 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
       const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
       const { data: { session } } = await supabase.auth.getSession()
 
-      // Insérer le devis en DB et récupérer le quote_token auto-généré
+      // Mettre à jour le brouillon existant ou insérer si aucun brouillon
       let quoteToken: string | undefined
       if (user) {
-        const { data } = await supabase.from('quotes').insert({
-          artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
-          client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
-          total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
-        }).select('*, quote_token').single()
-        if (data) {
-          setSavedQuotes(prev => [data, ...prev])
-          quoteToken = data.quote_token
-          insertedQuoteId = data.id
+        let data: any = null
+        if (draftQuoteId) {
+          // Mettre à jour le brouillon créé lors de la génération PDF
+          const { data: updated } = await supabase.from('quotes')
+            .update({ status: 'sent', client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
+            .eq('id', draftQuoteId).select('*, quote_token').single()
+          data = updated
+          setDraftQuoteId(null)
+          if (data) setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? data : sq))
+        } else {
+          // Pas de brouillon préalable — insertion directe
+          const { data: inserted } = await supabase.from('quotes').insert({
+            artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
+            client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
+            total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
+          }).select('*, quote_token').single()
+          data = inserted
+          if (data) setSavedQuotes(prev => [data, ...prev])
         }
+        if (data) { quoteToken = data.quote_token; insertedQuoteId = data.id }
       }
 
       // Envoyer l'email avec le lien d'acceptation
@@ -1281,45 +1295,42 @@ function QuoteBadge({ status }: { status: string }) {
 
 function QuoteTimeline({ status }: { status: string }) {
   const step2Active = status === 'sent' || status === 'accepted' || status === 'refused'
-  const step3Color =
-    status === 'accepted' ? '#16a34a' :
-    status === 'refused'  ? '#dc2626' :
-    '#d1d5db'
-  const step3Filled = status === 'accepted' || status === 'refused'
+  const step3Color = status === 'accepted' ? '#16a34a' : status === 'refused' ? '#dc2626' : '#d1d5db'
+  const step3Active = status === 'accepted' || status === 'refused'
+  const step3Label = status === 'refused' ? 'Refusé' : 'Accepté'
 
-  const dot = (filled: boolean, color: string) => (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: filled ? color : 'white',
-        border: `2px solid ${color}`,
-        flexShrink: 0,
-      }}
-    />
-  )
-  const line = (active: boolean) => (
-    <span style={{ flex: 1, height: 2, background: active ? '#2850c8' : '#e5e7eb', display: 'inline-block', margin: '0 4px', verticalAlign: 'middle' }} />
-  )
-
-  const labels = ['Créé', 'Envoyé', status === 'refused' ? 'Refusé' : 'Accepté']
+  const steps = [
+    { label: 'Créé', active: true, color: '#2850c8' },
+    { label: 'Envoyé', active: step2Active, color: '#2850c8' },
+    { label: step3Label, active: step3Active, color: step3Color },
+  ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ display: 'flex', alignItems: 'center', width: 160 }}>
-        {dot(true, '#2850c8')}
-        {line(step2Active)}
-        {dot(step2Active, '#2850c8')}
-        {line(step3Filled)}
-        {dot(step3Filled, step3Color)}
-      </div>
-      <div style={{ display: 'flex', width: 160, justifyContent: 'space-between' }}>
-        {labels.map((l, i) => (
-          <span key={i} style={{ fontSize: 10, color: '#9ca3af', lineHeight: 1 }}>{l}</span>
-        ))}
-      </div>
+    <div className="flex items-center gap-0 mt-2">
+      {steps.map((step, i) => (
+        <div key={i} className="flex items-center">
+          <div className="flex flex-col items-center" style={{ minWidth: 52 }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: '50%',
+              background: step.active ? step.color : '#f3f4f6',
+              border: `2px solid ${step.active ? step.color : '#e5e7eb'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {step.active && (
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <span style={{ fontSize: 10, color: step.active ? step.color : '#9ca3af', fontWeight: step.active ? 600 : 400, marginTop: 3 }}>
+              {step.label}
+            </span>
+          </div>
+          {i < steps.length - 1 && (
+            <div style={{ width: 28, height: 2, background: steps[i + 1].active ? '#2850c8' : '#e5e7eb', marginBottom: 13, flexShrink: 0 }} />
+          )}
+        </div>
+      ))}
     </div>
   )
 }
