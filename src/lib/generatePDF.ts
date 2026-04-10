@@ -277,11 +277,17 @@ function loadImage(url: string): Promise<{ dataUrl: string; width: number; heigh
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
+      // Cap à 400x200px max pour garder le PDF léger
+      const MAX_W = 400, MAX_H = 200
+      const ratio = Math.min(MAX_W / img.width, MAX_H / img.height, 1)
+      const w = Math.round(img.width * ratio)
+      const h = Math.round(img.height * ratio)
       const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      canvas.getContext('2d')!.drawImage(img, 0, 0)
-      resolve({ dataUrl: canvas.toDataURL('image/png'), width: img.width, height: img.height })
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      // JPEG 0.85 au lieu de PNG — divise la taille par 10
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.85), width: w, height: h })
     }
     img.onerror = reject
     img.src = url
