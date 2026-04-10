@@ -4,7 +4,7 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { generateQuotePDF, type QuoteLine, type QuoteData } from '@/lib/generatePDF'
 import { supabase } from '@/lib/supabase'
 
-type Page = 'calls' | 'contacts' | 'quotes' | 'assistant' | 'hours' | 'settings' | 'subscription'
+type Page = 'calls' | 'contacts' | 'appointments' | 'quotes' | 'invoices' | 'assistant' | 'hours' | 'settings' | 'subscription' | 'integrations'
 
 const BRAND = '#2850c8'
 
@@ -34,32 +34,50 @@ export default function Dashboard() {
   return (
     <div className="flex min-h-screen bg-[#F5F5F4] text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-56' : 'w-14'} bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-200 fixed top-0 left-0 h-screen z-20`}>
-        <div className="p-4 border-b border-gray-100 flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs flex-shrink-0" style={{ background: BRAND }}>
+      <aside className={`${sidebarOpen ? 'w-60' : 'w-14'} bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-200 fixed top-0 left-0 h-screen z-20`}>
+
+        {/* Logo + entreprise */}
+        <div className="p-4 border-b border-gray-100 flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: BRAND }}>
             {(profile.company_name || 'A')[0].toUpperCase()}
           </div>
-          {sidebarOpen && <span className="font-semibold text-[14px] tracking-tight truncate">{profile.company_name || 'Mon entreprise'}</span>}
-        </div>
-        {sidebarOpen && (
-          <div className="px-3 py-2 border-b border-gray-100">
-            <div className="bg-gray-50 rounded-lg px-2.5 py-2">
-              <p className="text-xs font-medium text-gray-700 truncate">{profile.assistant_name} — Assistante IA</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{profile.twilio_number || 'N° non configuré'}</p>
+          {sidebarOpen && (
+            <div className="min-w-0">
+              <p className="font-semibold text-[13px] tracking-tight truncate leading-tight">{profile.company_name || 'Mon entreprise'}</p>
+              <p className="text-[11px] text-gray-400 truncate">{profile.twilio_number || 'N° non configuré'}</p>
             </div>
+          )}
+        </div>
+
+        {/* Alerte période d'essai */}
+        {sidebarOpen && (
+          <div className="mx-3 mt-3 px-3 py-2.5 rounded-lg border border-amber-200 bg-amber-50">
+            <p className="text-[11px] font-semibold text-amber-700">La période d'essai se termine le</p>
+            <p className="text-[11px] text-amber-600 mt-0.5">
+              {new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
           </div>
         )}
-        <nav className="flex-1 py-2 overflow-y-auto">
+
+        {/* Navigation */}
+        <nav className="flex-1 py-3 overflow-y-auto">
           <NavSection label="Activité" visible={sidebarOpen} />
           <NavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<DocIcon />} label="Devis sur mesure" active={page === 'quotes'} onClick={() => setPage('quotes')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<CalendarIcon />} label="Rendez-vous" active={page === 'appointments'} onClick={() => setPage('appointments')} open={sidebarOpen} accent={accent} />
+
+          <NavSection label="Commercial" visible={sidebarOpen} />
+          <NavItem icon={<DocIcon />} label="Devis" active={page === 'quotes'} onClick={() => setPage('quotes')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<InvoiceIcon />} label="Factures" active={page === 'invoices'} onClick={() => setPage('invoices')} open={sidebarOpen} accent={accent} />
+
           <NavSection label="Configuration" visible={sidebarOpen} />
           <NavItem icon={<BotIcon />} label="Assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<GearIcon />} label="Paramètres" active={page === 'settings'} onClick={() => setPage('settings')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} open={sidebarOpen} accent={accent} />
         </nav>
+
         {sidebarOpen && <p className="px-4 pb-1 text-[10px] text-gray-300">Propulsé par Fixlyy</p>}
         <button onClick={signOut} className="m-3 mt-0 text-xs text-gray-400 hover:text-red-500 transition-colors text-left px-2 py-1.5">
           {sidebarOpen ? 'Se déconnecter' : '→'}
@@ -67,18 +85,22 @@ export default function Dashboard() {
       </aside>
 
       {/* Main */}
-      <div className={`flex-1 flex flex-col ${sidebarOpen ? 'ml-56' : 'ml-14'} transition-all duration-200`}>
+      <div className={`flex-1 flex flex-col ${sidebarOpen ? 'ml-60' : 'ml-14'} transition-all duration-200`}>
         {/* Topbar */}
-        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 h-13 flex items-center justify-between px-6 h-[52px]">
+        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 flex items-center justify-between px-6 h-[52px]">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-gray-600 transition-colors">
               <MenuIcon />
             </button>
-            <span className="text-sm text-gray-500">{PAGE_LABELS[page]}</span>
+            <div className="flex items-center gap-1.5 text-sm text-gray-400">
+              <span>Plateforme</span>
+              <span>/</span>
+              <span className="text-gray-700 font-medium">{PAGE_LABELS[page]}</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs px-3 py-1.5 rounded-md font-medium" style={{ background: accent + '20', color: accent }}>
-              Essai — 14 jours
+              Essai — 7 jours
             </span>
             <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-600">
               {user?.email?.[0]?.toUpperCase()}
@@ -89,11 +111,14 @@ export default function Dashboard() {
         <main className="flex-1 p-6 overflow-y-auto">
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
+          {page === 'appointments' && <AppointmentsPage accent={accent} />}
           {page === 'quotes' && <QuotesPage accent={accent} />}
+          {page === 'invoices' && <InvoicesPage accent={accent} />}
           {page === 'assistant' && <AssistantPage accent={accent} />}
           {page === 'hours' && <HoursPage accent={accent} />}
           {page === 'settings' && <SettingsPage accent={accent} uploadLogo={uploadLogo} />}
           {page === 'subscription' && <SubscriptionPage accent={accent} />}
+          {page === 'integrations' && <IntegrationsPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -102,8 +127,10 @@ export default function Dashboard() {
 
 // ── Page Labels ───────────────────────────────────────────────────────────────
 const PAGE_LABELS: Record<Page, string> = {
-  calls: 'Appels', contacts: 'Contacts', quotes: 'Devis sur mesure',
-  assistant: 'Assistante IA', hours: 'Horaires', settings: 'Paramètres', subscription: 'Abonnement',
+  calls: 'Appels', contacts: 'Contacts', appointments: 'Rendez-vous',
+  quotes: 'Devis', invoices: 'Factures',
+  assistant: 'Assistante IA', hours: 'Horaires', settings: 'Paramètres',
+  subscription: 'Abonnement', integrations: 'Intégrations',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
@@ -793,6 +820,148 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
   )
 }
 
+// ── Appointments Page ─────────────────────────────────────────────────────────
+function AppointmentsPage({ accent }: { accent: string }) {
+  return (
+    <div>
+      <PageHeader title="Rendez-vous" sub="Gérez la prise de rendez-vous de vos clients" />
+      <Card>
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-sm font-semibold">Agenda</p>
+          <button className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+            + Nouveau rendez-vous
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: accent + '15' }}>
+            <span className="w-7 h-7" style={{ color: accent }}><CalendarIcon /></span>
+          </div>
+          <p className="text-sm font-medium text-gray-700 mb-1">Aucun rendez-vous configuré</p>
+          <p className="text-xs text-gray-400 max-w-xs">Connectez Cal.com pour permettre à votre assistante IA de créer des rendez-vous pendant les appels.</p>
+          <button className="mt-4 text-xs px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors font-medium">
+            Connecter Cal.com
+          </button>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ── Invoices Page ─────────────────────────────────────────────────────────────
+function InvoicesPage({ accent }: { accent: string }) {
+  const { user } = useAuth()
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('invoices').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(30)
+      .then(({ data }) => { setInvoices(data || []); setLoading(false) })
+  }, [user])
+
+  const statusCfg: Record<string, { bg: string; text: string; label: string }> = {
+    draft:   { bg: 'bg-gray-100',    text: 'text-gray-600',    label: 'Brouillon' },
+    sent:    { bg: 'bg-blue-100',    text: 'text-blue-700',    label: 'Envoyée' },
+    paid:    { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Payée' },
+    overdue: { bg: 'bg-red-100',     text: 'text-red-700',     label: 'En retard' },
+  }
+
+  return (
+    <div>
+      <PageHeader title="Factures" sub="Toutes vos factures générées depuis les devis acceptés" />
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">Factures ({invoices.length})</p>
+          <button className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+            + Nouvelle facture
+          </button>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: accent + '15' }}>
+              <span className="w-7 h-7" style={{ color: accent }}><InvoiceIcon /></span>
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">Aucune facture pour l'instant</p>
+            <p className="text-xs text-gray-400 max-w-xs">Les factures seront générées automatiquement lorsqu'un client acceptera un devis.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {invoices.map((inv: any) => {
+              const s = statusCfg[inv.status] || statusCfg.draft
+              return (
+                <div key={inv.id} className="flex items-center gap-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium font-mono">{inv.number}</p>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{inv.client_name || 'Client non renseigné'}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold" style={{ color: accent }}>
+                      {inv.total_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                    </p>
+                    <p className="text-xs text-gray-400">{new Date(inv.created_at).toLocaleDateString('fr-FR')}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ── Integrations Page ─────────────────────────────────────────────────────────
+function IntegrationsPage({ accent }: { accent: string }) {
+  const integrations = [
+    { name: 'Cal.com', desc: 'Prise de rendez-vous en ligne', status: 'disconnected', icon: '📅' },
+    { name: 'Google Calendar', desc: 'Synchronisation de votre agenda', status: 'disconnected', icon: '🗓️' },
+    { name: 'Stripe', desc: 'Paiement en ligne et abonnements', status: 'connected', icon: '💳' },
+    { name: 'Vapi', desc: 'Assistante vocale IA 24/7', status: 'connected', icon: '🤖' },
+    { name: 'Twilio', desc: 'Numéro de téléphone professionnel', status: 'pending', icon: '📞' },
+  ]
+  const statusCfg = {
+    connected:    { label: 'Connecté',      cls: 'bg-emerald-100 text-emerald-700' },
+    disconnected: { label: 'Non connecté',  cls: 'bg-gray-100 text-gray-500' },
+    pending:      { label: 'En attente',    cls: 'bg-amber-100 text-amber-700' },
+  }
+  return (
+    <div>
+      <PageHeader title="Intégrations" sub="Gérez les connexions avec vos services externes" />
+      <Card>
+        <div className="flex flex-col divide-y divide-gray-100">
+          {integrations.map(intg => {
+            const s = statusCfg[intg.status as keyof typeof statusCfg]
+            return (
+              <div key={intg.name} className="flex items-center gap-4 py-4">
+                <div className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center text-xl flex-shrink-0 bg-gray-50">
+                  {intg.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{intg.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{intg.desc}</p>
+                </div>
+                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${s.cls}`}>{s.label}</span>
+                {intg.status === 'disconnected' && (
+                  <button className="text-xs px-3 py-1.5 rounded-md font-medium border border-gray-200 hover:bg-gray-50 transition-colors flex-shrink-0">
+                    Connecter
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 // ── Assistant Page ────────────────────────────────────────────────────────────
 function AssistantPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
@@ -1148,3 +1317,6 @@ const ClockIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="
 const GearIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const CardIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 8h2M4 10.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1 7h14" stroke="currentColor" strokeWidth="1.2"/></svg>
 const MenuIcon = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="11.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1.5v3M11 1.5v3M1.5 7h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><rect x="4" y="9.5" width="2" height="2" rx="0.5" fill="currentColor"/><rect x="7" y="9.5" width="2" height="2" rx="0.5" fill="currentColor"/></svg>
+const InvoiceIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h6M5 8h6M5 11h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.5 10.5l1.5 1.5-1.5 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+const PuzzleIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M6 2.5h4v1.5a1 1 0 002 0V2.5h1.5A.5.5 0 0114 3v2.5h-1.5a1 1 0 000 2H14V10h-1.5a1 1 0 000 2H14v1.5a.5.5 0 01-.5.5H10v-1.5a1 1 0 00-2 0V14H5.5A.5.5 0 015 13.5V12H3.5a1 1 0 010-2H5V7.5H3.5a1 1 0 010-2H5V3a.5.5 0 01.5-.5H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
