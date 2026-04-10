@@ -461,25 +461,29 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
     let insertedQuoteId: string | null = null
     try {
       const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
-      const { data: { session } } = await supabase.auth.getSession()
+      if (!base64) throw new Error('[PDF] generateQuotePDF a retourné undefined')
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const session = sessionData?.session
+      if (!session) throw new Error('[Auth] Session expirée — reconnectez-vous')
 
       // Générer le token côté client — ne pas dépendre du retour Supabase
       const quoteToken = crypto.randomUUID()
       if (user) {
         if (draftQuoteId) {
-          // Mettre à jour le brouillon créé lors de la génération PDF
-          const { data } = await supabase.from('quotes')
+          const { data, error } = await supabase.from('quotes')
             .update({ status: 'sent', quote_token: quoteToken, client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
             .eq('id', draftQuoteId).select().single()
           setDraftQuoteId(null)
+          if (error) console.warn('[DB] Update draft failed:', error.message)
           if (data) { insertedQuoteId = data.id; setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? { ...data, quote_token: quoteToken } : sq)) }
         } else {
-          // Pas de brouillon préalable — insertion directe
-          const { data } = await supabase.from('quotes').insert({
+          const { data, error } = await supabase.from('quotes').insert({
             artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
             client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
             total_ht: totalHT, total_ttc: totalTTC, status: 'sent', quote_token: quoteToken,
           }).select().single()
+          if (error) console.warn('[DB] Insert quote failed:', error.message)
           if (data) { insertedQuoteId = data.id; setSavedQuotes(prev => [{ ...data, quote_token: quoteToken }, ...prev]) }
         }
       }
@@ -487,7 +491,7 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
       // Envoyer l'email avec le lien d'acceptation
       const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/send-quote-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
           pdfBase64: base64,
           clientEmail,
@@ -502,8 +506,8 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
       })
 
       if (!res.ok) {
-        const errText = await res.text().catch(() => `Erreur HTTP ${res.status}`)
-        throw new Error(errText || `Erreur HTTP ${res.status}`)
+        const errText = await res.text().catch(() => `HTTP ${res.status}`)
+        throw new Error(`[Email] HTTP ${res.status} — ${errText}`)
       }
 
       setSendSuccess(true)
