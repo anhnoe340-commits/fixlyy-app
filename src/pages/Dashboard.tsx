@@ -416,12 +416,14 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
     const qd = buildQuoteData()
     await generateQuotePDF(profile, qd)
     if (user) {
+      const token = crypto.randomUUID()
       const { data } = await supabase.from('quotes').insert({
         artisan_id: user.id, number: qd.number, client_name: qd.clientName,
-        client_email: qd.clientEmail, object: qd.object, total_ht: totalHT, total_ttc: totalTTC, status: 'draft',
-      }).select('*, quote_token').single()
+        client_email: qd.clientEmail, object: qd.object, total_ht: totalHT, total_ttc: totalTTC,
+        status: 'draft', quote_token: token,
+      }).select().single()
       if (data) {
-        setSavedQuotes(prev => [data, ...prev])
+        setSavedQuotes(prev => [{ ...data, quote_token: token }, ...prev])
         setDraftQuoteId(data.id)
       }
     }
@@ -461,29 +463,25 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
       const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
       const { data: { session } } = await supabase.auth.getSession()
 
-      // Mettre à jour le brouillon existant ou insérer si aucun brouillon
-      let quoteToken: string | undefined
+      // Générer le token côté client — ne pas dépendre du retour Supabase
+      const quoteToken = crypto.randomUUID()
       if (user) {
-        let data: any = null
         if (draftQuoteId) {
           // Mettre à jour le brouillon créé lors de la génération PDF
-          const { data: updated } = await supabase.from('quotes')
-            .update({ status: 'sent', client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
-            .eq('id', draftQuoteId).select('*, quote_token').single()
-          data = updated
+          const { data } = await supabase.from('quotes')
+            .update({ status: 'sent', quote_token: quoteToken, client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
+            .eq('id', draftQuoteId).select().single()
           setDraftQuoteId(null)
-          if (data) setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? data : sq))
+          if (data) { insertedQuoteId = data.id; setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? { ...data, quote_token: quoteToken } : sq)) }
         } else {
           // Pas de brouillon préalable — insertion directe
-          const { data: inserted } = await supabase.from('quotes').insert({
+          const { data } = await supabase.from('quotes').insert({
             artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
             client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
-            total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
-          }).select('*, quote_token').single()
-          data = inserted
-          if (data) setSavedQuotes(prev => [data, ...prev])
+            total_ht: totalHT, total_ttc: totalTTC, status: 'sent', quote_token: quoteToken,
+          }).select().single()
+          if (data) { insertedQuoteId = data.id; setSavedQuotes(prev => [{ ...data, quote_token: quoteToken }, ...prev]) }
         }
-        if (data) { quoteToken = data.quote_token; insertedQuoteId = data.id }
       }
 
       // Envoyer l'email avec le lien d'acceptation
