@@ -58,7 +58,7 @@ export async function generateQuotePDF(profile: Profile, quote: QuoteData, retur
       const img = await loadImage(profile.logo_url)
       const maxH = 18, maxW = 50
       const ratio = Math.min(maxW / img.width, maxH / img.height)
-      doc.addImage(img.dataUrl, 'PNG', margin, y, img.width * ratio, img.height * ratio)
+      doc.addImage(img.dataUrl, 'JPEG', margin, y, img.width * ratio, img.height * ratio)
     } catch {
       doc.setFont('helvetica', 'bold').setFontSize(18).setTextColor(...accent)
       doc.text('F', margin, y + 8)
