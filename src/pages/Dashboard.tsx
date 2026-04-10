@@ -918,7 +918,7 @@ function InvoicesPage({ accent }: { accent: string }) {
 }
 
 // ── Integrations Page ─────────────────────────────────────────────────────────
-function IntegrationsPage({ accent }: { accent: string }) {
+function IntegrationsPage({ accent: _accent }: { accent: string }) {
   const integrations = [
     { name: 'Cal.com', desc: 'Prise de rendez-vous en ligne', status: 'disconnected', icon: '📅' },
     { name: 'Google Calendar', desc: 'Synchronisation de votre agenda', status: 'disconnected', icon: '🗓️' },
