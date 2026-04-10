@@ -475,7 +475,7 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
             .update({ status: 'sent', client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
             .eq('id', draftQuoteId).select().single()
           setDraftQuoteId(null)
-          if (error) console.warn('[DB] Update draft failed:', error.message)
+          if (error) throw new Error(`[DB update] ${error.message} (code: ${error.code})`)
           if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? data : sq)) }
         } else {
           const { data, error } = await supabase.from('quotes').insert({
@@ -483,7 +483,7 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
             client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
             total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
           }).select().single()
-          if (error) console.warn('[DB] Insert quote failed:', error.message)
+          if (error) throw new Error(`[DB insert] ${error.message} (code: ${error.code})`)
           if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => [data, ...prev]) }
         }
       }
