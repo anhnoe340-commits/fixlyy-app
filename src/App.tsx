@@ -6,6 +6,7 @@ import OnboardingPage from '@/pages/OnboardingPage'
 import CheckoutSuccess from '@/pages/CheckoutSuccess'
 import Onboarding from '@/pages/Onboarding'
 import Dashboard from '@/pages/Dashboard'
+import AcceptQuotePage from '@/pages/AcceptQuotePage'
 import { supabase } from '@/lib/supabase'
 
 function Spinner() {
@@ -57,5 +58,7 @@ function AppContent() {
 }
 
 export default function App() {
+  // Page publique — pas besoin d'auth
+  if (window.location.pathname === '/accept') return <AcceptQuotePage />
   return <AuthProvider><AppContent /></AuthProvider>
 }

@@ -453,6 +453,22 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
     try {
       const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
       const { data: { session } } = await supabase.auth.getSession()
+
+      // Insérer le devis en DB et récupérer le quote_token auto-généré
+      let quoteToken: string | undefined
+      if (user) {
+        const { data } = await supabase.from('quotes').insert({
+          artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
+          client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
+          total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
+        }).select('*, quote_token').single()
+        if (data) {
+          setSavedQuotes(prev => [data, ...prev])
+          quoteToken = data.quote_token
+        }
+      }
+
+      // Envoyer l'email avec le lien d'acceptation
       await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/send-quote-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
@@ -465,17 +481,11 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
           subject: emailModal.subject,
           body: emailModal.body,
           artisanEmail: profile.email || undefined,
+          quoteToken,
         }),
       })
+
       setSendSuccess(true)
-      if (user) {
-        const { data } = await supabase.from('quotes').insert({
-          artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
-          client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
-          total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
-        }).select().single()
-        if (data) setSavedQuotes(prev => [data, ...prev])
-      }
       setEmailModal(null)
       setTimeout(() => setSendSuccess(false), 4000)
     } finally {
