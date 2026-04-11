@@ -271,6 +271,7 @@ function ContactsPage({ accent }: { accent: string }) {
   const [panelOpen, setPanelOpen] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '' })
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [importPreview, setImportPreview] = useState<ImportRow[] | null>(null)
   const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -290,14 +291,19 @@ function ContactsPage({ accent }: { accent: string }) {
   const handleAdd = async () => {
     if (!user || !form.name.trim()) return
     setSaving(true)
-    const { data } = await supabase.rpc('insert_contact', {
+    setSaveError(null)
+    const { data, error } = await supabase.rpc('insert_contact', {
       p_name: form.name, p_phone: form.phone || null,
       p_email: form.email || null, p_address: form.address || null,
     })
+    setSaving(false)
+    if (error) {
+      setSaveError(error.message)
+      return
+    }
     if (data) setContacts(prev => [...prev, data as ContactRow].sort((a, b) => a.name.localeCompare(b.name)))
     setForm({ name: '', phone: '', email: '', address: '' })
     setPanelOpen(false)
-    setSaving(false)
   }
 
   const handleDelete = async (id: string) => {
@@ -452,6 +458,11 @@ function ContactsPage({ accent }: { accent: string }) {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
               </div>
             </div>
+            {saveError && (
+              <div className="mx-6 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 break-all">
+                Erreur : {saveError}
+              </div>
+            )}
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
               <button onClick={() => setPanelOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Annuler</button>
               <button onClick={handleAdd} disabled={saving || !form.name.trim()}
