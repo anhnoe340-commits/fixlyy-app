@@ -278,7 +278,7 @@ function ContactsPage({ accent }: { accent: string }) {
 
   useEffect(() => {
     if (!user) return
-    supabase.from('contacts').select('*').eq('artisan_id', user.id).order('name')
+    supabase.from('contacts').select('*').eq('user_id', user.id).order('name')
       .then(({ data }) => { setContacts(data || []); setLoading(false) })
   }, [user])
 
