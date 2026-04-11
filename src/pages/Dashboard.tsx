@@ -290,7 +290,10 @@ function ContactsPage({ accent }: { accent: string }) {
   const handleAdd = async () => {
     if (!user || !form.name.trim()) return
     setSaving(true)
-    const { data } = await supabase.from('contacts').insert({ artisan_id: user.id, ...form }).select().single()
+    const { data } = await supabase.rpc('insert_contact', {
+      p_name: form.name, p_phone: form.phone || null,
+      p_email: form.email || null, p_address: form.address || null,
+    })
     if (data) setContacts(prev => [...prev, data as ContactRow].sort((a, b) => a.name.localeCompare(b.name)))
     setForm({ name: '', phone: '', email: '', address: '' })
     setPanelOpen(false)
@@ -318,9 +321,15 @@ function ContactsPage({ accent }: { accent: string }) {
   const handleConfirmImport = async () => {
     if (!user || !importPreview) return
     setImporting(true)
-    const rows = importPreview.map(r => ({ artisan_id: user.id, name: r.name, phone: r.phone || null, email: r.email || null, address: r.address || null }))
-    const { data } = await supabase.from('contacts').insert(rows).select()
-    if (data) setContacts(prev => [...prev, ...(data as ContactRow[])].sort((a, b) => a.name.localeCompare(b.name)))
+    const inserted: ContactRow[] = []
+    for (const r of importPreview) {
+      const { data } = await supabase.rpc('insert_contact', {
+        p_name: r.name, p_phone: r.phone || null,
+        p_email: r.email || null, p_address: r.address || null,
+      })
+      if (data) inserted.push(data as ContactRow)
+    }
+    setContacts(prev => [...prev, ...inserted].sort((a, b) => a.name.localeCompare(b.name)))
     setImportPreview(null)
     setImporting(false)
   }
@@ -534,14 +543,13 @@ function QuotesPage({ accent: _accent }: { accent: string }) {
     const qd = buildQuoteData()
     await generateQuotePDF(profile, qd)
     if (user) {
-      const token = crypto.randomUUID()
-      const { data } = await supabase.from('quotes').insert({
-        artisan_id: user.id, number: qd.number, client_name: qd.clientName,
-        client_email: qd.clientEmail, object: qd.object, total_ht: totalHT, total_ttc: totalTTC,
-        status: 'draft', quote_token: token,
-      }).select().single()
+      const { data } = await supabase.rpc('insert_quote', {
+        p_number: qd.number, p_client_name: qd.clientName || null,
+        p_client_email: qd.clientEmail || null, p_object: qd.object || null,
+        p_total_ht: totalHT, p_total_ttc: totalTTC, p_status: 'draft',
+      })
       if (data) {
-        setSavedQuotes(prev => [{ ...data, quote_token: token }, ...prev])
+        setSavedQuotes(prev => [data, ...prev])
         setDraftQuoteId(data.id)
       }
     }
@@ -589,18 +597,19 @@ ${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.ema
       let quoteToken: string | undefined
       if (user) {
         if (draftQuoteId) {
-          const { data, error } = await supabase.from('quotes')
-            .update({ status: 'sent', client_name: emailModal.quoteData.clientName, client_email: emailModal.quoteData.clientEmail })
-            .eq('id', draftQuoteId).select().single()
+          // Draft existe — on le passe à 'sent' via UPDATE direct (colonnes de base, pas de PGRST204)
+          await supabase.from('quotes').update({ status: 'sent' }).eq('id', draftQuoteId)
+          insertedQuoteId = draftQuoteId
+          quoteToken = draftQuoteId
           setDraftQuoteId(null)
-          if (error) throw new Error(`[DB update] ${error.message} (code: ${error.code})`)
-          if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => prev.map(sq => sq.id === data.id ? data : sq)) }
+          setSavedQuotes(prev => prev.map(sq => sq.id === draftQuoteId ? { ...sq, status: 'sent' } : sq))
         } else {
-          const { data, error } = await supabase.from('quotes').insert({
-            artisan_id: user.id, number: emailModal.quoteData.number, client_name: emailModal.quoteData.clientName,
-            client_email: emailModal.quoteData.clientEmail, object: emailModal.quoteData.object,
-            total_ht: totalHT, total_ttc: totalTTC, status: 'sent',
-          }).select().single()
+          // Pas de brouillon — insertion via RPC
+          const { data, error } = await supabase.rpc('insert_quote', {
+            p_number: emailModal.quoteData.number, p_client_name: emailModal.quoteData.clientName || null,
+            p_client_email: emailModal.quoteData.clientEmail || null, p_object: emailModal.quoteData.object || null,
+            p_total_ht: totalHT, p_total_ttc: totalTTC, p_status: 'sent',
+          })
           if (error) throw new Error(`[DB insert] ${error.message} (code: ${error.code})`)
           if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => [data, ...prev]) }
         }
