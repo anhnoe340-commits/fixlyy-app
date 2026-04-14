@@ -4,7 +4,7 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { generateQuotePDF, type QuoteLine, type QuoteData } from '@/lib/generatePDF'
 import { supabase } from '@/lib/supabase'
 
-type Page = 'calls' | 'contacts' | 'appointments' | 'quotes' | 'invoices' | 'assistant' | 'hours' | 'settings' | 'subscription' | 'integrations'
+type Page = 'calls' | 'contacts' | 'appointments' | 'assistant' | 'hours' | 'settings' | 'subscription' | 'integrations'
 
 const BRAND = '#2850c8'
 
@@ -66,10 +66,6 @@ export default function Dashboard() {
           <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<CalendarIcon />} label="Rendez-vous" active={page === 'appointments'} onClick={() => setPage('appointments')} open={sidebarOpen} accent={accent} />
 
-          <NavSection label="Commercial" visible={sidebarOpen} />
-          <NavItem icon={<DocIcon />} label="Devis" active={page === 'quotes'} onClick={() => setPage('quotes')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<InvoiceIcon />} label="Factures" active={page === 'invoices'} onClick={() => setPage('invoices')} open={sidebarOpen} accent={accent} />
-
           <NavSection label="Configuration" visible={sidebarOpen} />
           <NavItem icon={<BotIcon />} label="Assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} open={sidebarOpen} accent={accent} />
@@ -112,9 +108,7 @@ export default function Dashboard() {
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
           {page === 'appointments' && <AppointmentsPage accent={accent} />}
-          {page === 'quotes' && <QuotesPage accent={accent} />}
-          {page === 'invoices' && <InvoicesPage accent={accent} />}
-          {page === 'assistant' && <AssistantPage accent={accent} />}
+{page === 'assistant' && <AssistantPage accent={accent} />}
           {page === 'hours' && <HoursPage accent={accent} />}
           {page === 'settings' && <SettingsPage accent={accent} uploadLogo={uploadLogo} />}
           {page === 'subscription' && <SubscriptionPage accent={accent} />}
@@ -128,7 +122,6 @@ export default function Dashboard() {
 // ── Page Labels ───────────────────────────────────────────────────────────────
 const PAGE_LABELS: Record<Page, string> = {
   calls: 'Appels', contacts: 'Contacts', appointments: 'Rendez-vous',
-  quotes: 'Devis', invoices: 'Factures',
   assistant: 'Assistante IA', hours: 'Horaires', settings: 'Paramètres',
   subscription: 'Abonnement', integrations: 'Intégrations',
 }
@@ -228,7 +221,7 @@ function CallsPage({ accent }: { accent: string }) {
 }
 
 // ── Contacts Page ─────────────────────────────────────────────────────────────
-type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string }
+type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string; lastCallSummary?: string | null; lastCallDate?: string | null }
 type ImportRow = { name: string; phone: string; email: string; address: string }
 
 function parseCSV(text: string): ImportRow[] {
@@ -278,8 +271,20 @@ function ContactsPage({ accent }: { accent: string }) {
 
   useEffect(() => {
     if (!user) return
-    supabase.rpc('get_contacts')
-      .then(({ data }) => { setContacts((data as ContactRow[]) || []); setLoading(false) })
+    Promise.all([
+      supabase.rpc('get_contacts'),
+      supabase.from('calls').select('caller_phone, summary, created_at').eq('artisan_id', user.id).order('created_at', { ascending: false })
+    ]).then(([{ data: contactsData }, { data: callsData }]) => {
+      const contacts = (contactsData as ContactRow[]) || []
+      const calls = callsData || []
+      // Attach last call summary to each contact by phone
+      const enriched = contacts.map(c => {
+        const match = calls.find(call => call.caller_phone && c.phone && call.caller_phone === c.phone)
+        return { ...c, lastCallSummary: match?.summary || null, lastCallDate: match?.created_at || null }
+      })
+      setContacts(enriched)
+      setLoading(false)
+    })
   }, [user])
 
   const filtered = contacts.filter(c =>
@@ -414,9 +419,14 @@ function ContactsPage({ accent }: { accent: string }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{c.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{[c.phone, c.email, c.address].filter(Boolean).join(' · ')}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
+                  {c.lastCallSummary && (
+                    <p className="text-xs text-gray-500 mt-1 italic truncate">
+                      📞 {c.lastCallSummary}
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-gray-300 mr-2">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
+                <p className="text-xs text-gray-300 mr-2 flex-shrink-0">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
                 <button onClick={() => handleDelete(c.id)}
                   className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm">
                   ×
