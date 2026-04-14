@@ -1,21 +1,15 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfile } from '@/contexts/ProfileContext'
-import { generateQuotePDF, type QuoteLine, type QuoteData } from '@/lib/generatePDF'
 import { supabase } from '@/lib/supabase'
 
-type Page = 'calls' | 'contacts' | 'appointments' | 'assistant' | 'hours' | 'settings' | 'subscription' | 'integrations'
+type Page =
+  | 'calls' | 'contacts'
+  | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
+  | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
+  | 'subscription'
 
 const BRAND = '#2850c8'
-
-const ACCENT_COLORS = [
-  { label: 'Orange Fixlyy', value: '#FF6B35' },
-  { label: 'Bleu acier', value: '#185FA5' },
-  { label: 'Vert ardoise', value: '#0F6E56' },
-  { label: 'Bordeaux', value: '#993556' },
-  { label: 'Anthracite', value: '#3C3489' },
-  { label: 'Personnalisé', value: 'custom' },
-]
 
 export default function Dashboard() {
   const { user, signOut } = useAuth()
@@ -61,17 +55,29 @@ export default function Dashboard() {
 
         {/* Navigation */}
         <nav className="flex-1 py-3 overflow-y-auto">
+          {/* Section Activité */}
           <NavSection label="Activité" visible={sidebarOpen} />
           <NavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<CalendarIcon />} label="Rendez-vous" active={page === 'appointments'} onClick={() => setPage('appointments')} open={sidebarOpen} accent={accent} />
 
-          <NavSection label="Configuration" visible={sidebarOpen} />
-          <NavItem icon={<BotIcon />} label="Assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} open={sidebarOpen} accent={accent} />
+          {/* Section Répondre */}
+          <NavSection label="Répondre" visible={sidebarOpen} />
+          <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<PhoneInIcon />} label="Raisons entrantes" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<TeamIcon />} label="Employés" active={page === 'employees'} onClick={() => setPage('employees')} open={sidebarOpen} accent={accent} />
+
+          {/* Section Plateforme */}
+          <NavSection label="Plateforme" visible={sidebarOpen} />
+          <NavItem icon={<BuildingIcon />} label="Détails entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<GearIcon />} label="Paramètres" active={page === 'settings'} onClick={() => setPage('settings')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<BotIcon />} label="Assistant" active={page === 'assistant'} onClick={() => setPage('assistant')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} open={sidebarOpen} accent={accent} />
         </nav>
 
         {sidebarOpen && <p className="px-4 pb-1 text-[10px] text-gray-300">Propulsé par Fixlyy</p>}
@@ -107,12 +113,19 @@ export default function Dashboard() {
         <main className="flex-1 p-6 overflow-y-auto">
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
-          {page === 'appointments' && <AppointmentsPage accent={accent} />}
-{page === 'assistant' && <AssistantPage accent={accent} />}
+          {page === 'greeting' && <GreetingPage accent={accent} />}
+          {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} />}
+          {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
+          {page === 'call-transfer' && <CallTransferPage accent={accent} />}
+          {page === 'post-processing' && <PostProcessingPage accent={accent} />}
+          {page === 'employees' && <EmployeesPage accent={accent} />}
+          {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
           {page === 'hours' && <HoursPage accent={accent} />}
-          {page === 'settings' && <SettingsPage accent={accent} uploadLogo={uploadLogo} />}
-          {page === 'subscription' && <SubscriptionPage accent={accent} />}
+          {page === 'assistant' && <AssistantPage accent={accent} />}
+          {page === 'webhooks' && <WebhooksPage accent={accent} />}
           {page === 'integrations' && <IntegrationsPage accent={accent} />}
+          {page === 'timezone' && <TimezonePage accent={accent} />}
+          {page === 'subscription' && <SubscriptionPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -121,9 +134,21 @@ export default function Dashboard() {
 
 // ── Page Labels ───────────────────────────────────────────────────────────────
 const PAGE_LABELS: Record<Page, string> = {
-  calls: 'Appels', contacts: 'Contacts', appointments: 'Rendez-vous',
-  assistant: 'Assistante IA', hours: 'Horaires', settings: 'Paramètres',
-  subscription: 'Abonnement', integrations: 'Intégrations',
+  calls: 'Appels',
+  contacts: 'Contacts',
+  greeting: 'Paramètres de salutation',
+  'inbound-reasons': "Raisons d'appel entrantes",
+  'outbound-reasons': "Raisons d'appel sortantes",
+  'call-transfer': "Transfert d'appel",
+  'post-processing': 'Post-traitement',
+  employees: 'Employés',
+  'business-details': "Détails de l'entreprise",
+  hours: "Horaires d'ouverture",
+  assistant: "Paramètres de l'assistant",
+  webhooks: 'Webhooks',
+  integrations: 'Intégrations',
+  timezone: 'Fuseau horaire',
+  subscription: 'Abonnement',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
@@ -159,7 +184,6 @@ function CallsPage({ accent }: { accent: string }) {
     supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => { setCalls(data || []); setLoading(false) })
 
-    // Temps réel — nouveaux appels insérés par Vapi
     const sub = supabase.channel('calls-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
         payload => setCalls(prev => [payload.new as CallRow, ...prev])
@@ -177,6 +201,7 @@ function CallsPage({ accent }: { accent: string }) {
   const filtered = filter === 'all' ? calls : calls.filter(c => c.status === filter)
   const todayCalls = calls.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString())
   const urgentCount = calls.filter(c => c.status === 'urgent').length
+
   return (
     <div>
       <PageHeader title="Appels" sub="Gérez et consultez vos appels reçus" />
@@ -211,7 +236,7 @@ function CallsPage({ accent }: { accent: string }) {
         ) : (
           <div className="divide-y divide-gray-100">
             {filtered.map(c => (
-              <CallRow key={c.id} call={c} accent={accent} onStatusChange={updateStatus} />
+              <CallRowItem key={c.id} call={c} accent={accent} onStatusChange={updateStatus} />
             ))}
           </div>
         )}
@@ -222,39 +247,6 @@ function CallsPage({ accent }: { accent: string }) {
 
 // ── Contacts Page ─────────────────────────────────────────────────────────────
 type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string; lastCallSummary?: string | null; lastCallDate?: string | null }
-type ImportRow = { name: string; phone: string; email: string; address: string }
-
-function parseCSV(text: string): ImportRow[] {
-  const lines = text.trim().split(/\r?\n/)
-  if (lines.length < 2) return []
-  const sep = lines[0].includes(';') ? ';' : ','
-  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
-  const col = (keys: string[]) => headers.findIndex(h => keys.some(k => h.includes(k)))
-  const iName = col(['nom', 'name', 'prénom', 'prenom', 'contact'])
-  const iPhone = col(['tel', 'phone', 'mobile', 'portable', 'numéro', 'numero'])
-  const iEmail = col(['email', 'mail', 'courriel'])
-  const iAddr = col(['adresse', 'address', 'rue', 'street'])
-  if (iName < 0) return []
-  return lines.slice(1).flatMap(line => {
-    const cells = line.split(sep).map(c => c.trim().replace(/^["']|["']$/g, ''))
-    const name = cells[iName] || ''
-    if (!name) return []
-    return [{ name, phone: iPhone >= 0 ? cells[iPhone] || '' : '', email: iEmail >= 0 ? cells[iEmail] || '' : '', address: iAddr >= 0 ? cells[iAddr] || '' : '' }]
-  })
-}
-
-function parseVCard(text: string): ImportRow[] {
-  const cards = text.split(/BEGIN:VCARD/i).slice(1)
-  return cards.flatMap(card => {
-    const get = (key: string) => { const m = card.match(new RegExp(`^${key}[^:]*:(.+)`, 'mi')); return m ? m[1].trim().replace(/\\n/g, ' ') : '' }
-    const name = get('FN') || get('N').split(';').filter(Boolean).reverse().join(' ')
-    if (!name) return []
-    const phone = get('TEL').replace(/[^\d+\s()-]/g, '')
-    const email = get('EMAIL')
-    const adr = get('ADR').replace(/;+/g, ' ').trim()
-    return [{ name, phone, email, address: adr }]
-  })
-}
 
 function ContactsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
@@ -265,9 +257,6 @@ function ContactsPage({ accent }: { accent: string }) {
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '' })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [importPreview, setImportPreview] = useState<ImportRow[] | null>(null)
-  const [importing, setImporting] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!user) return
@@ -275,10 +264,9 @@ function ContactsPage({ accent }: { accent: string }) {
       supabase.rpc('get_contacts'),
       supabase.from('calls').select('caller_phone, summary, created_at').eq('artisan_id', user.id).order('created_at', { ascending: false })
     ]).then(([{ data: contactsData }, { data: callsData }]) => {
-      const contacts = (contactsData as ContactRow[]) || []
+      const cts = (contactsData as ContactRow[]) || []
       const calls = callsData || []
-      // Attach last call summary to each contact by phone
-      const enriched = contacts.map(c => {
+      const enriched = cts.map(c => {
         const match = calls.find(call => call.caller_phone && c.phone && call.caller_phone === c.phone)
         return { ...c, lastCallSummary: match?.summary || null, lastCallDate: match?.created_at || null }
       })
@@ -295,17 +283,13 @@ function ContactsPage({ accent }: { accent: string }) {
 
   const handleAdd = async () => {
     if (!user || !form.name.trim()) return
-    setSaving(true)
-    setSaveError(null)
+    setSaving(true); setSaveError(null)
     const { data, error } = await supabase.rpc('insert_contact', {
       p_name: form.name, p_phone: form.phone || null,
       p_email: form.email || null, p_address: form.address || null,
     })
     setSaving(false)
-    if (error) {
-      setSaveError(error.message)
-      return
-    }
+    if (error) { setSaveError(error.message); return }
     if (data) setContacts(prev => [...prev, data as ContactRow].sort((a, b) => a.name.localeCompare(b.name)))
     setForm({ name: '', phone: '', email: '', address: '' })
     setPanelOpen(false)
@@ -316,90 +300,23 @@ function ContactsPage({ accent }: { accent: string }) {
     await supabase.from('contacts').delete().eq('id', id)
   }
 
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const text = ev.target?.result as string
-      const rows = file.name.endsWith('.vcf') ? parseVCard(text) : parseCSV(text)
-      setImportPreview(rows)
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
-  const handleConfirmImport = async () => {
-    if (!user || !importPreview) return
-    setImporting(true)
-    const inserted: ContactRow[] = []
-    for (const r of importPreview) {
-      const { data } = await supabase.rpc('insert_contact', {
-        p_name: r.name, p_phone: r.phone || null,
-        p_email: r.email || null, p_address: r.address || null,
-      })
-      if (data) inserted.push(data as ContactRow)
-    }
-    setContacts(prev => [...prev, ...inserted].sort((a, b) => a.name.localeCompare(b.name)))
-    setImportPreview(null)
-    setImporting(false)
-  }
-
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 
   return (
     <div className="relative">
       <PageHeader title="Contacts" sub="Gérez votre base de données clients" />
-
-      {/* Import preview modal */}
-      {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-            <p className="text-sm font-semibold mb-1">{importPreview.length} contact{importPreview.length > 1 ? 's' : ''} détecté{importPreview.length > 1 ? 's' : ''}</p>
-            <p className="text-xs text-gray-400 mb-4">Vérifiez avant d'importer</p>
-            <div className="max-h-60 overflow-y-auto flex flex-col gap-2 mb-4">
-              {importPreview.map((r, i) => (
-                <div key={i} className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0"
-                    style={{ background: accent + '20', color: accent }}>{initials(r.name)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{r.name}</p>
-                    <p className="text-xs text-gray-400">{[r.phone, r.email].filter(Boolean).join(' · ')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setImportPreview(null)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
-              <button onClick={handleConfirmImport} disabled={importing}
-                className="text-xs px-4 py-2 rounded-lg text-white font-medium disabled:opacity-50 flex items-center gap-2"
-                style={{ background: accent }}>
-                {importing && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                Importer {importPreview.length} contact{importPreview.length > 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <Card>
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold">Contacts ({contacts.length})</p>
           <div className="flex gap-2">
             <input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
               className="border border-gray-200 rounded-md px-3 py-1.5 text-xs outline-none focus:border-gray-400 w-44" />
-            <input ref={fileRef} type="file" accept=".csv,.vcf" className="hidden" onChange={handleFileImport} />
-            <button onClick={() => fileRef.current?.click()}
-              className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">
-              ↑ Importer CSV / vCard
-            </button>
             <button onClick={() => { setPanelOpen(true); setForm({ name: '', phone: '', email: '', address: '' }) }}
               className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
               + Ajouter un contact
             </button>
           </div>
         </div>
-
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
@@ -407,7 +324,7 @@ function ContactsPage({ accent }: { accent: string }) {
         ) : filtered.length === 0 ? (
           <div className="text-center py-10">
             <p className="text-sm text-gray-400">{search ? 'Aucun résultat' : 'Aucun contact encore'}</p>
-            {!search && <p className="text-xs text-gray-300 mt-1">Cliquez sur "Ajouter un contact" ou importez un fichier CSV / vCard</p>}
+            {!search && <p className="text-xs text-gray-300 mt-1">Cliquez sur "Ajouter un contact" pour commencer</p>}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -421,9 +338,7 @@ function ContactsPage({ accent }: { accent: string }) {
                   <p className="text-sm font-medium">{c.name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
                   {c.lastCallSummary && (
-                    <p className="text-xs text-gray-500 mt-1 italic truncate">
-                      📞 {c.lastCallSummary}
-                    </p>
+                    <p className="text-xs text-gray-500 mt-1 italic truncate">📞 {c.lastCallSummary}</p>
                   )}
                 </div>
                 <p className="text-xs text-gray-300 mr-2 flex-shrink-0">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
@@ -437,7 +352,6 @@ function ContactsPage({ accent }: { accent: string }) {
         )}
       </Card>
 
-      {/* Slide-out panel — Nouveau contact */}
       {panelOpen && (
         <div className="fixed inset-0 z-40 flex">
           <div className="flex-1 bg-black/20" onClick={() => setPanelOpen(false)} />
@@ -447,26 +361,22 @@ function ContactsPage({ accent }: { accent: string }) {
               <button onClick={() => setPanelOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg">×</button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
-              <div>
-                <label className="text-xs text-gray-500 font-medium block mb-1">Nom complet *</label>
+              <Field label="Nom complet *">
                 <input autoFocus placeholder="Ex : Marie Dupont" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium block mb-1">Téléphone</label>
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+              </Field>
+              <Field label="Téléphone">
                 <input placeholder="+33 6 00 00 00 00" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium block mb-1">Adresse e-mail</label>
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+              </Field>
+              <Field label="Adresse e-mail">
                 <input placeholder="marie@exemple.fr" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 font-medium block mb-1">Adresse</label>
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+              </Field>
+              <Field label="Adresse">
                 <input placeholder="12 rue de la Paix, Paris" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
-              </div>
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+              </Field>
             </div>
             {saveError && (
               <div className="mx-6 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 break-all">
@@ -489,629 +399,168 @@ function ContactsPage({ accent }: { accent: string }) {
   )
 }
 
-// ── Quotes Page (disabled) ────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function QuotesPage({ accent: _accent }: { accent: string }) {
+// ── Greeting Page ─────────────────────────────────────────────────────────────
+function GreetingPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
-  const quoteColor = profile?.quote_color || BRAND
-  const [lines, setLines] = useState<QuoteLine[]>([
-    { id: 1, desig: "Main d'œuvre", qty: 2, unit: 'h', pu: profile?.hourly_rate || 65, vat: profile?.vat_rate || 20 },
-    { id: 2, desig: 'Déplacement', qty: 1, unit: 'forfait', pu: profile?.travel_rate || 25, vat: profile?.vat_rate || 20 },
-  ])
-  const [nextId, setNextId] = useState(3)
-  const [clientName, setClientName] = useState('')
-  const [clientAddress, setClientAddress] = useState('')
-  const [clientEmail, setClientEmail] = useState('')
-  const [clientPhone, setClientPhone] = useState('')
-  const [quoteObject, setQuoteObject] = useState('')
-  const [notes, setNotes] = useState('Devis valable 30 jours. Paiement à réception de facture, sans escompte. En cas de retard, pénalités de 3× le taux légal + indemnité forfaitaire de recouvrement de 40€. Garantie main d\'œuvre 3 mois. TVA non applicable, art. 293B du CGI (si micro-entreprise).')
-  const [generating, setGenerating] = useState(false)
-  const [sending, setSending] = useState(false)
-  const [sendSuccess, setSendSuccess] = useState(false)
-  const [sendError, setSendError] = useState<string | null>(null)
-  const [signature, setSignature] = useState<string | null>(null)
-  const [emailModal, setEmailModal] = useState<{ quoteData: ReturnType<typeof buildQuoteData>; subject: string; body: string } | null>(null)
-  const [customColor, setCustomColor] = useState(profile?.quote_color || '#FF6B35')
-  const fileRef = useRef<HTMLInputElement>(null)
-  const { uploadLogo } = useProfile()
-  const { user } = useAuth()
-  const [savedQuotes, setSavedQuotes] = useState<any[]>([])
-  const [historyLoading, setHistoryLoading] = useState(true)
-  const [draftQuoteId, setDraftQuoteId] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [personalizedGreeting, setPersonalizedGreeting] = useState(true)
 
-  useEffect(() => {
-    if (!user) return
-    supabase.from('quotes').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(30)
-      .then(({ data }) => { setSavedQuotes(data || []); setHistoryLoading(false) })
-  }, [user])
+  if (!profile) return null
 
-  const totalHT = lines.reduce((s, l) => s + l.qty * l.pu, 0)
-  const totalVAT = lines.reduce((s, l) => s + l.qty * l.pu * l.vat / 100, 0)
-  const totalTTC = totalHT + totalVAT
-
-  const addLine = (type: string) => {
-    const defaults: Record<string, Partial<QuoteLine>> = {
-      work: { desig: "Main d'œuvre", unit: 'h', pu: profile?.hourly_rate || 65 },
-      material: { desig: 'Fourniture', unit: 'u', pu: 0 },
-      travel: { desig: 'Déplacement', unit: 'forfait', pu: profile?.travel_rate || 25 },
-      custom: { desig: '', unit: 'u', pu: 0 },
-    }
-    setLines(prev => [...prev, { id: nextId, qty: 1, vat: profile?.vat_rate || 20, desig: '', unit: 'u', pu: 0, ...defaults[type] } as QuoteLine])
-    setNextId(n => n + 1)
-  }
-
-  const updateLine = (id: number, field: keyof QuoteLine, value: any) => {
-    setLines(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l))
-  }
-
-  const today = new Date()
-  const fmt = (d: Date) => d.toLocaleDateString('fr-FR')
-  const validUntil = new Date(today); validUntil.setDate(validUntil.getDate() + 30)
-
-  function buildQuoteData(): QuoteData {
-    return {
-      number: `D${today.getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
-      date: fmt(today),
-      validity: fmt(validUntil),
-      object: quoteObject || 'Prestation de services',
-      clientName, clientAddress, clientEmail, clientPhone, notes, lines,
-      signatureDataUrl: signature || undefined,
-    }
-  }
-
-  async function handleGeneratePDF() {
-    if (!profile) return
-    setGenerating(true)
-    const qd = buildQuoteData()
-    await generateQuotePDF(profile, qd)
-    if (user) {
-      const { data } = await supabase.rpc('insert_quote', {
-        p_number: qd.number, p_client_name: qd.clientName || null,
-        p_client_email: qd.clientEmail || null, p_object: qd.object || null,
-        p_total_ht: totalHT, p_total_ttc: totalTTC, p_status: 'draft',
-      })
-      if (data) {
-        setSavedQuotes(prev => [data, ...prev])
-        setDraftQuoteId(data.id)
-      }
-    }
-    setGenerating(false)
-  }
-
-  function handleOpenEmailModal() {
-    if (!profile || !clientEmail) return
-    const quoteData = buildQuoteData()
-    const fmtEur = (v: number) => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
-    const mainLines = lines.filter(l => l.desig).map(l => `  • ${l.desig} — ${fmtEur(l.qty * l.pu)} HT`).join('\n')
-    const subject = `Votre devis ${quoteData.number} — ${profile.company_name}`
-    const body = `Bonjour ${clientName || ''},
-
-Suite à notre échange, veuillez trouver ci-joint votre devis n° ${quoteData.number} concernant : ${quoteData.object}.
-
-Détail de la prestation :
-${mainLines}
-
-Montant total TTC : ${fmtEur(totalTTC)}
-
-Ce devis est valable jusqu'au ${quoteData.validity}. Pour l'accepter, il vous suffit de le signer et de me le renvoyer par email, ou de me le remettre lors de l'intervention.
-
-N'hésitez pas à me contacter si vous avez des questions.
-
-Cordialement,
-${profile.company_name}${profile.phone ? '\n' + profile.phone : ''}${profile.email ? '\n' + profile.email : ''}`
-
-    setEmailModal({ quoteData, subject, body })
-  }
-
-  async function handleConfirmSend() {
-    if (!profile || !emailModal) return
-    setSending(true); setSendSuccess(false); setSendError(null)
-    let insertedQuoteId: string | null = null
-    try {
-      const base64 = await generateQuotePDF(profile, emailModal.quoteData, true)
-      if (!base64) throw new Error('[PDF] generateQuotePDF a retourné undefined')
-
-      const { data: sessionData } = await supabase.auth.getSession()
-      const session = sessionData?.session
-      if (!session) throw new Error('[Auth] Session expirée — reconnectez-vous')
-
-      // Utiliser l'id UUID du devis comme token d'acceptation (pas besoin de colonne séparée)
-      let quoteToken: string | undefined
-      if (user) {
-        if (draftQuoteId) {
-          // Draft existe — on le passe à 'sent' via UPDATE direct (colonnes de base, pas de PGRST204)
-          await supabase.from('quotes').update({ status: 'sent' }).eq('id', draftQuoteId)
-          insertedQuoteId = draftQuoteId
-          quoteToken = draftQuoteId
-          setDraftQuoteId(null)
-          setSavedQuotes(prev => prev.map(sq => sq.id === draftQuoteId ? { ...sq, status: 'sent' } : sq))
-        } else {
-          // Pas de brouillon — insertion via RPC
-          const { data, error } = await supabase.rpc('insert_quote', {
-            p_number: emailModal.quoteData.number, p_client_name: emailModal.quoteData.clientName || null,
-            p_client_email: emailModal.quoteData.clientEmail || null, p_object: emailModal.quoteData.object || null,
-            p_total_ht: totalHT, p_total_ttc: totalTTC, p_status: 'sent',
-          })
-          if (error) throw new Error(`[DB insert] ${error.message} (code: ${error.code})`)
-          if (data) { insertedQuoteId = data.id; quoteToken = data.id; setSavedQuotes(prev => [data, ...prev]) }
-        }
-      }
-
-      // Envoyer l'email avec le lien d'acceptation
-      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/send-quote-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          pdfBase64: base64,
-          clientEmail,
-          clientName,
-          companyName: profile.company_name,
-          quoteNumber: emailModal.quoteData.number,
-          subject: emailModal.subject,
-          body: emailModal.body,
-          artisanEmail: profile.email || undefined,
-          quoteToken,
-        }),
-      })
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => `HTTP ${res.status}`)
-        throw new Error(`[Email] HTTP ${res.status} — ${errText}`)
-      }
-
-      setSendSuccess(true)
-      setEmailModal(null)
-      setTimeout(() => setSendSuccess(false), 4000)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erreur inconnue lors de l'envoi"
-      setSendError(msg)
-      if (insertedQuoteId) {
-        setSavedQuotes(prev => prev.map(sq => sq.id === insertedQuoteId ? { ...sq, status: 'error' } : sq))
-      }
-    } finally {
-      setSending(false)
-    }
-  }
-
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    await uploadLogo(file)
-  }
-
-  const handleColorSelect = (val: string) => {
-    if (val !== 'custom') updateProfile({ quote_color: val })
-    else updateProfile({ quote_color: customColor })
+  const handleSave = async () => {
+    await updateProfile({
+      greeting_open: profile.greeting_open,
+      greeting_closed: profile.greeting_closed,
+    })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
   }
 
   return (
     <div>
-      <PageHeader title="Devis sur mesure" sub="Créez vos devis avec votre identité visuelle" />
+      <PageHeader title="Paramètres de salutation" sub="Configurez les messages de votre assistante en fonction des horaires" />
 
-      {/* Branding config */}
-      <div className="grid grid-cols-2 gap-4 mb-5">
-        {/* Logo upload */}
-        <Card>
-          <p className="text-sm font-semibold mb-3">Logo de l'entreprise</p>
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-16 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center overflow-hidden cursor-pointer hover:border-gray-400 transition-colors flex-shrink-0" onClick={() => fileRef.current?.click()}>
-              {profile?.logo_url
-                ? <img src={profile.logo_url} alt="logo" className="w-full h-full object-contain p-1" />
-                : <span className="text-xs text-gray-400 text-center leading-tight px-1">Importer votre logo</span>}
-            </div>
-            <div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-              <button onClick={() => fileRef.current?.click()} className="text-xs border border-gray-200 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors block mb-2">
-                {profile?.logo_url ? 'Changer le logo' : 'Importer (PNG, JPG)'}
-              </button>
-              <p className="text-[11px] text-gray-400">Affiché sur tous vos devis PDF. Max 2 Mo.</p>
-            </div>
-          </div>
-        </Card>
-
-        {/* Color picker */}
-        <Card>
-          <p className="text-sm font-semibold mb-3">Couleur des devis</p>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {ACCENT_COLORS.map(c => (
-              <button key={c.value} onClick={() => handleColorSelect(c.value)}
-                title={c.label}
-                className="w-7 h-7 rounded-full border-2 transition-all flex-shrink-0"
-                style={{
-                  background: c.value === 'custom' ? customColor : c.value,
-                  borderColor: profile?.quote_color === (c.value === 'custom' ? customColor : c.value) ? '#1A1A1A' : 'transparent',
-                  outline: c.value === 'custom' ? `2px dashed #D1D5DB` : undefined,
-                }}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Couleur personnalisée :</label>
-            <input type="color" value={profile?.quote_color || '#FF6B35'}
-              onChange={e => { setCustomColor(e.target.value); updateProfile({ quote_color: e.target.value }) }}
-              className="w-8 h-7 rounded cursor-pointer border border-gray-200 p-0.5" />
-            <span className="text-xs text-gray-400 font-mono">{profile?.quote_color || '#FF6B35'}</span>
-          </div>
-        </Card>
-      </div>
-
-      {/* Tarifs de base */}
-      <div className="rounded-xl border px-4 py-3 mb-5" style={{ background: quoteColor + '12', borderColor: quoteColor + '30' }}>
-        <p className="text-sm font-semibold mb-3" style={{ color: quoteColor }}>Tarifs de base (pré-remplit les lignes automatiquement)</p>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Taux horaire main d'œuvre">
-            <div className="flex items-center gap-2">
-              <input type="number" value={profile?.hourly_rate} onChange={e => updateProfile({ hourly_rate: +e.target.value })}
-                className="w-20 border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-              <span className="text-xs text-gray-500">€/h HT</span>
-            </div>
-          </Field>
-          <Field label="Frais de déplacement">
-            <div className="flex items-center gap-2">
-              <input type="number" value={profile?.travel_rate} onChange={e => updateProfile({ travel_rate: +e.target.value })}
-                className="w-20 border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-              <span className="text-xs text-gray-500">€ fixe</span>
-            </div>
-          </Field>
-          <Field label="TVA par défaut">
-            <select value={profile?.vat_rate} onChange={e => updateProfile({ vat_rate: +e.target.value })}
-              className="border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400">
-              <option value={20}>20 %</option><option value={10}>10 %</option>
-              <option value={5.5}>5,5 %</option><option value={0}>0 %</option>
-            </select>
-          </Field>
-        </div>
-      </div>
-
-      {/* Quote form */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div>
-            <p className="text-[15px] font-semibold">Nouveau devis</p>
-            <p className="text-xs text-gray-400 mt-0.5">Devis n° D{today.getFullYear()}-001</p>
-          </div>
-          <div className="flex gap-2 items-center">
-            {sendSuccess && <span className="text-xs text-emerald-600 font-medium">✓ Devis envoyé</span>}
-            {sendError && <span className="text-xs text-red-600 font-medium">✗ {sendError}</span>}
-            <button onClick={handleGeneratePDF} disabled={generating}
-              className="text-sm px-4 py-2 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center gap-2">
-              {generating && <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />}
-              {generating ? 'Génération...' : '↓ Télécharger'}
-            </button>
-            <button onClick={handleOpenEmailModal} disabled={sending || !clientEmail}
-              className="text-sm px-4 py-2 rounded-lg text-white font-medium transition-opacity disabled:opacity-50 flex items-center gap-2"
-              style={{ background: quoteColor }}>
-              {sending && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-              {sending ? 'Envoi...' : '✉ Envoyer par email'}
-            </button>
-          </div>
-        </div>
-
-        <div className="p-5">
-          {/* Client + Meta */}
-          <div className="grid grid-cols-4 gap-3 mb-5">
-            <Field label="Client" className="col-span-1">
-              <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nom du client" className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Adresse client">
-              <input value={clientAddress} onChange={e => setClientAddress(e.target.value)} placeholder="Adresse" className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Email client">
-              <input value={clientEmail} onChange={e => setClientEmail(e.target.value)} placeholder="email@client.fr" className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Téléphone">
-              <input value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="+33 6..." className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-            </Field>
-          </div>
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <Field label="Objet du devis" className="col-span-2">
-              <input value={quoteObject} onChange={e => setQuoteObject(e.target.value)} placeholder="Ex: Réparation fuite robinetterie..." className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Date">
-              <input type="date" defaultValue={today.toISOString().split('T')[0]} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" />
-            </Field>
-          </div>
-
-          {/* Lines table */}
-          <div className="border border-gray-200 rounded-lg overflow-hidden mb-4">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: quoteColor }}>
-                  {['Désignation', 'Qté', 'Unité', 'P.U. HT', 'TVA', 'Total HT', ''].map((h, i) => (
-                    <th key={i} className="text-left text-white text-xs font-semibold px-3 py-2.5" style={{ textAlign: i > 0 && i < 6 ? 'right' : 'left' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, i) => (
-                  <tr key={line.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-3 py-2" style={{ width: '38%' }}>
-                      <input value={line.desig} onChange={e => updateLine(line.id, 'desig', e.target.value)} className="w-full bg-transparent text-sm outline-none border-b border-transparent focus:border-gray-300" placeholder="Description..." />
-                    </td>
-                    <td className="px-2 py-2 text-right" style={{ width: '8%' }}>
-                      <input type="number" value={line.qty} step="0.5" onChange={e => updateLine(line.id, 'qty', +e.target.value || 0)} className="w-14 text-right bg-transparent border border-transparent focus:border-gray-300 rounded px-1 py-0.5 text-sm outline-none" />
-                    </td>
-                    <td className="px-2 py-2 text-right" style={{ width: '8%' }}>
-                      <input value={line.unit} onChange={e => updateLine(line.id, 'unit', e.target.value)} className="w-14 text-right bg-transparent text-sm outline-none border-b border-transparent focus:border-gray-300" />
-                    </td>
-                    <td className="px-2 py-2 text-right" style={{ width: '12%' }}>
-                      <input type="number" value={line.pu} step="0.01" onChange={e => updateLine(line.id, 'pu', +e.target.value || 0)} className="w-20 text-right bg-transparent border border-transparent focus:border-gray-300 rounded px-1 py-0.5 text-sm outline-none" />
-                    </td>
-                    <td className="px-2 py-2 text-right" style={{ width: '9%' }}>
-                      <select value={line.vat} onChange={e => updateLine(line.id, 'vat', +e.target.value)} className="text-xs bg-transparent outline-none cursor-pointer">
-                        <option value={20}>20 %</option><option value={10}>10 %</option>
-                        <option value={5.5}>5,5 %</option><option value={0}>0 %</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-2 text-right text-sm font-medium" style={{ width: '13%' }}>
-                      {(line.qty * line.pu).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
-                    </td>
-                    <td className="px-2 py-2" style={{ width: '4%' }}>
-                      <button onClick={() => setLines(prev => prev.filter(l => l.id !== line.id))} className="w-5 h-5 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors text-base">×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex gap-2 mb-6 flex-wrap">
-            {[['work', "Main d'œuvre"], ['material', 'Fourniture'], ['travel', 'Déplacement'], ['custom', 'Ligne libre']].map(([type, label]) => (
-              <button key={type} onClick={() => addLine(type)} className="text-xs border border-gray-200 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors">+ {label}</button>
-            ))}
-          </div>
-
-          {/* Totals */}
-          <div className="flex justify-end">
-            <div className="w-72">
-              <div className="flex justify-between text-sm text-gray-500 mb-2"><span>Total HT</span><span>{totalHT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span></div>
-              <div className="flex justify-between text-sm text-gray-500 mb-3"><span>TVA {lines[0]?.vat ?? 20} %</span><span>{totalVAT.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span></div>
-              <div className="flex justify-between items-center text-base font-semibold px-4 py-3 rounded-xl" style={{ background: quoteColor + '15' }}>
-                <span>Total TTC</span>
-                <span style={{ color: quoteColor }}>{totalTTC.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Signature */}
-          <div className="mt-5 pt-4 border-t border-gray-100">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs text-gray-500 block mb-1.5">Signature de l'artisan</label>
-                <SignaturePad onChange={setSignature} />
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1.5">Signature du client (sur document imprimé)</label>
-                <div className="h-[80px] border border-dashed border-gray-200 rounded-lg flex items-center justify-center">
-                  <span className="text-xs text-gray-300">Bon pour accord</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="pt-4 border-t border-gray-100">
-            <label className="text-xs text-gray-500 block mb-1.5">Notes / Conditions</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400 resize-none" />
-          </div>
-        </div>
-      </div>
-
-      {/* Historique des devis */}
-      <div className="mt-5">
+      <div className="flex flex-col gap-4">
+        {/* Pendant les heures d'ouverture */}
         <Card>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm font-semibold">Historique des devis</p>
-              <p className="text-xs text-gray-400 mt-0.5">{savedQuotes.length} devis enregistrés</p>
+              <p className="text-sm font-semibold">Pendant les heures d'ouverture</p>
+              <p className="text-xs text-gray-400 mt-0.5">Message diffusé lors des appels reçus pendant vos heures d'activité</p>
             </div>
+            <button onClick={() => {}} className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
+              <span>▶</span> Prévisualiser la voix
+            </button>
           </div>
-          {historyLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : savedQuotes.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-gray-400">Aucun devis enregistré</p>
-              <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici après génération ou envoi</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {savedQuotes.map(q => (
-                <div key={q.id} className="group py-3 border-b border-gray-100 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium font-mono">{q.number}</p>
-                        <QuoteBadge status={q.status} />
-                      </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{q.client_name || 'Client non renseigné'}{q.object ? ` · ${q.object}` : ''}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold" style={{ color: quoteColor }}>
-                        {q.total_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
-                      </p>
-                      {q.status !== 'draft' && q.updated_at ? (
-                        <p className="text-xs text-gray-400">
-                          Envoyé le {new Date(q.updated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-gray-400">{new Date(q.created_at).toLocaleDateString('fr-FR')}</p>
-                      )}
-                    </div>
-                    <select value={q.status}
-                      onChange={async e => {
-                        const s = e.target.value
-                        setSavedQuotes(prev => prev.map(sq => sq.id === q.id ? { ...sq, status: s } : sq))
-                        await supabase.from('quotes').update({ status: s }).eq('id', q.id)
-                      }}
-                      className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none ml-2 cursor-pointer">
-                      <option value="draft">Brouillon</option>
-                      <option value="sent">Envoyé</option>
-                      <option value="accepted">Accepté</option>
-                      <option value="refused">Refusé</option>
-                    </select>
-                    <button
-                      onClick={async () => {
-                        setSavedQuotes(prev => prev.filter(sq => sq.id !== q.id))
-                        await supabase.from('quotes').delete().eq('id', q.id)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">
-                      ×
-                    </button>
-                  </div>
-                  <div className="mt-2 ml-0.5">
-                    <QuoteTimeline status={q.status} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <textarea
+            value={profile.greeting_open || ''}
+            onChange={e => updateProfile({ greeting_open: e.target.value })}
+            rows={4}
+            placeholder="Ex : Bonjour, vous avez bien joint l'entreprise Dupont Plomberie. Je suis Mia, l'assistante de Marc. Comment puis-je vous aider ?"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 resize-none"
+          />
         </Card>
+
+        {/* Hors heures d'ouverture */}
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold">Hors heures d'ouverture</p>
+              <p className="text-xs text-gray-400 mt-0.5">Message diffusé en dehors de vos horaires d'activité</p>
+            </div>
+            <button onClick={() => {}} className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
+              <span>▶</span> Prévisualiser la voix
+            </button>
+          </div>
+          <textarea
+            value={profile.greeting_closed || ''}
+            onChange={e => updateProfile({ greeting_closed: e.target.value })}
+            rows={4}
+            placeholder="Ex : Bonjour, vous avez bien joint l'entreprise Dupont Plomberie. Nous sommes actuellement fermés. Laissez-moi votre message et nous vous rappellerons dès que possible."
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 resize-none"
+          />
+        </Card>
+
+        {/* Salutation personnalisée */}
+        <Card>
+          <div className="flex items-center justify-between py-1">
+            <div>
+              <p className="text-sm font-semibold">Activer le message de salutation personnalisé</p>
+              <p className="text-xs text-gray-400 mt-0.5">L'assistante utilise le prénom du client s'il est connu</p>
+            </div>
+            <Toggle defaultOn={personalizedGreeting} accent={accent} onChange={setPersonalizedGreeting} />
+          </div>
+        </Card>
+
+        {/* Message de fin d'appel */}
+        <Card>
+          <p className="text-sm font-semibold mb-3">Message de fin d'appel</p>
+          <p className="text-xs text-gray-400 mb-3">Diffusé automatiquement à la fin de chaque appel</p>
+          <input
+            defaultValue="Merci pour votre appel. Bonne journée !"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+          />
+        </Card>
+
+        <div className="flex justify-end">
+          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
+          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+            Enregistrer les modifications
+          </button>
+        </div>
       </div>
-
-      {/* Email preview modal */}
-      {emailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEmailModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-              <div>
-                <p className="font-semibold text-[15px]">Aperçu du mail</p>
-                <p className="text-xs text-gray-400 mt-0.5">Relisez et modifiez avant d'envoyer</p>
-              </div>
-              <button onClick={() => setEmailModal(null)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors text-lg">×</button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-4 flex-1 overflow-y-auto flex flex-col gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">À</label>
-                <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50">{clientEmail}</div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Objet</label>
-                <input value={emailModal.subject} onChange={e => setEmailModal(m => m ? { ...m, subject: e.target.value } : m)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-              </div>
-              <div className="flex-1">
-                <label className="text-xs font-medium text-gray-500 block mb-1">Corps du message</label>
-                <textarea value={emailModal.body} onChange={e => setEmailModal(m => m ? { ...m, body: e.target.value } : m)}
-                  rows={12} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400 resize-none font-mono leading-relaxed" />
-              </div>
-              <p className="text-xs text-gray-400 flex items-center gap-1.5">
-                <span>📎</span> Le devis PDF sera automatiquement joint à ce mail.
-              </p>
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
-              <button onClick={() => setEmailModal(null)} className="text-sm px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">Annuler</button>
-              <button onClick={handleConfirmSend} disabled={sending}
-                className="text-sm px-5 py-2 rounded-lg text-white font-medium transition-opacity disabled:opacity-50 flex items-center gap-2"
-                style={{ background: quoteColor }}>
-                {sending && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                {sending ? 'Envoi en cours...' : 'Envoyer le devis'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
-// ── Appointments Page ─────────────────────────────────────────────────────────
-function AppointmentsPage({ accent }: { accent: string }) {
-  return (
-    <div>
-      <PageHeader title="Rendez-vous" sub="Gérez la prise de rendez-vous de vos clients" />
-      <Card>
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-sm font-semibold">Agenda</p>
-          <button className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-            + Nouveau rendez-vous
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: accent + '15' }}>
-            <span className="w-7 h-7" style={{ color: accent }}><CalendarIcon /></span>
-          </div>
-          <p className="text-sm font-medium text-gray-700 mb-1">Aucun rendez-vous configuré</p>
-          <p className="text-xs text-gray-400 max-w-xs">Connectez Cal.com pour permettre à votre assistante IA de créer des rendez-vous pendant les appels.</p>
-          <button className="mt-4 text-xs px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors font-medium">
-            Connecter Cal.com
-          </button>
-        </div>
-      </Card>
-    </div>
-  )
-}
+// ── Inbound Reasons Page ──────────────────────────────────────────────────────
+type CallReason = { id: number; label: string; desc: string; on: boolean }
 
-// ── Invoices Page ─────────────────────────────────────────────────────────────
-function InvoicesPage({ accent }: { accent: string }) {
-  const { user } = useAuth()
-  const [invoices, setInvoices] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+function InboundReasonsPage({ accent }: { accent: string }) {
+  const [reasons, setReasons] = useState<CallReason[]>([
+    { id: 1, label: 'Demande générale', desc: 'Collecte le motif, le nom et le numéro du client', on: true },
+  ])
+  const [showAdd, setShowAdd] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newDesc, setNewDesc] = useState('')
 
-  useEffect(() => {
-    if (!user) return
-    supabase.from('invoices').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(30)
-      .then(({ data }) => { setInvoices(data || []); setLoading(false) })
-  }, [user])
-
-  const statusCfg: Record<string, { bg: string; text: string; label: string }> = {
-    draft:   { bg: 'bg-gray-100',    text: 'text-gray-600',    label: 'Brouillon' },
-    sent:    { bg: 'bg-blue-100',    text: 'text-blue-700',    label: 'Envoyée' },
-    paid:    { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Payée' },
-    overdue: { bg: 'bg-red-100',     text: 'text-red-700',     label: 'En retard' },
+  const toggle = (id: number) => setReasons(prev => prev.map(r => r.id === id ? { ...r, on: !r.on } : r))
+  const remove = (id: number) => setReasons(prev => prev.filter(r => r.id !== id))
+  const add = () => {
+    if (!newLabel.trim()) return
+    setReasons(prev => [...prev, { id: Date.now(), label: newLabel, desc: newDesc, on: true }])
+    setNewLabel(''); setNewDesc(''); setShowAdd(false)
   }
 
   return (
     <div>
-      <PageHeader title="Factures" sub="Toutes vos factures générées depuis les devis acceptés" />
+      <PageHeader title="Raisons d'appel entrantes" sub="Définissez les motifs pour lesquels vos clients vous appellent" />
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">Factures ({invoices.length})</p>
-          <button className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-            + Nouvelle facture
+          <p className="text-sm font-semibold">{reasons.length} raison{reasons.length > 1 ? 's' : ''} configurée{reasons.length > 1 ? 's' : ''}</p>
+          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+            + Ajouter une raison d'appel
           </button>
         </div>
-        {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : invoices.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: accent + '15' }}>
-              <span className="w-7 h-7" style={{ color: accent }}><InvoiceIcon /></span>
-            </div>
-            <p className="text-sm font-medium text-gray-700 mb-1">Aucune facture pour l'instant</p>
-            <p className="text-xs text-gray-400 max-w-xs">Les factures seront générées automatiquement lorsqu'un client acceptera un devis.</p>
+
+        {reasons.length === 0 ? (
+          <div className="text-center py-10">
+            <p className="text-sm text-gray-400">Aucune raison d'appel configurée</p>
+            <p className="text-xs text-gray-300 mt-1">Ajoutez des raisons pour guider l'assistante lors des appels</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {invoices.map((inv: any) => {
-              const s = statusCfg[inv.status] || statusCfg.draft
-              return (
-                <div key={inv.id} className="flex items-center gap-3 py-2.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium font-mono">{inv.number}</p>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{inv.client_name || 'Client non renseigné'}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold" style={{ color: accent }}>
-                      {inv.total_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
-                    </p>
-                    <p className="text-xs text-gray-400">{new Date(inv.created_at).toLocaleDateString('fr-FR')}</p>
-                  </div>
+          <div className="flex flex-col divide-y divide-gray-100">
+            {reasons.map(r => (
+              <div key={r.id} className="flex items-center gap-4 py-3.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{r.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>
                 </div>
-              )
-            })}
+                <Toggle defaultOn={r.on} accent={accent} onChange={() => toggle(r.id)} />
+                <button onClick={() => remove(r.id)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAdd && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
+            <Field label="Intitulé de la raison">
+              <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
+                placeholder="Ex : Demande de devis"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Description (optionnel)">
+              <input value={newDesc} onChange={e => setNewDesc(e.target.value)}
+                placeholder="Ex : L'assistante collecte le motif et planifie un rappel"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Ajouter</button>
+            </div>
           </div>
         )}
       </Card>
@@ -1119,85 +568,481 @@ function InvoicesPage({ accent }: { accent: string }) {
   )
 }
 
-// ── Integrations Page ─────────────────────────────────────────────────────────
-function IntegrationsPage({ accent: _accent }: { accent: string }) {
-  const integrations = [
-    { name: 'Cal.com', desc: 'Prise de rendez-vous en ligne', status: 'disconnected', icon: '📅' },
-    { name: 'Google Calendar', desc: 'Synchronisation de votre agenda', status: 'disconnected', icon: '🗓️' },
-    { name: 'Stripe', desc: 'Paiement en ligne et abonnements', status: 'connected', icon: '💳' },
-    { name: 'Vapi', desc: 'Assistante vocale IA 24/7', status: 'connected', icon: '🤖' },
-    { name: 'Twilio', desc: 'Numéro de téléphone professionnel', status: 'pending', icon: '📞' },
-  ]
-  const statusCfg = {
-    connected:    { label: 'Connecté',      cls: 'bg-emerald-100 text-emerald-700' },
-    disconnected: { label: 'Non connecté',  cls: 'bg-gray-100 text-gray-500' },
-    pending:      { label: 'En attente',    cls: 'bg-amber-100 text-amber-700' },
+// ── Outbound Reasons Page ─────────────────────────────────────────────────────
+function OutboundReasonsPage({ accent }: { accent: string }) {
+  const [reasons, setReasons] = useState<CallReason[]>([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+
+  const remove = (id: number) => setReasons(prev => prev.filter(r => r.id !== id))
+  const toggle = (id: number) => setReasons(prev => prev.map(r => r.id === id ? { ...r, on: !r.on } : r))
+  const add = () => {
+    if (!newLabel.trim()) return
+    setReasons(prev => [...prev, { id: Date.now(), label: newLabel, desc: newDesc, on: true }])
+    setNewLabel(''); setNewDesc(''); setShowAdd(false)
   }
+
   return (
     <div>
-      <PageHeader title="Intégrations" sub="Gérez les connexions avec vos services externes" />
+      <PageHeader title="Raisons d'appel sortantes" sub="Définissez les motifs pour lesquels votre assistante rappelle vos clients" />
       <Card>
-        <div className="flex flex-col divide-y divide-gray-100">
-          {integrations.map(intg => {
-            const s = statusCfg[intg.status as keyof typeof statusCfg]
-            return (
-              <div key={intg.name} className="flex items-center gap-4 py-4">
-                <div className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center text-xl flex-shrink-0 bg-gray-50">
-                  {intg.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{intg.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{intg.desc}</p>
-                </div>
-                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${s.cls}`}>{s.label}</span>
-                {intg.status === 'disconnected' && (
-                  <button className="text-xs px-3 py-1.5 rounded-md font-medium border border-gray-200 hover:bg-gray-50 transition-colors flex-shrink-0">
-                    Connecter
-                  </button>
-                )}
-              </div>
-            )
-          })}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">{reasons.length} raison{reasons.length !== 1 ? 's' : ''} configurée{reasons.length !== 1 ? 's' : ''}</p>
+          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+            + Ajouter une raison d'appel
+          </button>
         </div>
+
+        {reasons.length === 0 && !showAdd ? (
+          <div className="text-center py-12">
+            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+              <PhoneOutIcon />
+            </div>
+            <p className="text-sm text-gray-400">Aucune raison d'appel sortant configurée</p>
+            <p className="text-xs text-gray-300 mt-1">Ajoutez des raisons pour que l'assistante puisse rappeler vos clients</p>
+            <button onClick={() => setShowAdd(true)} className="mt-4 text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
+              + Ajouter une raison d'appel
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-100">
+            {reasons.map(r => (
+              <div key={r.id} className="flex items-center gap-4 py-3.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{r.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>
+                </div>
+                <Toggle defaultOn={r.on} accent={accent} onChange={() => toggle(r.id)} />
+                <button onClick={() => remove(r.id)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAdd && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
+            <Field label="Intitulé de la raison">
+              <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
+                placeholder="Ex : Rappel devis envoyé"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Description (optionnel)">
+              <input value={newDesc} onChange={e => setNewDesc(e.target.value)}
+                placeholder="Ex : L'assistante rappelle le client 48h après l'envoi du devis"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Ajouter</button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   )
 }
 
-// ── Assistant Page ────────────────────────────────────────────────────────────
-function AssistantPage({ accent }: { accent: string }) {
-  const { profile, updateProfile } = useProfile()
-  if (!profile) return null
+// ── Call Transfer Page ────────────────────────────────────────────────────────
+function CallTransferPage({ accent }: { accent: string }) {
+  const [externalTransfer, setExternalTransfer] = useState(false)
+  const [externalNumber, setExternalNumber] = useState('')
+  const [transferToEmployees, setTransferToEmployees] = useState(false)
+  const [interEmployeeTransfer, setInterEmployeeTransfer] = useState(false)
+
   return (
     <div>
-      <PageHeader title="Assistante IA" sub="Configurez les paramètres de votre assistante" />
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <PageHeader title="Transfert d'appel" sub="Configurez le transfert d'appels vers des numéros externes ou des employés" />
+
+      <div className="flex flex-col gap-4">
+        {/* Transfert externe */}
         <Card>
-          <p className="text-sm font-semibold mb-4">Identité</p>
-          <Field label="Prénom de l'assistante"><input value={profile.assistant_name} onChange={e => updateProfile({ assistant_name: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="Type de voix">
-            <select value={profile.assistant_voice} onChange={e => updateProfile({ assistant_voice: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none">
-              {['Féminine conviviale','Féminine professionnelle','Féminine énergique','Masculine conviviale'].map(v => <option key={v}>{v}</option>)}
-            </select>
-          </Field>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold">Transfert d'appel externe</p>
+              <p className="text-xs text-gray-400 mt-0.5">Transférer les appels vers un numéro de téléphone externe</p>
+            </div>
+            <Toggle defaultOn={externalTransfer} accent={accent} onChange={setExternalTransfer} />
+          </div>
+          {externalTransfer && (
+            <Field label="Numéro de destination">
+              <input value={externalNumber} onChange={e => setExternalNumber(e.target.value)}
+                placeholder="+33 6 00 00 00 00"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 mt-1" />
+            </Field>
+          )}
         </Card>
+
+        {/* Heures actives de l'assistant */}
         <Card>
-          <p className="text-sm font-semibold mb-4">Messages</p>
-          <Field label="Pendant les horaires d'ouverture"><textarea value={profile.greeting_open} onChange={e => updateProfile({ greeting_open: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none resize-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="Hors horaires"><textarea value={profile.greeting_closed} onChange={e => updateProfile({ greeting_closed: e.target.value })} rows={3} className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm outline-none resize-none focus:border-gray-400" /></Field>
+          <p className="text-sm font-semibold mb-1">Heures actives de l'assistant</p>
+          <p className="text-xs text-gray-400 mb-4">Le transfert d'appel est actif uniquement pendant ces horaires</p>
+          <div className="flex flex-col gap-3">
+            {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'].map((day, i) => (
+              <div key={day} className="flex items-center gap-4">
+                <span className="text-sm text-gray-600 w-24">{day}</span>
+                {i < 5 ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <input type="time" defaultValue="09:00" className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
+                    <span>à</span>
+                    <input type="time" defaultValue="18:00" className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-300 italic">Fermé</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Transfert vers des employés */}
+        <Card>
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <p className="text-sm font-semibold">Transférer vers des employés</p>
+              <p className="text-xs text-gray-400 mt-0.5">L'assistante transfère l'appel vers un employé disponible</p>
+            </div>
+            <Toggle defaultOn={transferToEmployees} accent={accent} onChange={setTransferToEmployees} />
+          </div>
+          {transferToEmployees && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs text-gray-400 text-center py-4">Ajoutez d'abord des employés dans la section "Employés"</p>
+            </div>
+          )}
+        </Card>
+
+        {/* Transfert entre employés */}
+        <Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Transfert entre employés</p>
+              <p className="text-xs text-gray-400 mt-0.5">Permettre aux employés de transférer des appels entre eux</p>
+            </div>
+            <Toggle defaultOn={interEmployeeTransfer} accent={accent} onChange={setInterEmployeeTransfer} />
+          </div>
         </Card>
       </div>
+    </div>
+  )
+}
+
+// ── Post Processing Page ──────────────────────────────────────────────────────
+function PostProcessingPage({ accent }: { accent: string }) {
+  const { profile, updateProfile } = useProfile()
+  const [emailNotif, setEmailNotif] = useState(true)
+  const [saved, setSaved] = useState(false)
+
+  if (!profile) return null
+
+  const handleSave = async () => {
+    await updateProfile({ email: profile.email })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  return (
+    <div>
+      <PageHeader title="Post-traitement" sub="Actions effectuées automatiquement après chaque appel" />
+      <div className="flex flex-col gap-4">
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold">Envoyer un email de notification après l'appel</p>
+              <p className="text-xs text-gray-400 mt-0.5">Recevez un résumé de chaque appel par email dès la fin de la conversation</p>
+            </div>
+            <Toggle defaultOn={emailNotif} accent={accent} onChange={setEmailNotif} />
+          </div>
+          {emailNotif && (
+            <Field label="Adresse email de notification">
+              <input
+                value={profile.email || ''}
+                onChange={e => updateProfile({ email: e.target.value })}
+                placeholder="votre@email.fr"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 mt-1"
+              />
+            </Field>
+          )}
+        </Card>
+
+        <Card>
+          <p className="text-sm font-semibold mb-4">Contenu du résumé</p>
+          <div className="flex flex-col gap-3">
+            <ToggleRow label="Nom du client" desc="Inclure le nom et le numéro du client dans le résumé" defaultOn={true} accent={accent} />
+            <ToggleRow label="Résumé de l'appel" desc="Synthèse générée automatiquement par l'IA" defaultOn={true} accent={accent} />
+            <ToggleRow label="Durée de l'appel" desc="Durée totale de la conversation" defaultOn={true} accent={accent} />
+            <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
+          </div>
+        </Card>
+
+        <div className="flex justify-end">
+          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
+          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+            Enregistrer les modifications
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Employees Page ────────────────────────────────────────────────────────────
+type Employee = { id: number; name: string; email: string; phone: string; role: string }
+
+function EmployeesPage({ accent }: { accent: string }) {
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', phone: '', role: '' })
+
+  const add = () => {
+    if (!form.name.trim()) return
+    setEmployees(prev => [...prev, { id: Date.now(), ...form }])
+    setForm({ name: '', email: '', phone: '', role: '' })
+    setShowAdd(false)
+  }
+
+  const remove = (id: number) => setEmployees(prev => prev.filter(e => e.id !== id))
+  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+
+  return (
+    <div>
+      <PageHeader title="Employés" sub="Gérez les membres de votre équipe" />
       <Card>
-        <div className="flex items-center justify-between mb-4"><p className="text-sm font-semibold">Raisons d'appel</p><button className="text-xs px-3 py-1.5 rounded-md text-white" style={{ background: accent }}>+ Ajouter</button></div>
-        {[
-          { label: "Demande de devis plomberie", desc: "Collecte motif, nom, tél et heure de rappel", on: true },
-          { label: "Urgence fuite / dégât des eaux", desc: "Transfert immédiat + SMS artisan", on: true },
-          { label: "Demande de devis électricité", desc: "Collecte motif, nom, tél et heure de rappel", on: true },
-          { label: "Prise de rendez-vous", desc: "Synchronise avec Cal.com", on: false },
-        ].map((r, i) => <ToggleRow key={i} label={r.label} desc={r.desc} defaultOn={r.on} accent={accent} />)}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">{employees.length} employé{employees.length !== 1 ? 's' : ''}</p>
+          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+            + Ajouter un employé
+          </button>
+        </div>
+
+        {employees.length === 0 && !showAdd ? (
+          <div className="text-center py-12">
+            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+              <TeamIcon />
+            </div>
+            <p className="text-sm text-gray-400">Aucun employé ajouté</p>
+            <p className="text-xs text-gray-300 mt-1">Ajoutez vos collaborateurs pour activer le transfert d'appels</p>
+            <button onClick={() => setShowAdd(true)} className="mt-4 text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
+              + Ajouter un employé
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-100">
+            {employees.map(emp => (
+              <div key={emp.id} className="group flex items-center gap-3 py-3.5">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0"
+                  style={{ background: accent + '15', color: accent }}>
+                  {initials(emp.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{emp.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{[emp.email, emp.phone].filter(Boolean).join(' · ')}</p>
+                  {emp.role && <p className="text-xs text-gray-300 mt-0.5">{emp.role}</p>}
+                </div>
+                <button onClick={() => remove(emp.id)} className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAdd && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nom complet *">
+                <input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Marie Dupont"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+              </Field>
+              <Field label="Rôle / Poste">
+                <input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                  placeholder="Plombier, Commercial..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+              </Field>
+              <Field label="Email">
+                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="marie@entreprise.fr"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+              </Field>
+              <Field label="Téléphone">
+                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="+33 6 00 00 00 00"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+              </Field>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Ajouter</button>
+            </div>
+          </div>
+        )}
       </Card>
+    </div>
+  )
+}
+
+// ── Business Details Page ─────────────────────────────────────────────────────
+function BusinessDetailsPage({ accent, uploadLogo: _uploadLogo }: { accent: string; uploadLogo: (f: File) => Promise<string | null> }) {
+  const { profile, updateProfile } = useProfile()
+  const [skills, setSkills] = useState<string[]>(['Plomberie', 'Chauffage'])
+  const [newSkill, setNewSkill] = useState('')
+  const [postalCodes, setPostalCodes] = useState<Array<{ code: string; radius: number }>>([])
+  const [newPostal, setNewPostal] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  if (!profile) return null
+
+  const addSkill = () => {
+    if (!newSkill.trim()) return
+    setSkills(prev => [...prev, newSkill.trim()])
+    setNewSkill('')
+  }
+
+  const addPostal = () => {
+    if (!newPostal.trim()) return
+    setPostalCodes(prev => [...prev, { code: newPostal.trim(), radius: 10 }])
+    setNewPostal('')
+  }
+
+  const handleSave = async () => {
+    await updateProfile({
+      company_name: profile.company_name,
+      address: profile.address,
+      company_type: profile.company_type,
+      email: profile.email,
+      phone: profile.phone,
+    })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  const callStatuses = [
+    { label: 'Nouveau', color: 'bg-blue-100 text-blue-700' },
+    { label: 'En cours', color: 'bg-amber-100 text-amber-700' },
+    { label: 'Traité', color: 'bg-emerald-100 text-emerald-700' },
+  ]
+
+  return (
+    <div>
+      <PageHeader title="Détails de l'entreprise" sub="Informations utilisées par votre assistante pour se présenter" />
+      <div className="flex flex-col gap-4">
+        {/* Infos principales */}
+        <Card>
+          <p className="text-sm font-semibold mb-4">Informations générales</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Nom de l'entreprise">
+              <input value={profile.company_name || ''} onChange={e => updateProfile({ company_name: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Type d'activité">
+              <select value={profile.company_type || ''} onChange={e => updateProfile({ company_type: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                <option value="">Sélectionner...</option>
+                {['Plomberie / Chauffage / Climatisation', 'Électricité / Solaire', 'Services à domicile', 'Menuiserie / Charpenterie', 'Peinture / Décoration', 'Serrurerie', 'Jardinage / Paysagisme', 'Autre'].map(t => <option key={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Adresse">
+              <input value={profile.address || ''} onChange={e => updateProfile({ address: e.target.value })}
+                placeholder="12 rue de la Paix, 75001 Paris"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Téléphone">
+              <input value={profile.phone || ''} onChange={e => updateProfile({ phone: e.target.value })}
+                placeholder="+33 6 00 00 00 00"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Email">
+              <input value={profile.email || ''} onChange={e => updateProfile({ email: e.target.value })}
+                placeholder="contact@entreprise.fr"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Site web">
+              <input defaultValue="" placeholder="https://www.monentreprise.fr"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Description de l'entreprise">
+              <textarea
+                defaultValue=""
+                placeholder="Décrivez votre activité, vos spécialités et votre zone d'intervention..."
+                rows={3}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 resize-none"
+              />
+            </Field>
+          </div>
+        </Card>
+
+        {/* Compétences */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Compétences</p>
+          <p className="text-xs text-gray-400 mb-4">Vos domaines d'expertise communiqués aux clients lors des appels</p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {skills.map((s, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
+                {s}
+                <button onClick={() => setSkills(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-70 ml-0.5">×</button>
+              </div>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <input value={newSkill} onChange={e => setNewSkill(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addSkill()}
+                placeholder="Ajouter une compétence..."
+                className="text-xs border border-dashed border-gray-300 rounded-full px-3 py-1.5 outline-none focus:border-gray-400 w-44" />
+              <button onClick={addSkill} className="text-xs px-2.5 py-1.5 rounded-full text-white" style={{ background: accent }}>+</button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Statuts des appels */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Statuts des appels</p>
+          <p className="text-xs text-gray-400 mb-4">Étiquettes utilisées pour classer vos appels</p>
+          <div className="flex gap-2 flex-wrap">
+            {callStatuses.map((s, i) => (
+              <span key={i} className={`text-xs font-semibold px-3 py-1.5 rounded-full ${s.color}`}>{s.label}</span>
+            ))}
+            <span className="text-xs px-3 py-1.5 rounded-full border border-dashed border-gray-300 text-gray-400 cursor-pointer hover:border-gray-400">
+              + Ajouter un statut
+            </span>
+          </div>
+        </Card>
+
+        {/* Codes postaux / Zone d'intervention */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Zone d'intervention</p>
+          <p className="text-xs text-gray-400 mb-4">Codes postaux couverts avec rayon d'intervention</p>
+          <div className="flex flex-col gap-2 mb-3">
+            {postalCodes.map((pc, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg">
+                <span className="text-sm font-medium flex-1">{pc.code}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-400">Rayon :</span>
+                  <select value={pc.radius} onChange={e => setPostalCodes(prev => prev.map((p, idx) => idx === i ? { ...p, radius: +e.target.value } : p))}
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none">
+                    {[5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>{r} km</option>)}
+                  </select>
+                </div>
+                <button onClick={() => setPostalCodes(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 text-sm">×</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input value={newPostal} onChange={e => setNewPostal(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addPostal()}
+              placeholder="Ex : 75001"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            <button onClick={addPostal} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
+              + Ajouter
+            </button>
+          </div>
+        </Card>
+
+        <div className="flex justify-end">
+          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
+          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+            Enregistrer les modifications
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1206,11 +1051,11 @@ function AssistantPage({ accent }: { accent: string }) {
 type DaySlot = { day: string; open: string; close: string; on: boolean }
 
 const DEFAULT_HOURS: DaySlot[] = [
-  { day: 'Lundi', open: '08:00', close: '18:00', on: true },
-  { day: 'Mardi', open: '08:00', close: '18:00', on: true },
-  { day: 'Mercredi', open: '08:00', close: '18:00', on: true },
-  { day: 'Jeudi', open: '08:00', close: '18:00', on: true },
-  { day: 'Vendredi', open: '08:00', close: '17:00', on: true },
+  { day: 'Lundi', open: '09:00', close: '18:00', on: true },
+  { day: 'Mardi', open: '09:00', close: '18:00', on: true },
+  { day: 'Mercredi', open: '09:00', close: '18:00', on: true },
+  { day: 'Jeudi', open: '09:00', close: '18:00', on: true },
+  { day: 'Vendredi', open: '09:00', close: '18:00', on: true },
   { day: 'Samedi', open: '09:00', close: '12:00', on: false },
   { day: 'Dimanche', open: '', close: '', on: false },
 ]
@@ -1223,7 +1068,7 @@ function HoursPage({ accent }: { accent: string }) {
   })
   const [saved, setSaved] = useState(false)
 
-  const updateDay = (i: number, field: keyof DaySlot, value: any) => {
+  const updateDay = (i: number, field: keyof DaySlot, value: string | boolean) => {
     setDays(prev => prev.map((d, idx) => idx === i ? { ...d, [field]: value } : d))
   }
 
@@ -1236,29 +1081,31 @@ function HoursPage({ accent }: { accent: string }) {
   return (
     <div>
       <PageHeader title="Horaires d'ouverture" sub="Configurez les heures de disponibilité de votre assistante" />
-      <Card className="mb-4">
-        <div className="flex items-center justify-between mb-4">
+      <Card>
+        <div className="flex items-center justify-between mb-5">
           <p className="text-sm font-semibold">Plages horaires</p>
           <div className="flex items-center gap-3">
             {saved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
-            <button onClick={handleSave} className="text-xs px-3 py-1.5 rounded-md text-white" style={{ background: accent }}>Enregistrer</button>
+            <button onClick={handleSave} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>Enregistrer</button>
           </div>
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {days.map((d, i) => (
             <div key={d.day} className="flex items-center gap-4">
-              <span className="text-sm font-medium w-24">{d.day}</span>
-              {d.on
-                ? <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <input type="time" value={d.open} onChange={e => updateDay(i, 'open', e.target.value)}
-                      className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
-                    <span>à</span>
-                    <input type="time" value={d.close} onChange={e => updateDay(i, 'close', e.target.value)}
-                      className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
-                  </div>
-                : <span className="text-sm text-gray-300 italic">Fermé</span>}
+              <span className="text-sm font-medium w-28">{d.day}</span>
+              {d.on ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <input type="time" value={d.open} onChange={e => updateDay(i, 'open', e.target.value)}
+                    className="border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-400" />
+                  <span className="text-gray-300">–</span>
+                  <input type="time" value={d.close} onChange={e => updateDay(i, 'close', e.target.value)}
+                    className="border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-400" />
+                </div>
+              ) : (
+                <span className="text-sm text-gray-300 italic">Fermé</span>
+              )}
               <button onClick={() => updateDay(i, 'on', !d.on)}
-                className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ml-auto`}
+                className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ml-auto"
                 style={{ background: d.on ? accent : '#D1D5DB' }}>
                 <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
               </button>
@@ -1266,56 +1113,394 @@ function HoursPage({ accent }: { accent: string }) {
           ))}
         </div>
       </Card>
+    </div>
+  )
+}
+
+// ── Assistant Page ────────────────────────────────────────────────────────────
+function AssistantPage({ accent }: { accent: string }) {
+  const { profile, updateProfile } = useProfile()
+  const [saved, setSaved] = useState(false)
+  const [extraLangs, setExtraLangs] = useState<string[]>([])
+
+  if (!profile) return null
+
+  const handleSave = async () => {
+    await updateProfile({ assistant_name: profile.assistant_name, assistant_voice: profile.assistant_voice })
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  const availableLangs = ['Anglais', 'Espagnol', 'Allemand', 'Italien', 'Portugais', 'Arabe']
+
+  return (
+    <div>
+      <PageHeader title="Paramètres de l'assistant" sub="Configurez l'identité et la voix de votre assistante IA" />
+      <div className="flex flex-col gap-4">
+        <Card>
+          <p className="text-sm font-semibold mb-4">Identité</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Prénom de l'assistante">
+              <input value={profile.assistant_name || ''} onChange={e => updateProfile({ assistant_name: e.target.value })}
+                placeholder="Mia"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            </Field>
+            <Field label="Type de voix">
+              <select value={profile.assistant_voice || ''} onChange={e => updateProfile({ assistant_voice: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                {['Féminin conviviale', 'Féminin professionnelle', 'Féminin énergique', 'Masculin convivial', 'Masculin professionnel'].map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </Card>
+
+        <Card>
+          <p className="text-sm font-semibold mb-4">Langue</p>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <Field label="Langue principale">
+              <select defaultValue="Français" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
+                <option>Français</option>
+                <option>Anglais</option>
+                <option>Espagnol</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Langues supplémentaires">
+            <div className="flex flex-wrap gap-2 mt-1">
+              {extraLangs.map((lang, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full" style={{ background: accent + '15', color: accent }}>
+                  {lang}
+                  <button onClick={() => setExtraLangs(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-70">×</button>
+                </div>
+              ))}
+              {availableLangs.filter(l => !extraLangs.includes(l)).map(lang => (
+                <button key={lang} onClick={() => setExtraLangs(prev => [...prev, lang])}
+                  className="text-xs px-3 py-1.5 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-gray-400">
+                  + {lang}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <p className="text-sm font-semibold">Prévisualisation de la voix</p>
+              <p className="text-xs text-gray-400 mt-0.5">Écoutez un exemple avec les paramètres actuels</p>
+            </div>
+            <button className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-2">
+              <span>▶</span> Écouter
+            </button>
+          </div>
+        </Card>
+
+        <div className="flex justify-end">
+          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
+          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+            Enregistrer les modifications
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Webhooks Page ─────────────────────────────────────────────────────────────
+type Webhook = { id: number; url: string; events: string[]; active: boolean }
+
+function WebhooksPage({ accent }: { accent: string }) {
+  const [webhooks, setWebhooks] = useState<Webhook[]>([])
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ url: '', events: [] as string[] })
+
+  const eventOptions = ['end-of-call-report', 'status-update', 'call-started', 'call-ended']
+
+  const add = () => {
+    if (!form.url.trim()) return
+    setWebhooks(prev => [...prev, { id: Date.now(), url: form.url, events: form.events, active: true }])
+    setForm({ url: '', events: [] })
+    setShowAdd(false)
+  }
+
+  const toggleEvent = (ev: string) => {
+    setForm(f => ({
+      ...f,
+      events: f.events.includes(ev) ? f.events.filter(e => e !== ev) : [...f.events, ev]
+    }))
+  }
+
+  return (
+    <div>
+      <PageHeader title="Webhooks" sub="Recevez des notifications en temps réel pour chaque événement d'appel" />
       <Card>
-        <p className="text-sm font-semibold mb-4">Notifications et transfert</p>
-        <ToggleRow label="Transfert d'appel externe actif" desc="Numéro de destination configuré dans vos paramètres" defaultOn={true} accent={accent} />
-        <ToggleRow label="SMS résumé après appel" desc="Résumé envoyé en moins de 30 secondes" defaultOn={true} accent={accent} />
-        <ToggleRow label="Email de synthèse quotidien" desc="Rapport envoyé chaque soir" defaultOn={true} accent={accent} />
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">{webhooks.length} webhook{webhooks.length !== 1 ? 's' : ''} configuré{webhooks.length !== 1 ? 's' : ''}</p>
+          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
+            + Créer un webhook
+          </button>
+        </div>
+
+        {webhooks.length === 0 && !showAdd ? (
+          <div className="text-center py-12">
+            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+              <WebhookIcon />
+            </div>
+            <p className="text-sm text-gray-400">Aucun webhook configuré</p>
+            <p className="text-xs text-gray-300 mt-1">Créez un webhook pour recevoir des données lors de chaque appel</p>
+            <button onClick={() => setShowAdd(true)} className="mt-4 text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
+              + Créer un webhook
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-100">
+            {webhooks.map(wh => (
+              <div key={wh.id} className="py-3.5 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-mono text-gray-700 truncate">{wh.url}</p>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {wh.events.map(ev => (
+                      <span key={ev} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{ev}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {wh.active ? 'Actif' : 'Inactif'}
+                  </span>
+                  <button onClick={() => setWebhooks(prev => prev.filter(w => w.id !== wh.id))} className="text-gray-300 hover:text-red-500 text-sm">×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showAdd && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-4">
+            <Field label="URL du webhook">
+              <input autoFocus value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                placeholder="https://votre-serveur.com/webhook"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 font-mono" />
+            </Field>
+            <div>
+              <label className="text-xs text-gray-500 block mb-2">Événements à écouter</label>
+              <div className="flex flex-wrap gap-2">
+                {eventOptions.map(ev => (
+                  <button key={ev} onClick={() => toggleEvent(ev)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${form.events.includes(ev) ? 'text-white border-transparent' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}
+                    style={form.events.includes(ev) ? { background: accent } : {}}>
+                    {ev}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Créer le webhook</button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   )
 }
 
-// ── Settings Page ─────────────────────────────────────────────────────────────
-function SettingsPage({ accent: _accent, uploadLogo: _uploadLogo }: { accent: string; uploadLogo: (f: File) => Promise<string | null> }) {
-  const { profile, updateProfile } = useProfile()
-  if (!profile) return null
+// ── Integrations Page ─────────────────────────────────────────────────────────
+function IntegrationsPage({ accent }: { accent: string }) {
+  const [apiKey] = useState<string | null>(null)
+  const [apiKeyGenerated, setApiKeyGenerated] = useState(false)
+  const [generatedKey, setGeneratedKey] = useState('')
+  const [calApiKey, setCalApiKey] = useState('')
+  const [authorizedDomains, setAuthorizedDomains] = useState<string[]>([])
+  const [newDomain, setNewDomain] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const generateKey = () => {
+    const key = 'fix_' + Array.from({ length: 32 }, () => Math.random().toString(36)[2]).join('')
+    setGeneratedKey(key)
+    setApiKeyGenerated(true)
+  }
+
+  const copyKey = () => {
+    navigator.clipboard.writeText(generatedKey)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const addDomain = () => {
+    if (!newDomain.trim()) return
+    setAuthorizedDomains(prev => [...prev, newDomain.trim()])
+    setNewDomain('')
+  }
+
   return (
     <div>
-      <PageHeader title="Paramètres" sub="Informations de votre entreprise" />
-      <div className="grid grid-cols-2 gap-4">
+      <PageHeader title="Intégrations" sub="Connectez Fixlyy à vos outils et configurez l'accès API" />
+      <div className="flex flex-col gap-4">
+
+        {/* Widget */}
         <Card>
-          <p className="text-sm font-semibold mb-4">Informations entreprise</p>
-          <Field label="Nom de l'entreprise"><input value={profile.company_name} onChange={e => updateProfile({ company_name: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="Type d'activité">
-            <select value={profile.company_type} onChange={e => updateProfile({ company_type: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none">
-              {['Plomberie / Chauffage / Climatisation','Électricité / Solaire','Services à domicile','Menuiserie / Charpenterie','Peinture','Autre'].map(t => <option key={t}>{t}</option>)}
-            </select>
-          </Field>
-          <div className="h-3" />
-          <Field label="Email"><input value={profile.email} onChange={e => updateProfile({ email: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="Téléphone"><input value={profile.phone} onChange={e => updateProfile({ phone: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="SIRET"><input value={profile.siret} onChange={e => updateProfile({ siret: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="N° RC Pro (assurance)"><input value={(profile as any).rc_pro || ''} onChange={e => updateProfile({ rc_pro: e.target.value } as any)} placeholder="Ex: MRB-2024-XXXXXXX" className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-        </Card>
-        <Card>
-          <p className="text-sm font-semibold mb-4">Zone d'intervention</p>
-          <Field label="Adresse"><input value={profile.address} onChange={e => updateProfile({ address: e.target.value })} className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <Field label="Numéro Twilio (assistant)"><input value={profile.twilio_number || ''} onChange={e => updateProfile({ twilio_number: e.target.value })} placeholder="+33 1 XX XX XX XX" className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm outline-none focus:border-gray-400" /></Field>
-          <div className="h-3" />
-          <div>
-            <label className="text-xs text-gray-500 block mb-1.5">Statuts des appels</label>
-            <div className="flex gap-2 flex-wrap">
-              <Badge type="new" /><Badge type="pending" /><Badge type="done" />
-              <span className="text-xs px-2 py-0.5 rounded-full border border-dashed border-gray-300 text-gray-400 cursor-pointer hover:border-gray-400">+ Ajouter</span>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-xl flex-shrink-0">
+              🧩
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Widget Fixlyy</p>
+              <p className="text-xs text-gray-400 mt-0.5">Intégrez un bouton d'appel direct sur votre site web</p>
+            </div>
+            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Non configuré</span>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500 mb-2">Copiez ce code dans le <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> de votre site</p>
+            <div className="bg-gray-900 rounded-lg px-4 py-3 font-mono text-xs text-gray-300 relative">
+              {'<script src="https://widget.fixlyy.fr/v1.js" data-key="YOUR_KEY"></script>'}
+              <button className="absolute top-2 right-2 text-[10px] text-gray-400 hover:text-white px-2 py-1 rounded bg-gray-700">
+                Copier
+              </button>
             </div>
           </div>
         </Card>
+
+        {/* Clé API */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Clé API</p>
+          <p className="text-xs text-gray-400 mb-4">Utilisez cette clé pour intégrer Fixlyy dans vos propres applications</p>
+          {!apiKeyGenerated && !apiKey ? (
+            <button onClick={generateKey} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
+              Générer une clé API
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono text-xs text-gray-600 overflow-hidden">
+                {generatedKey || apiKey}
+              </div>
+              <button onClick={copyKey} className={`text-xs px-3 py-2 rounded-lg border transition-colors ${copied ? 'border-emerald-300 text-emerald-600 bg-emerald-50' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                {copied ? '✓ Copié' : 'Copier'}
+              </button>
+            </div>
+          )}
+        </Card>
+
+        {/* Domaines autorisés */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Domaines autorisés</p>
+          <p className="text-xs text-gray-400 mb-4">Seuls ces domaines peuvent utiliser votre clé API et widget</p>
+          <div className="flex flex-col gap-2 mb-3">
+            {authorizedDomains.map((domain, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
+                <span className="text-sm font-mono text-gray-700">{domain}</span>
+                <button onClick={() => setAuthorizedDomains(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 text-sm">×</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input value={newDomain} onChange={e => setNewDomain(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addDomain()}
+              placeholder="ex : monsite.fr"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+            <button onClick={addDomain} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
+              + Ajouter
+            </button>
+          </div>
+        </Card>
+
+        {/* Cal.com */}
+        <Card>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-xl flex-shrink-0">
+              📅
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Cal.com</p>
+              <p className="text-xs text-gray-400 mt-0.5">Prise de rendez-vous automatique via votre assistante</p>
+            </div>
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${calApiKey ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {calApiKey ? 'Connecté' : 'Non connecté'}
+            </span>
+          </div>
+          <Field label="Clé API Cal.com">
+            <input value={calApiKey} onChange={e => setCalApiKey(e.target.value)}
+              placeholder="cal_live_xxxxxxxxxxxxxxxxxxxxxxxx"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 font-mono" />
+          </Field>
+          {calApiKey && (
+            <p className="text-xs text-emerald-600 mt-2">✓ Votre assistante peut désormais prendre des rendez-vous via Cal.com</p>
+          )}
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// ── Timezone Page ─────────────────────────────────────────────────────────────
+function TimezonePage({ accent }: { accent: string }) {
+  const [timezone, setTimezone] = useState('Europe/Paris')
+  const [saved, setSaved] = useState(false)
+
+  const timezones = [
+    { value: 'Europe/Paris', label: 'Heure d\'Europe centrale — CET/CEST (UTC+1/+2)' },
+    { value: 'Europe/London', label: 'Heure du Royaume-Uni — GMT/BST (UTC+0/+1)' },
+    { value: 'Europe/Berlin', label: 'Heure d\'Europe centrale — CET/CEST (UTC+1/+2)' },
+    { value: 'Europe/Madrid', label: 'Heure d\'Europe centrale — CET/CEST (UTC+1/+2)' },
+    { value: 'America/New_York', label: 'Heure de l\'Est — EST/EDT (UTC-5/-4)' },
+    { value: 'America/Los_Angeles', label: 'Heure du Pacifique — PST/PDT (UTC-8/-7)' },
+    { value: 'UTC', label: 'Temps universel coordonné — UTC (UTC+0)' },
+  ]
+
+  const now = new Date()
+  const localTime = now.toLocaleTimeString('fr-FR', { timeZone: timezone, hour: '2-digit', minute: '2-digit' })
+  const localDate = now.toLocaleDateString('fr-FR', { timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+  return (
+    <div>
+      <PageHeader title="Fuseau horaire" sub="Configurez le fuseau horaire utilisé pour vos horaires et notifications" />
+      <div className="flex flex-col gap-4">
+        <Card>
+          <p className="text-sm font-semibold mb-4">Fuseau horaire de l'entreprise</p>
+          <Field label="Sélectionner un fuseau horaire">
+            <select value={timezone} onChange={e => setTimezone(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400">
+              {timezones.map(tz => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+          </Field>
+          <div className="mt-4 px-4 py-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-400 mb-1">Heure actuelle dans ce fuseau</p>
+            <p className="text-xl font-semibold">{localTime}</p>
+            <p className="text-xs text-gray-500 mt-0.5 capitalize">{localDate}</p>
+          </div>
+        </Card>
+
+        <Card>
+          <p className="text-sm font-semibold mb-1">Impact sur votre configuration</p>
+          <p className="text-xs text-gray-400 mb-4">Ce fuseau horaire affecte les éléments suivants</p>
+          <div className="flex flex-col gap-2.5">
+            {[
+              { icon: '🕐', label: 'Horaires d\'ouverture', desc: 'Vos plages horaires sont interprétées dans ce fuseau' },
+              { icon: '📱', label: 'Notifications SMS et email', desc: 'Les résumés d\'appels affichent l\'heure locale' },
+              { icon: '📞', label: 'Logs d\'appels', desc: 'Les horodatages des appels utilisent ce fuseau' },
+            ].map((item, i) => (
+              <div key={i} className="flex items-start gap-3 px-3 py-2.5 bg-gray-50 rounded-lg">
+                <span className="text-base">{item.icon}</span>
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div className="flex justify-end">
+          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
+          <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2500) }}
+            className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+            Enregistrer
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1325,9 +1510,9 @@ function SettingsPage({ accent: _accent, uploadLogo: _uploadLogo }: { accent: st
 function SubscriptionPage({ accent }: { accent: string }) {
   const [selected, setSelected] = useState(1)
   const plans = [
-    { name: 'Solo', price: 79, desc: '150 appels · 1 artisan', features: ['Secrétaire IA 24/7','SMS résumé 30 sec','Devis sur mesure','Support email'] },
-    { name: 'Pro', price: 149, desc: 'Appels illimités · 1 artisan', features: ['Tout Solo inclus','Appels illimités','Transfert intelligent','Statistiques avancées'], popular: true },
-    { name: 'Équipe', price: 249, desc: 'Appels illimités · 5 artisans', features: ['Tout Pro inclus','Jusqu\'à 5 artisans','Tableau de bord équipe','Support prioritaire'] },
+    { name: 'Solo', price: 79, desc: '150 appels · 1 artisan', features: ['Secrétaire IA 24/7', 'SMS résumé 30 sec', 'Prise de RDV', 'Support email'] },
+    { name: 'Pro', price: 149, desc: 'Appels illimités · 1 artisan', features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
+    { name: 'Équipe', price: 249, desc: 'Appels illimités · 5 artisans', features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
   ]
   return (
     <div>
@@ -1381,11 +1566,31 @@ function StatCard({ label, value, trend, trendUp, accent }: { label: string; val
   )
 }
 
-function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
-  return <div className={className}><label className="text-xs text-gray-500 block mb-1">{label}</label>{children}</div>
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label className="text-xs text-gray-500 block mb-1">{label}</label>{children}</div>
 }
 
-function CallRow({ call: c, accent, onStatusChange }: { call: CallRow; accent: string; onStatusChange: (id: string, status: string) => void }) {
+function Toggle({ defaultOn, accent, onChange, className = '' }: { defaultOn: boolean; accent: string; onChange?: (v: boolean) => void; className?: string }) {
+  const [on, setOn] = useState(defaultOn)
+  return (
+    <button onClick={() => { setOn(!on); onChange?.(!on) }}
+      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${className}`}
+      style={{ background: on ? accent : '#D1D5DB' }}>
+      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+    </button>
+  )
+}
+
+function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: string; defaultOn: boolean; accent: string }) {
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+      <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-gray-400 mt-0.5">{desc}</p></div>
+      <Toggle defaultOn={defaultOn} accent={accent} className="ml-4" />
+    </div>
+  )
+}
+
+function CallRowItem({ call: c, accent, onStatusChange }: { call: CallRow; accent: string; onStatusChange: (id: string, status: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   const initials = (name: string | null) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?'
@@ -1432,136 +1637,20 @@ function CallRow({ call: c, accent, onStatusChange }: { call: CallRow; accent: s
   )
 }
 
-function QuoteBadge({ status }: { status: string }) {
-  const cfg: Record<string, { bg: string; text: string; label: string }> = {
-    draft:    { bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'Brouillon' },
-    sent:     { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'Envoyé' },
-    accepted: { bg: 'bg-emerald-100',text: 'text-emerald-700',label: 'Accepté' },
-    refused:  { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Refusé' },
-    error:    { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Erreur envoi' },
-  }
-  const s = cfg[status] || cfg.draft
-  return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>{s.label}</span>
-}
-
-function QuoteTimeline({ status }: { status: string }) {
-  const step2Active = status === 'sent' || status === 'accepted' || status === 'refused'
-  const step3Color = status === 'accepted' ? '#16a34a' : status === 'refused' ? '#dc2626' : '#d1d5db'
-  const step3Active = status === 'accepted' || status === 'refused'
-  const step3Label = status === 'refused' ? 'Refusé' : 'Accepté'
-
-  const steps = [
-    { label: 'Créé', active: true, color: '#2850c8' },
-    { label: 'Envoyé', active: step2Active, color: '#2850c8' },
-    { label: step3Label, active: step3Active, color: step3Color },
-  ]
-
-  return (
-    <div className="flex items-center gap-0 mt-2">
-      {steps.map((step, i) => (
-        <div key={i} className="flex items-center">
-          <div className="flex flex-col items-center" style={{ minWidth: 52 }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: '50%',
-              background: step.active ? step.color : '#f3f4f6',
-              border: `2px solid ${step.active ? step.color : '#e5e7eb'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {step.active && (
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </div>
-            <span style={{ fontSize: 10, color: step.active ? step.color : '#9ca3af', fontWeight: step.active ? 600 : 400, marginTop: 3 }}>
-              {step.label}
-            </span>
-          </div>
-          {i < steps.length - 1 && (
-            <div style={{ width: 28, height: 2, background: steps[i + 1].active ? '#2850c8' : '#e5e7eb', marginBottom: 13, flexShrink: 0 }} />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function Badge({ type }: { type: 'urgent' | 'pending' | 'new' | 'done' }) {
-  const styles: Record<string, string> = {
-    urgent: 'bg-red-100 text-red-700',
-    pending: 'bg-amber-100 text-amber-800',
-    new: 'bg-blue-100 text-blue-700',
-    done: 'bg-emerald-100 text-emerald-700',
-  }
-  const labels: Record<string, string> = { urgent: 'Urgent', pending: 'En attente', new: 'Nouveau', done: 'Traité' }
-  return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${styles[type]}`}>{labels[type]}</span>
-}
-
-function Toggle({ defaultOn, accent, className = '' }: { defaultOn: boolean; accent: string; className?: string }) {
-  const [on, setOn] = useState(defaultOn)
-  return (
-    <button onClick={() => setOn(!on)} className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${className}`} style={{ background: on ? accent : '#D1D5DB' }}>
-      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-    </button>
-  )
-}
-
-function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: string; defaultOn: boolean; accent: string }) {
-  return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-gray-400 mt-0.5">{desc}</p></div>
-      <Toggle defaultOn={defaultOn} accent={accent} className="ml-4" />
-    </div>
-  )
-}
-
-// ── Signature Pad ─────────────────────────────────────────────────────────────
-function SignaturePad({ onChange }: { onChange: (v: string | null) => void }) {
-  const ref = useRef<HTMLCanvasElement>(null)
-  const drawing = useRef(false)
-  const getXY = (e: React.MouseEvent | React.TouchEvent) => {
-    const r = ref.current!.getBoundingClientRect()
-    const src = 'touches' in e.nativeEvent ? e.nativeEvent.touches[0] : e.nativeEvent as MouseEvent
-    return [src.clientX - r.left, src.clientY - r.top]
-  }
-  const start = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); drawing.current = true
-    const ctx = ref.current!.getContext('2d')!
-    const [x, y] = getXY(e); ctx.beginPath(); ctx.moveTo(x, y)
-  }
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!drawing.current) return; e.preventDefault()
-    const ctx = ref.current!.getContext('2d')!
-    const [x, y] = getXY(e)
-    ctx.lineTo(x, y); ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke()
-  }
-  const stop = () => { drawing.current = false; onChange(ref.current!.toDataURL()) }
-  const clear = () => {
-    const c = ref.current!; c.getContext('2d')!.clearRect(0, 0, c.width, c.height); onChange(null)
-  }
-  useEffect(() => {
-    const c = ref.current!
-    c.width = c.offsetWidth; c.height = 80
-  }, [])
-  return (
-    <div>
-      <canvas ref={ref} className="border border-gray-200 rounded-lg cursor-crosshair w-full touch-none" style={{ height: 80 }}
-        onMouseDown={start} onMouseMove={draw} onMouseUp={stop} onMouseLeave={stop}
-        onTouchStart={start} onTouchMove={draw} onTouchEnd={stop} />
-      <button type="button" onClick={clear} className="text-[10px] text-gray-400 hover:text-gray-600 mt-1">Effacer</button>
-    </div>
-  )
-}
-
 // ── SVG Icons ──────────────────────────────────────────────────────────────────
 const PhoneIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5V2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const UserIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.2"/><path d="M2 13c0-3.314 2.686-6 6-6s6 2.686 6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-const DocIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="2" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const BotIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="6" cy="7.5" r="1" fill="currentColor"/><circle cx="10" cy="7.5" r="1" fill="currentColor"/><path d="M6 10.5c.5.5 3.5.5 4 0" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M8 2.5v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const ClockIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M8 5v3l2 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-const GearIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const CardIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 8h2M4 10.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1 7h14" stroke="currentColor" strokeWidth="1.2"/></svg>
 const MenuIcon = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="11.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1.5v3M11 1.5v3M1.5 7h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><rect x="4" y="9.5" width="2" height="2" rx="0.5" fill="currentColor"/><rect x="7" y="9.5" width="2" height="2" rx="0.5" fill="currentColor"/></svg>
-const InvoiceIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 5h6M5 8h6M5 11h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M10.5 10.5l1.5 1.5-1.5 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
 const PuzzleIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M6 2.5h4v1.5a1 1 0 002 0V2.5h1.5A.5.5 0 0114 3v2.5h-1.5a1 1 0 000 2H14V10h-1.5a1 1 0 000 2H14v1.5a.5.5 0 01-.5.5H10v-1.5a1 1 0 00-2 0V14H5.5A.5.5 0 015 13.5V12H3.5a1 1 0 010-2H5V7.5H3.5a1 1 0 010-2H5V3a.5.5 0 01.5-.5H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const MessageIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6l-3 2.5V11H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M5 6h6M5 8.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const PhoneInIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M9.5 2h4.5v4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 2l-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+const PhoneOutIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M14 2h-4.5M14 2v4.5M14 2l-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+const TransferIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 5h9M8 2l3 3-3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 11H5M8 8l-3 3 3 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+const MailIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5l7 4.5L15 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const TeamIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 13c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="11.5" cy="5" r="2" stroke="currentColor" strokeWidth="1.1"/><path d="M13.5 12c0-2-1.343-3.716-3.2-4.253" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+const BuildingIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="12" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 15V9h6v6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><rect x="4" y="5" width="2" height="2" rx="0.5" fill="currentColor"/><rect x="10" y="5" width="2" height="2" rx="0.5" fill="currentColor"/><path d="M1.5 7h13" stroke="currentColor" strokeWidth="1.2"/></svg>
+const WebhookIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 4.5l2 5.5M6 4.5L4 10M6 12h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
