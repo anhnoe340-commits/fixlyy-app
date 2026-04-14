@@ -489,7 +489,8 @@ function ContactsPage({ accent }: { accent: string }) {
   )
 }
 
-// ── Quotes Page ───────────────────────────────────────────────────────────────
+// ── Quotes Page (disabled) ────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function QuotesPage({ accent: _accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
   const quoteColor = profile?.quote_color || BRAND
