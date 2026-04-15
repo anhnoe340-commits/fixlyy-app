@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_utcoG3DmcHHjvheqNn0ShJldJ2bZ",
+  "orgId": "team_Js7HHPAEKmfgagxsOmIq3GQc",
+  "projectName": "fixlyy-app",
+  "settings": {
+    "createdAt": 1775474821162,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": "pnpm install",
+    "buildCommand": "pnpm run build",
+    "outputDirectory": "dist",
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
