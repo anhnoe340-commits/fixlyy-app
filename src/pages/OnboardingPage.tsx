@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const BRAND = '#2850c8'
@@ -50,9 +50,10 @@ const BUSINESS_TYPES = [
 ]
 
 const VOICE_OPTIONS = [
-  { value: 'Féminin conviviale', label: '👩 Féminin — conviviale', desc: 'Chaleureuse et accessible' },
-  { value: 'Féminin professionnelle', label: '👩‍💼 Féminin — professionnelle', desc: 'Formelle et rassurante' },
-  { value: 'Masculin convivial', label: '👨 Masculin — convivial', desc: 'Détendu et sympa' },
+  { value: 'female-warm',  label: '👩 Féminine chaleureuse',    desc: 'Douce, accessible et humaine',     preview: 'female-warm' },
+  { value: 'female-pro',   label: '👩‍💼 Féminine professionnelle', desc: 'Claire, posée et rassurante',      preview: 'female-pro' },
+  { value: 'male-warm',    label: '👨 Masculine chaleureuse',    desc: 'Naturelle, détendue et sympa',      preview: 'male-warm' },
+  { value: 'male-pro',     label: '👨‍💼 Masculine professionnelle', desc: 'Grave, assurée et professionnelle', preview: 'male-pro' },
 ]
 
 const PLANS = [
@@ -76,7 +77,7 @@ export default function OnboardingPage({ userEmail }: Props) {
     email: userEmail,
     address: '',
     assistant_name: 'Mia',
-    assistant_voice: 'Féminin conviviale',
+    assistant_voice: 'female-warm',
     greeting_open: "Bonjour, vous avez bien joint {NOM_ENTREPRISE}. Je suis {NOM_ASSISTANTE}, l'assistante de votre artisan. Comment puis-je vous aider ?",
     greeting_closed: "Bonjour, vous avez bien joint {NOM_ENTREPRISE}. Nous sommes actuellement fermés. Laissez-moi votre message et votre artisan vous rappellera dès que possible.",
     hours: DEFAULT_HOURS,
@@ -86,6 +87,38 @@ export default function OnboardingPage({ userEmail }: Props) {
   })
 
   const [newAppt, setNewAppt] = useState({ date: '', time: '', duration: '1h', description: '' })
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  async function previewVoice(voiceKey: string) {
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    if (playingVoice === voiceKey) {
+      setPlayingVoice(null)
+      return
+    }
+    setPlayingVoice(voiceKey)
+    try {
+      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/voice-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice: voiceKey }),
+      })
+      if (!res.ok) { setPlayingVoice(null); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => { setPlayingVoice(null); URL.revokeObjectURL(url) }
+      audio.onerror = () => { setPlayingVoice(null); URL.revokeObjectURL(url) }
+      await audio.play()
+    } catch {
+      setPlayingVoice(null)
+    }
+  }
 
   const TOTAL_STEPS = 6
   const progress = ((step - 1) / (TOTAL_STEPS - 1)) * 100
@@ -314,24 +347,49 @@ export default function OnboardingPage({ userEmail }: Props) {
               {/* Type de voix */}
               <div>
                 <label className="text-xs font-semibold text-gray-500 block mb-2">Type de voix</label>
-                <div className="flex flex-col gap-2">
-                  {VOICE_OPTIONS.map(v => (
-                    <button key={v.value} onClick={() => update({ assistant_voice: v.value })}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${data.assistant_voice === v.value ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{v.label}</p>
-                        <p className="text-xs text-gray-400">{v.desc}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {VOICE_OPTIONS.map(v => {
+                    const isSelected = data.assistant_voice === v.value
+                    const isPlaying = playingVoice === v.value
+                    const isLoading = isPlaying && audioRef.current === null
+                    return (
+                      <div key={v.value}
+                        onClick={() => update({ assistant_voice: v.value })}
+                        className={`relative flex flex-col gap-1 px-3 py-3 rounded-xl border-2 cursor-pointer transition-all ${isSelected ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300 bg-white'}`}>
+                        {/* Checkmark */}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: BRAND }}>
+                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                              <path d="M1.5 4l1.8 1.8L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        )}
+                        <p className="text-sm font-medium pr-5">{v.label}</p>
+                        <p className="text-[11px] text-gray-400 leading-tight">{v.desc}</p>
+                        {/* Play button */}
+                        <button
+                          onClick={e => { e.stopPropagation(); previewVoice(v.value) }}
+                          className={`mt-1.5 flex items-center gap-1.5 self-start px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${isPlaying ? 'text-white' : 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+                          style={isPlaying ? { background: BRAND } : {}}>
+                          {isLoading ? (
+                            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+                          ) : isPlaying ? (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <rect x="1.5" y="1" width="3" height="8" rx="1" fill="white"/>
+                              <rect x="5.5" y="1" width="3" height="8" rx="1" fill="white"/>
+                            </svg>
+                          ) : (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M2 1.5l7 3.5-7 3.5V1.5z" fill="currentColor"/>
+                            </svg>
+                          )}
+                          {isLoading ? 'Chargement…' : isPlaying ? 'Arrêter' : 'Écouter'}
+                        </button>
                       </div>
-                      {data.assistant_voice === v.value && (
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: BRAND }}>
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                    )
+                  })}
                 </div>
+                <p className="text-[11px] text-gray-400 mt-2 text-center">Cliquez sur "Écouter" pour entendre un extrait de chaque voix</p>
               </div>
 
               {/* Message d'accueil */}

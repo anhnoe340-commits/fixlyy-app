@@ -6,8 +6,8 @@
     "/opt/homebrew/bin/vercel",
     "build",
     "--prod",
-    "--scope",
-    "anhnoe340-commits-projects"
+    "--token",
+    "REDACTED"
   ],
   "cliVersion": "50.41.0",
   "builds": [
