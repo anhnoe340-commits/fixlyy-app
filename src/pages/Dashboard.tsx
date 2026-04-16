@@ -4,11 +4,10 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 
 type Page =
-  | 'calls' | 'contacts' | 'agenda'
-  | 'assistant' | 'integrations' | 'subscription'
-  // legacy pages (accessible directement, pas dans la nav)
-  | 'stats' | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer'
-  | 'post-processing' | 'employees' | 'business-details' | 'hours' | 'webhooks' | 'timezone'
+  | 'calls' | 'contacts' | 'agenda' | 'stats'
+  | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
+  | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
+  | 'subscription'
 
 const BRAND = '#2850c8'
 
@@ -43,16 +42,34 @@ export default function Dashboard() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 overflow-y-auto">
+        <nav className="flex-1 py-3 overflow-y-auto">
+          {/* Section principale — toujours visible */}
           <p className="px-4 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">Activité</p>
           <DarkNavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} accent={accent} />
           <DarkNavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} accent={accent} />
           <DarkNavItem icon={<CalendarIcon />} label="Agenda" active={page === 'agenda'} onClick={() => setPage('agenda')} accent={accent} />
+          <DarkNavItem icon={<ChartIcon />} label="Statistiques" active={page === 'stats'} onClick={() => setPage('stats')} accent={accent} />
 
-          <p className="px-4 mt-5 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">Configurer</p>
-          <DarkNavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
-          <DarkNavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} />
-          <DarkNavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} />
+          {/* Répondre — section repliable */}
+          <SidebarGroup label="Répondre" defaultOpen={['greeting','inbound-reasons','outbound-reasons','call-transfer','post-processing','employees'].includes(page)}>
+            <DarkNavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} indent />
+            <DarkNavItem icon={<PhoneInIcon />} label="Raisons entrantes" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} indent />
+            <DarkNavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} accent={accent} indent />
+            <DarkNavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} accent={accent} indent />
+            <DarkNavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} accent={accent} indent />
+            <DarkNavItem icon={<TeamIcon />} label="Employés" active={page === 'employees'} onClick={() => setPage('employees')} accent={accent} indent />
+          </SidebarGroup>
+
+          {/* Plateforme — section repliable */}
+          <SidebarGroup label="Plateforme" defaultOpen={['business-details','hours','assistant','webhooks','integrations','timezone','subscription'].includes(page)}>
+            <DarkNavItem icon={<BuildingIcon />} label="Détails entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} accent={accent} indent />
+            <DarkNavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} indent />
+            <DarkNavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} indent />
+            <DarkNavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} accent={accent} indent />
+            <DarkNavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} indent />
+            <DarkNavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} accent={accent} indent />
+            <DarkNavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} indent />
+          </SidebarGroup>
         </nav>
 
         {/* Pied de page — utilisateur */}
@@ -88,21 +105,20 @@ export default function Dashboard() {
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
           {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
-          {page === 'assistant' && <AssistantPage accent={accent} />}
-          {page === 'integrations' && <IntegrationsPage accent={accent} />}
-          {page === 'subscription' && <SubscriptionPage accent={accent} />}
-          {/* legacy */}
           {page === 'stats' && <StatsPage accent={accent} />}
           {page === 'greeting' && <GreetingPage accent={accent} />}
-          {page === 'hours' && <HoursPage accent={accent} />}
-          {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
-          {page === 'webhooks' && <WebhooksPage accent={accent} />}
-          {page === 'timezone' && <TimezonePage accent={accent} />}
           {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} />}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
           {page === 'call-transfer' && <CallTransferPage accent={accent} />}
           {page === 'post-processing' && <PostProcessingPage accent={accent} />}
           {page === 'employees' && <EmployeesPage accent={accent} />}
+          {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
+          {page === 'hours' && <HoursPage accent={accent} />}
+          {page === 'assistant' && <AssistantPage accent={accent} />}
+          {page === 'webhooks' && <WebhooksPage accent={accent} />}
+          {page === 'integrations' && <IntegrationsPage accent={accent} />}
+          {page === 'timezone' && <TimezonePage accent={accent} />}
+          {page === 'subscription' && <SubscriptionPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -114,35 +130,51 @@ const PAGE_LABELS: Record<Page, string> = {
   calls: 'Appels',
   contacts: 'Contacts',
   agenda: 'Agenda',
-  assistant: 'Mon assistante',
-  integrations: 'Intégrations',
-  subscription: 'Abonnement',
   stats: 'Statistiques',
-  greeting: 'Salutation',
-  'inbound-reasons': "Raisons entrantes",
-  'outbound-reasons': "Raisons sortantes",
+  greeting: 'Paramètres de salutation',
+  'inbound-reasons': "Raisons d'appel entrantes",
+  'outbound-reasons': "Raisons d'appel sortantes",
   'call-transfer': "Transfert d'appel",
   'post-processing': 'Post-traitement',
   employees: 'Employés',
-  'business-details': "Détails entreprise",
-  hours: "Horaires",
+  'business-details': "Détails de l'entreprise",
+  hours: "Horaires d'ouverture",
+  assistant: "Paramètres de l'assistante",
   webhooks: 'Webhooks',
+  integrations: 'Intégrations',
   timezone: 'Fuseau horaire',
+  subscription: 'Abonnement',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
-function DarkNavItem({ icon, label, active, onClick, accent }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; accent: string }) {
+function DarkNavItem({ icon, label, active, onClick, accent, indent = false }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; accent: string; indent?: boolean }) {
   return (
     <button onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors border-l-2 ${
+      className={`w-full flex items-center gap-2.5 py-2 text-[13px] transition-colors border-l-2 ${indent ? 'pl-7 pr-4' : 'px-4'} ${
         active
           ? 'text-white font-medium bg-white/10'
           : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
       }`}
       style={active ? { borderLeftColor: accent } : {}}>
-      <span className="w-4 h-4 flex-shrink-0">{icon}</span>
-      <span>{label}</span>
+      <span className="w-3.5 h-3.5 flex-shrink-0 opacity-80">{icon}</span>
+      <span className="truncate">{label}</span>
     </button>
+  )
+}
+
+function SidebarGroup({ label, children, defaultOpen = false }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="mt-1">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 transition-colors">
+        <span>{label}</span>
+        <span className={`transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </span>
+      </button>
+      {open && <div>{children}</div>}
+    </div>
   )
 }
 
@@ -1951,5 +1983,5 @@ const BuildingIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y=
 const WebhookIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 4.5l2 5.5M6 4.5L4 10M6 12h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const ChartIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 12V7M6 12V5M10 12V8M14 12V3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M1 13.5h14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.2"/><circle cx="5.5" cy="10" r="1" fill="currentColor"/><circle cx="8" cy="10" r="1" fill="currentColor"/><circle cx="10.5" cy="10" r="1" fill="currentColor"/></svg>
-const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10.5 11l3-3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
 const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10.5 11l3-3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
