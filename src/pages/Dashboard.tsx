@@ -4,10 +4,11 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 
 type Page =
-  | 'calls' | 'contacts' | 'stats'
-  | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
-  | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
-  | 'subscription'
+  | 'calls' | 'contacts' | 'agenda'
+  | 'assistant' | 'integrations' | 'subscription'
+  // legacy pages (accessible directement, pas dans la nav)
+  | 'stats' | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer'
+  | 'post-processing' | 'employees' | 'business-details' | 'hours' | 'webhooks' | 'timezone'
 
 const BRAND = '#2850c8'
 
@@ -27,107 +28,81 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-[#F5F5F4] text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-60' : 'w-14'} bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-200 fixed top-0 left-0 h-screen z-20`}>
+      {/* Sidebar — dark */}
+      <aside className="w-56 bg-[#0F172A] flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20">
 
         {/* Logo + entreprise */}
-        <div className="p-4 border-b border-gray-100 flex items-center gap-2.5 min-w-0">
+        <div className="px-4 py-4 flex items-center gap-3 border-b border-white/10">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: BRAND }}>
             {(profile.company_name || 'A')[0].toUpperCase()}
           </div>
-          {sidebarOpen && (
-            <div className="min-w-0">
-              <p className="font-semibold text-[13px] tracking-tight truncate leading-tight">{profile.company_name || 'Mon entreprise'}</p>
-              <p className="text-[11px] text-gray-400 truncate">{profile.twilio_number || 'N° non configuré'}</p>
-            </div>
-          )}
+          <div className="min-w-0">
+            <p className="font-semibold text-[13px] text-white truncate leading-tight">{profile.company_name || 'Mon entreprise'}</p>
+            <p className="text-[11px] text-slate-500 truncate">{profile.twilio_number || 'N° en cours…'}</p>
+          </div>
         </div>
 
-        {/* Alerte période d'essai */}
-        {sidebarOpen && (
-          <div className="mx-3 mt-3 px-3 py-2.5 rounded-lg border border-amber-200 bg-amber-50">
-            <p className="text-[11px] font-semibold text-amber-700">La période d'essai se termine le</p>
-            <p className="text-[11px] text-amber-600 mt-0.5">
-              {new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </p>
-          </div>
-        )}
-
         {/* Navigation */}
-        <nav className="flex-1 py-3 overflow-y-auto">
-          {/* Section Activité */}
-          <NavSection label="Activité" visible={sidebarOpen} />
-          <NavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<ChartIcon />} label="Statistiques" active={page === 'stats'} onClick={() => setPage('stats')} open={sidebarOpen} accent={accent} />
+        <nav className="flex-1 py-4 overflow-y-auto">
+          <p className="px-4 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">Activité</p>
+          <DarkNavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} accent={accent} />
+          <DarkNavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} accent={accent} />
+          <DarkNavItem icon={<CalendarIcon />} label="Agenda" active={page === 'agenda'} onClick={() => setPage('agenda')} accent={accent} />
 
-          {/* Section Répondre */}
-          <NavSection label="Répondre" visible={sidebarOpen} />
-          <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<PhoneInIcon />} label="Raisons entrantes" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<TeamIcon />} label="Employés" active={page === 'employees'} onClick={() => setPage('employees')} open={sidebarOpen} accent={accent} />
-
-          {/* Section Plateforme */}
-          <NavSection label="Plateforme" visible={sidebarOpen} />
-          <NavItem icon={<BuildingIcon />} label="Détails entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<BotIcon />} label="Assistant" active={page === 'assistant'} onClick={() => setPage('assistant')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} open={sidebarOpen} accent={accent} />
-          <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} open={sidebarOpen} accent={accent} />
+          <p className="px-4 mt-5 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">Configurer</p>
+          <DarkNavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
+          <DarkNavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} />
+          <DarkNavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} />
         </nav>
 
-        {sidebarOpen && <p className="px-4 pb-1 text-[10px] text-gray-300">Propulsé par Fixlyy</p>}
-        <button onClick={signOut} className="m-3 mt-0 text-xs text-gray-400 hover:text-red-500 transition-colors text-left px-2 py-1.5">
-          {sidebarOpen ? 'Se déconnecter' : '→'}
-        </button>
+        {/* Pied de page — utilisateur */}
+        <div className="border-t border-white/10 px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-semibold text-slate-300 flex-shrink-0">
+              {user?.email?.[0]?.toUpperCase()}
+            </div>
+            <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+          </div>
+          <button onClick={signOut} title="Se déconnecter"
+            className="text-slate-600 hover:text-red-400 transition-colors flex-shrink-0">
+            <LogoutIcon />
+          </button>
+        </div>
       </aside>
 
       {/* Main */}
-      <div className={`flex-1 flex flex-col ${sidebarOpen ? 'ml-60' : 'ml-14'} transition-all duration-200`}>
+      <div className="flex-1 flex flex-col ml-56">
         {/* Topbar */}
         <header className="sticky top-0 z-10 bg-white border-b border-gray-200 flex items-center justify-between px-6 h-[52px]">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-gray-600 transition-colors">
-              <MenuIcon />
-            </button>
-            <div className="flex items-center gap-1.5 text-sm text-gray-400">
-              <span>Plateforme</span>
-              <span>/</span>
-              <span className="text-gray-700 font-medium">{PAGE_LABELS[page]}</span>
-            </div>
+          <div className="flex items-center gap-1.5 text-sm text-gray-400">
+            <span className="text-gray-700 font-medium">{PAGE_LABELS[page]}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs px-3 py-1.5 rounded-md font-medium" style={{ background: accent + '20', color: accent }}>
+            <span className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
               Essai — 7 jours
             </span>
-            <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-medium text-gray-600">
-              {user?.email?.[0]?.toUpperCase()}
-            </div>
           </div>
         </header>
 
         <main className="flex-1 p-6 overflow-y-auto">
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
+          {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
+          {page === 'assistant' && <AssistantPage accent={accent} />}
+          {page === 'integrations' && <IntegrationsPage accent={accent} />}
+          {page === 'subscription' && <SubscriptionPage accent={accent} />}
+          {/* legacy */}
           {page === 'stats' && <StatsPage accent={accent} />}
           {page === 'greeting' && <GreetingPage accent={accent} />}
+          {page === 'hours' && <HoursPage accent={accent} />}
+          {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
+          {page === 'webhooks' && <WebhooksPage accent={accent} />}
+          {page === 'timezone' && <TimezonePage accent={accent} />}
           {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} />}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
           {page === 'call-transfer' && <CallTransferPage accent={accent} />}
           {page === 'post-processing' && <PostProcessingPage accent={accent} />}
           {page === 'employees' && <EmployeesPage accent={accent} />}
-          {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
-          {page === 'hours' && <HoursPage accent={accent} />}
-          {page === 'assistant' && <AssistantPage accent={accent} />}
-          {page === 'webhooks' && <WebhooksPage accent={accent} />}
-          {page === 'integrations' && <IntegrationsPage accent={accent} />}
-          {page === 'timezone' && <TimezonePage accent={accent} />}
-          {page === 'subscription' && <SubscriptionPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -138,35 +113,35 @@ export default function Dashboard() {
 const PAGE_LABELS: Record<Page, string> = {
   calls: 'Appels',
   contacts: 'Contacts',
+  agenda: 'Agenda',
+  assistant: 'Mon assistante',
+  integrations: 'Intégrations',
+  subscription: 'Abonnement',
   stats: 'Statistiques',
-  greeting: 'Paramètres de salutation',
-  'inbound-reasons': "Raisons d'appel entrantes",
-  'outbound-reasons': "Raisons d'appel sortantes",
+  greeting: 'Salutation',
+  'inbound-reasons': "Raisons entrantes",
+  'outbound-reasons': "Raisons sortantes",
   'call-transfer': "Transfert d'appel",
   'post-processing': 'Post-traitement',
   employees: 'Employés',
-  'business-details': "Détails de l'entreprise",
-  hours: "Horaires d'ouverture",
-  assistant: "Paramètres de l'assistant",
+  'business-details': "Détails entreprise",
+  hours: "Horaires",
   webhooks: 'Webhooks',
-  integrations: 'Intégrations',
   timezone: 'Fuseau horaire',
-  subscription: 'Abonnement',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
-function NavSection({ label, visible }: { label: string; visible: boolean }) {
-  if (!visible) return <div className="my-1 mx-3 border-t border-gray-100" />
-  return <p className="px-3 pt-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
-}
-
-function NavItem({ icon, label, active, onClick, open, accent }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; open: boolean; accent: string }) {
+function DarkNavItem({ icon, label, active, onClick, accent }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; accent: string }) {
   return (
-    <button onClick={onClick} title={!open ? label : undefined}
-      className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors rounded-none ${active ? 'font-medium' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}`}
-      style={active ? { backgroundColor: accent + '15', color: accent } : {}}>
-      <span className="w-4 h-4 flex-shrink-0 opacity-70">{icon}</span>
-      {open && <span className="truncate">{label}</span>}
+    <button onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors border-l-2 ${
+        active
+          ? 'text-white font-medium bg-white/10'
+          : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
+      }`}
+      style={active ? { borderLeftColor: accent } : {}}>
+      <span className="w-4 h-4 flex-shrink-0">{icon}</span>
+      <span>{label}</span>
     </button>
   )
 }
@@ -1661,6 +1636,151 @@ function CallRowItem({ call: c, accent, onStatusChange }: { call: CallRow; accen
   )
 }
 
+// ── Agenda Page ───────────────────────────────────────────────────────────────
+function AgendaPage({ accent, onGoToIntegrations }: { accent: string; onGoToIntegrations: () => void }) {
+  const { user } = useAuth()
+  const { profile } = useProfile()
+  const [pendingCalls, setPendingCalls] = useState<(CallRow & { caller_address?: string | null })[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('calls').select('*').eq('artisan_id', user.id)
+      .in('status', ['new', 'pending'])
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => { setPendingCalls(data || []); setLoading(false) })
+  }, [user])
+
+  // Génère les 7 jours de la semaine courante
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date()
+    const day = d.getDay() === 0 ? 6 : d.getDay() - 1 // lundi = 0
+    d.setDate(d.getDate() - day + i)
+    return d
+  })
+  const today = new Date().toDateString()
+
+  return (
+    <div>
+      <PageHeader title="Agenda" sub="Vos rappels en attente et rendez-vous de la semaine" />
+
+      {/* Semaine courante */}
+      <Card className="mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold">Cette semaine</p>
+          <p className="text-xs text-gray-400">
+            {weekDays[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – {weekDays[6].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </p>
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {weekDays.map((d, i) => {
+            const isToday = d.toDateString() === today
+            const dayLabel = d.toLocaleDateString('fr-FR', { weekday: 'short' })
+            const dayNum = d.getDate()
+            const callsThisDay = pendingCalls.filter(c =>
+              new Date(c.created_at).toDateString() === d.toDateString()
+            )
+            return (
+              <div key={i} className={`rounded-xl p-3 text-center transition-colors ${isToday ? 'text-white' : 'bg-gray-50'}`}
+                style={isToday ? { background: accent } : {}}>
+                <p className={`text-[11px] font-medium uppercase tracking-wide ${isToday ? 'text-white/80' : 'text-gray-400'}`}>{dayLabel}</p>
+                <p className={`text-xl font-semibold mt-0.5 ${isToday ? 'text-white' : 'text-gray-700'}`}>{dayNum}</p>
+                {callsThisDay.length > 0 && (
+                  <div className={`mt-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full inline-block ${isToday ? 'bg-white/20 text-white' : 'text-white'}`}
+                    style={!isToday ? { background: accent } : {}}>
+                    {callsThisDay.length}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      {/* Rappels à faire */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold">Rappels en attente</p>
+            <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
+              {pendingCalls.length}
+            </span>
+          </div>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pendingCalls.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-2xl mb-2">✓</p>
+              <p className="text-sm text-gray-500 font-medium">Tout est traité</p>
+              <p className="text-xs text-gray-400 mt-1">Aucun rappel en attente</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {pendingCalls.map(c => (
+                <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5" style={{ background: accent + '20', color: accent }}>
+                    {(c.caller_name || c.caller_phone || '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
+                    <p className="text-xs text-gray-400 truncate mt-0.5">{c.caller_phone}</p>
+                    <p className="text-xs text-gray-500 mt-1 truncate italic">{c.summary?.slice(0, 60)}…</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${c.status === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {c.status === 'urgent' ? 'Urgent' : 'En attente'}
+                    </span>
+                    <p className="text-[10px] text-gray-300 mt-1.5">
+                      {new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Cal.com */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Prise de rendez-vous</p>
+          <p className="text-xs text-gray-400 mb-4">Liya partage votre lien de réservation aux clients qui en font la demande</p>
+          {profile?.onboarding_calendar ? (
+            <div>
+              <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200 mb-3">
+                <span className="text-emerald-600 text-sm">✓</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-emerald-700">Cal.com connecté</p>
+                  <p className="text-[11px] text-emerald-600 truncate">{profile.onboarding_calendar}</p>
+                </div>
+              </div>
+              <a href={profile.onboarding_calendar} target="_blank" rel="noreferrer"
+                className="block text-center text-xs px-4 py-2.5 rounded-lg text-white font-medium transition-opacity hover:opacity-90"
+                style={{ background: accent }}>
+                Ouvrir mon agenda Cal.com →
+              </a>
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3 text-xl">
+                📅
+              </div>
+              <p className="text-sm text-gray-600 font-medium">Aucun agenda configuré</p>
+              <p className="text-xs text-gray-400 mt-1 mb-4">Ajoutez votre lien Cal.com pour que Liya propose des créneaux aux clients</p>
+              <button onClick={onGoToIntegrations}
+                className="text-xs px-4 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+                Configurer Cal.com
+              </button>
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  )
+}
+
 // ── Stats Page ────────────────────────────────────────────────────────────────
 function StatsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
@@ -1830,4 +1950,6 @@ const TeamIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5
 const BuildingIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="12" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 15V9h6v6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><rect x="4" y="5" width="2" height="2" rx="0.5" fill="currentColor"/><rect x="10" y="5" width="2" height="2" rx="0.5" fill="currentColor"/><path d="M1.5 7h13" stroke="currentColor" strokeWidth="1.2"/></svg>
 const WebhookIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 4.5l2 5.5M6 4.5L4 10M6 12h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const ChartIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 12V7M6 12V5M10 12V8M14 12V3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M1 13.5h14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.2"/><circle cx="5.5" cy="10" r="1" fill="currentColor"/><circle cx="8" cy="10" r="1" fill="currentColor"/><circle cx="10.5" cy="10" r="1" fill="currentColor"/></svg>
+const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10.5 11l3-3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
 const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
