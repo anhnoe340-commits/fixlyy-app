@@ -20,6 +20,7 @@ export interface Profile {
   greeting_open: string
   greeting_closed: string
   twilio_number: string | null
+  onboarding_calendar: string | null
 }
 
 interface ProfileContextType {
@@ -45,6 +46,7 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   greeting_open: "Bonjour, je suis [ASSISTANT_NAME], l'assistante de [COMPANY_NAME]. Comment puis-je vous aider ?",
   greeting_closed: "Bonjour, vous appelez en dehors de nos heures d'ouverture. Je note votre demande et nous vous rappelons rapidement.",
   twilio_number: null,
+  onboarding_calendar: null,
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null)

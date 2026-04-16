@@ -171,7 +171,7 @@ export default function OnboardingPage({ userEmail }: Props) {
             ).join('\n'),
       }
 
-      await supabase.from('profiles').update(profileUpdate).eq('id', session.user.id)
+      await supabase.from('profiles').upsert({ id: session.user.id, ...profileUpdate })
 
       // Créer la session Stripe
       const plan = PLANS.find(p => p.id === selectedPlan)!

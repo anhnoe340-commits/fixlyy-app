@@ -4,7 +4,7 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 
 type Page =
-  | 'calls' | 'contacts'
+  | 'calls' | 'contacts' | 'stats'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
   | 'subscription'
@@ -59,6 +59,7 @@ export default function Dashboard() {
           <NavSection label="Activité" visible={sidebarOpen} />
           <NavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} open={sidebarOpen} accent={accent} />
           <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} open={sidebarOpen} accent={accent} />
+          <NavItem icon={<ChartIcon />} label="Statistiques" active={page === 'stats'} onClick={() => setPage('stats')} open={sidebarOpen} accent={accent} />
 
           {/* Section Répondre */}
           <NavSection label="Répondre" visible={sidebarOpen} />
@@ -113,6 +114,7 @@ export default function Dashboard() {
         <main className="flex-1 p-6 overflow-y-auto">
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
+          {page === 'stats' && <StatsPage accent={accent} />}
           {page === 'greeting' && <GreetingPage accent={accent} />}
           {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} />}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
@@ -136,6 +138,7 @@ export default function Dashboard() {
 const PAGE_LABELS: Record<Page, string> = {
   calls: 'Appels',
   contacts: 'Contacts',
+  stats: 'Statistiques',
   greeting: 'Paramètres de salutation',
   'inbound-reasons': "Raisons d'appel entrantes",
   'outbound-reasons': "Raisons d'appel sortantes",
@@ -1309,13 +1312,21 @@ function WebhooksPage({ accent }: { accent: string }) {
 
 // ── Integrations Page ─────────────────────────────────────────────────────────
 function IntegrationsPage({ accent }: { accent: string }) {
+  const { profile, updateProfile } = useProfile()
   const [apiKey] = useState<string | null>(null)
   const [apiKeyGenerated, setApiKeyGenerated] = useState(false)
   const [generatedKey, setGeneratedKey] = useState('')
-  const [calApiKey, setCalApiKey] = useState('')
+  const [calUrl, setCalUrl] = useState(profile?.onboarding_calendar || '')
+  const [calSaved, setCalSaved] = useState(false)
   const [authorizedDomains, setAuthorizedDomains] = useState<string[]>([])
   const [newDomain, setNewDomain] = useState('')
   const [copied, setCopied] = useState(false)
+
+  const saveCalUrl = async () => {
+    await updateProfile({ onboarding_calendar: calUrl.trim() || null } as any)
+    setCalSaved(true)
+    setTimeout(() => setCalSaved(false), 2500)
+  }
 
   const generateKey = () => {
     const key = 'fix_' + Array.from({ length: 32 }, () => Math.random().toString(36)[2]).join('')
@@ -1414,20 +1425,33 @@ function IntegrationsPage({ accent }: { accent: string }) {
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold">Cal.com</p>
-              <p className="text-xs text-gray-400 mt-0.5">Prise de rendez-vous automatique via votre assistante</p>
+              <p className="text-xs text-gray-400 mt-0.5">Liya partage votre lien de réservation aux clients qui demandent un rendez-vous</p>
             </div>
-            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${calApiKey ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-              {calApiKey ? 'Connecté' : 'Non connecté'}
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${profile?.onboarding_calendar ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {profile?.onboarding_calendar ? 'Connecté' : 'Non connecté'}
             </span>
           </div>
-          <Field label="Clé API Cal.com">
-            <input value={calApiKey} onChange={e => setCalApiKey(e.target.value)}
-              placeholder="cal_live_xxxxxxxxxxxxxxxxxxxxxxxx"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 font-mono" />
+          <Field label="Lien de réservation Cal.com">
+            <input value={calUrl} onChange={e => setCalUrl(e.target.value)}
+              placeholder="https://cal.com/votre-nom"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
           </Field>
-          {calApiKey && (
-            <p className="text-xs text-emerald-600 mt-2">✓ Votre assistante peut désormais prendre des rendez-vous via Cal.com</p>
-          )}
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-xs text-gray-400">
+              {profile?.onboarding_calendar
+                ? `Lien actif : ${profile.onboarding_calendar}`
+                : 'Trouvez votre lien sur cal.com → Partager'}
+            </p>
+            <div className="flex items-center gap-2">
+              {calSaved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
+              <button onClick={saveCalUrl}
+                disabled={calUrl === (profile?.onboarding_calendar || '')}
+                className="text-xs px-3 py-1.5 rounded-md text-white font-medium disabled:opacity-40 transition-opacity"
+                style={{ background: accent }}>
+                Enregistrer
+              </button>
+            </div>
+          </div>
         </Card>
       </div>
     </div>
@@ -1637,6 +1661,158 @@ function CallRowItem({ call: c, accent, onStatusChange }: { call: CallRow; accen
   )
 }
 
+// ── Stats Page ────────────────────────────────────────────────────────────────
+function StatsPage({ accent }: { accent: string }) {
+  const { user } = useAuth()
+  const [calls, setCalls] = useState<{ created_at: string; status: string; duration_seconds: number | null }[]>([])
+  const [contacts, setContacts] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    Promise.all([
+      supabase.from('calls').select('created_at, status, duration_seconds').eq('artisan_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    ]).then(([{ data: callsData }, { count }]) => {
+      setCalls(callsData || [])
+      setContacts(count || 0)
+      setLoading(false)
+    })
+  }, [user])
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+
+  const today = new Date().toDateString()
+  const todayCount = calls.filter(c => new Date(c.created_at).toDateString() === today).length
+  const urgentCount = calls.filter(c => c.status === 'urgent').length
+  const doneCount = calls.filter(c => c.status === 'done').length
+  const durations = calls.filter(c => c.duration_seconds != null).map(c => c.duration_seconds!)
+  const avgDuration = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0
+  const avgMinStr = avgDuration > 0 ? `${Math.floor(avgDuration / 60)}min ${avgDuration % 60}s` : '—'
+
+  // Graphique 7 derniers jours
+  const days7: { label: string; count: number; date: string }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i)
+    const ds = d.toDateString()
+    const label = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })
+    const count = calls.filter(c => new Date(c.created_at).toDateString() === ds).length
+    days7.push({ label, count, date: ds })
+  }
+  const maxDay = Math.max(...days7.map(d => d.count), 1)
+
+  // Répartition des statuts
+  const statuses = [
+    { label: 'Nouveaux', key: 'new', color: '#3B82F6' },
+    { label: 'Urgents', key: 'urgent', color: '#EF4444' },
+    { label: 'En attente', key: 'pending', color: '#F59E0B' },
+    { label: 'Traités', key: 'done', color: '#10B981' },
+  ]
+  const totalCalls = calls.length
+
+  return (
+    <div>
+      <PageHeader title="Statistiques" sub="Vue d'ensemble de votre activité téléphonique" />
+
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <StatCard label="Total appels" value={String(totalCalls)} trend="depuis le début" />
+        <StatCard label="Aujourd'hui" value={String(todayCount)} trend="appels reçus" trendUp={todayCount > 0} />
+        <StatCard label="Durée moyenne" value={avgMinStr} trend="par appel" />
+        <StatCard label="Contacts" value={String(contacts)} trend="dans votre base" trendUp={contacts > 0} accent={accent} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* Graphique 7 jours */}
+        <Card>
+          <p className="text-sm font-semibold mb-4">Appels — 7 derniers jours</p>
+          {totalCalls === 0 ? (
+            <div className="flex items-end justify-around h-28 gap-1.5">
+              {days7.map((d, i) => (
+                <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                  <span className="text-[10px] text-gray-400">0</span>
+                  <div className="w-full bg-gray-100 rounded-t-sm" style={{ height: '4px' }} />
+                  <span className="text-[9px] text-gray-400 text-center leading-tight">{d.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-end justify-around h-28 gap-1.5">
+              {days7.map((d, i) => {
+                const pct = d.count / maxDay
+                const isToday = d.date === today
+                return (
+                  <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                    {d.count > 0 && <span className="text-[10px] text-gray-500 font-medium">{d.count}</span>}
+                    <div className="w-full rounded-t-sm transition-all" style={{
+                      height: `${Math.max(pct * 96, d.count > 0 ? 8 : 4)}px`,
+                      background: isToday ? accent : accent + '60',
+                    }} />
+                    <span className="text-[9px] text-gray-400 text-center leading-tight">{d.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* Répartition statuts */}
+        <Card>
+          <p className="text-sm font-semibold mb-4">Répartition des statuts</p>
+          {totalCalls === 0 ? (
+            <div className="flex items-center justify-center h-28">
+              <p className="text-sm text-gray-400">Aucun appel pour l'instant</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {statuses.map(s => {
+                const cnt = calls.filter(c => c.status === s.key).length
+                const pct = totalCalls > 0 ? Math.round((cnt / totalCalls) * 100) : 0
+                return (
+                  <div key={s.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-600">{s.label}</span>
+                      <span className="text-xs font-medium text-gray-700">{cnt} <span className="text-gray-400 font-normal">({pct}%)</span></span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: s.color }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Taux de traitement */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">Taux de traitement</p>
+            <p className="text-xs text-gray-400 mt-0.5">Appels marqués comme "Traité"</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[28px] font-semibold tracking-tight" style={{ color: accent }}>
+              {totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '—'}
+            </p>
+            <p className="text-xs text-gray-400">{doneCount} sur {totalCalls} appels</p>
+          </div>
+        </div>
+        {totalCalls > 0 && (
+          <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((doneCount / totalCalls) * 100)}%`, background: accent }} />
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
 // ── SVG Icons ──────────────────────────────────────────────────────────────────
 const PhoneIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5V2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const UserIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.2"/><path d="M2 13c0-3.314 2.686-6 6-6s6 2.686 6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -1653,4 +1829,5 @@ const MailIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="3" wi
 const TeamIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 13c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="11.5" cy="5" r="2" stroke="currentColor" strokeWidth="1.1"/><path d="M13.5 12c0-2-1.343-3.716-3.2-4.253" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
 const BuildingIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="12" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 15V9h6v6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><rect x="4" y="5" width="2" height="2" rx="0.5" fill="currentColor"/><rect x="10" y="5" width="2" height="2" rx="0.5" fill="currentColor"/><path d="M1.5 7h13" stroke="currentColor" strokeWidth="1.2"/></svg>
 const WebhookIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.2"/><circle cx="8" cy="4" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 4.5l2 5.5M6 4.5L4 10M6 12h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const ChartIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 12V7M6 12V5M10 12V8M14 12V3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><path d="M1 13.5h14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>

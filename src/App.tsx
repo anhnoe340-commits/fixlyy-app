@@ -26,10 +26,15 @@ function AppContent() {
     if (loading) return
     if (!user) { setStatus('auth'); return }
 
-    // Retour de Stripe → aller directement en provisioning (polling)
+    // Retour de Stripe → persister en sessionStorage pour éviter la race condition
     const params = new URLSearchParams(window.location.search)
     if (params.get('checkout') === 'success') {
       window.history.replaceState({}, '', '/')
+      sessionStorage.setItem('fixlyy_checkout_success', '1')
+    }
+
+    // Si le paiement vient d'être fait (même si l'URL param a déjà disparu)
+    if (sessionStorage.getItem('fixlyy_checkout_success') === '1') {
       setStatus('provisioning')
       return
     }
@@ -39,16 +44,22 @@ function AppContent() {
       .from('profiles')
       .select('id, company_name, stripe_customer_id, vapi_assistant_id')
       .eq('id', user.id)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          // Erreur DB (RLS, réseau…) → retry dans 2s au lieu de tomber sur onboarding
+          console.error('[Fixlyy] profiles query error:', error)
+          setTimeout(() => setStatus('loading'), 2000)
+          return
+        }
         if (!data) { setStatus('onboarding'); return }
 
         if (data.vapi_assistant_id) {
           // Provisioning terminé → dashboard
+          sessionStorage.removeItem('fixlyy_checkout_success')
           setStatus('dashboard')
         } else if (data.company_name && data.stripe_customer_id) {
           // Onboarding fait + Stripe payé, mais provisioning pas encore terminé
-          // (webhook en cours ou browser fermé avant retour Stripe)
           setStatus('provisioning')
         } else {
           // Nouveau compte ou onboarding abandonné avant paiement
