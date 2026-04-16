@@ -57,9 +57,24 @@ const VOICE_OPTIONS = [
 ]
 
 const PLANS = [
-  { id: 'starter', name: 'Solo', price: '79€', priceId: 'price_1TJv9uB5dBerNSsDbvCQFO2P', calls: '150 appels/mois', features: ['Secrétaire IA 24/7', 'SMS résumé en 30 sec', 'Prise de RDV'] },
-  { id: 'pro', name: 'Pro', price: '149€', priceId: 'price_1TJv9uB5dBerNSsDpOIyE2UP', calls: 'Appels illimités', features: ['Tout Solo inclus', 'Transfert d\'appel', 'Statistiques'], popular: true },
-  { id: 'expert', name: 'Équipe', price: '249€', priceId: 'price_1TJv9vB5dBerNSsDlnsXltWh', calls: 'Illimité · jusqu\'à 5 artisans', features: ['Tout Pro inclus', 'Multi-artisans', 'Support prioritaire'] },
+  {
+    id: 'starter', name: 'Solo', calls: '150 appels/mois',
+    features: ['Secrétaire IA 24/7', 'SMS résumé en 30 sec', 'Prise de RDV'],
+    monthly: { price: '79€', priceId: 'price_1TJv9uB5dBerNSsDbvCQFO2P' },
+    annual:  { price: '63€', priceId: 'price_1TMyqSB5dBerNSsDWuMjQuNv', yearly: '756€' },
+  },
+  {
+    id: 'pro', name: 'Pro', calls: 'Appels illimités',
+    features: ['Tout Solo inclus', 'Transfert d\'appel', 'Statistiques'], popular: true,
+    monthly: { price: '149€', priceId: 'price_1TJv9uB5dBerNSsDpOIyE2UP' },
+    annual:  { price: '119€', priceId: 'price_1TMyqTB5dBerNSsDxdralW4k', yearly: '1 428€' },
+  },
+  {
+    id: 'expert', name: 'Équipe', calls: 'Illimité · jusqu\'à 5 artisans',
+    features: ['Tout Pro inclus', 'Multi-artisans', 'Support prioritaire'],
+    monthly: { price: '249€', priceId: 'price_1TJv9vB5dBerNSsDlnsXltWh' },
+    annual:  { price: '199€', priceId: 'price_1TMyqTB5dBerNSsDIhqeOKLX', yearly: '2 388€' },
+  },
 ]
 
 interface Props { userEmail: string }
@@ -69,6 +84,7 @@ export default function OnboardingPage({ userEmail }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedPlan, setSelectedPlan] = useState('pro')
+  const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
 
   const [data, setData] = useState<OnboardingData>({
     company_name: '',
@@ -175,10 +191,11 @@ export default function OnboardingPage({ userEmail }: Props) {
 
       // Créer la session Stripe
       const plan = PLANS.find(p => p.id === selectedPlan)!
+      const priceId = billing === 'annual' ? plan.annual.priceId : plan.monthly.priceId
       const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({ priceId: plan.priceId, trade: data.company_type, company: data.company_name, email: data.email }),
+        body: JSON.stringify({ priceId, trade: data.company_type, company: data.company_name, email: data.email }),
       })
       const result = await res.json()
       if (!res.ok || result.error) throw new Error(result.error || result.message || `Erreur ${res.status}`)
@@ -443,7 +460,7 @@ export default function OnboardingPage({ userEmail }: Props) {
                   <button onClick={() => updateHour(i, 'on', !d.on)}
                     className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
                     style={{ background: d.on ? BRAND : '#D1D5DB' }}>
-                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
                 </div>
               ))}
@@ -610,31 +627,57 @@ export default function OnboardingPage({ userEmail }: Props) {
               </div>
             </div>
 
+            {/* Toggle Mensuel / Annuel */}
+            <div className="flex items-center justify-center gap-3 mb-5">
+              <span className={`text-sm font-medium ${billing === 'monthly' ? 'text-gray-800' : 'text-gray-400'}`}>Mensuel</span>
+              <button
+                onClick={() => setBilling(b => b === 'monthly' ? 'annual' : 'monthly')}
+                className="relative w-11 h-6 rounded-full transition-colors flex-shrink-0"
+                style={{ background: billing === 'annual' ? BRAND : '#D1D5DB' }}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${billing === 'annual' ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+              <span className={`text-sm font-medium ${billing === 'annual' ? 'text-gray-800' : 'text-gray-400'}`}>
+                Annuel
+                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: '#10b981' }}>
+                  −20%
+                </span>
+              </span>
+            </div>
+
             {/* Plans */}
             <div className="flex flex-col gap-2.5 mb-5">
-              {PLANS.map(p => (
-                <button key={p.id} onClick={() => setSelectedPlan(p.id)}
-                  className={`relative p-4 rounded-xl border-2 text-left transition-all ${selectedPlan === p.id ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                  {p.popular && (
-                    <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: BRAND }}>
-                      Populaire
-                    </span>
-                  )}
-                  <div className="flex items-baseline gap-1.5 mb-1">
-                    <span className="text-lg font-bold">{p.price}</span>
-                    <span className="text-xs text-gray-400">/mois</span>
-                    <span className="text-sm font-semibold text-gray-700 ml-1">{p.name}</span>
-                    <span className="text-xs text-gray-400">· {p.calls}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {p.features.map((f, j) => (
-                      <span key={j} className="text-[10px] text-gray-500 flex items-center gap-1">
-                        <span className="text-emerald-500">✓</span> {f}
+              {PLANS.map(p => {
+                const pricing = billing === 'annual' ? p.annual : p.monthly
+                return (
+                  <button key={p.id} onClick={() => setSelectedPlan(p.id)}
+                    className={`relative p-4 rounded-xl border-2 text-left transition-all ${selectedPlan === p.id ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                    {p.popular && (
+                      <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: BRAND }}>
+                        Populaire
                       </span>
-                    ))}
-                  </div>
-                </button>
-              ))}
+                    )}
+                    <div className="flex items-baseline gap-1.5 mb-1 flex-wrap">
+                      <span className="text-lg font-bold">{pricing.price}</span>
+                      <span className="text-xs text-gray-400">/mois</span>
+                      <span className="text-sm font-semibold text-gray-700 ml-1">{p.name}</span>
+                      <span className="text-xs text-gray-400">· {p.calls}</span>
+                    </div>
+                    {billing === 'annual' && (
+                      <p className="text-[10px] text-emerald-600 font-medium mb-1">
+                        Facturé {p.annual.yearly}/an · 2 mois offerts
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {p.features.map((f, j) => (
+                        <span key={j} className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <span className="text-emerald-500">✓</span> {f}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
 
             {error && (
