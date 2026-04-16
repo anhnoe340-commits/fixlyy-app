@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 
 const BRAND = '#2850c8'
-const POLL_INTERVAL = 3000   // 3s entre chaque check
+const POLL_INTERVAL = 1500   // 1.5s entre chaque check
 const POLL_TIMEOUT  = 120000 // 2 min max d'attente
 
 interface Props {
@@ -108,8 +108,30 @@ export default function Onboarding({ onDone }: Props) {
     }
   }
 
+  // Déclenche le provisionnement immédiatement sans attendre le webhook Stripe
+  async function triggerProvision() {
+    if (!user) return
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await fetch(
+        'https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/provision-artisan',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      )
+    } catch (e) {
+      console.error('Auto-provision trigger failed:', e)
+    }
+  }
+
   useEffect(() => {
     startPolling()
+    triggerProvision() // n'attend pas le webhook Stripe — idempotent si déjà fait
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [user])
 
@@ -135,7 +157,7 @@ export default function Onboarding({ onDone }: Props) {
           On prépare tout pour vous
         </h1>
         <p className="text-sm text-gray-500 text-center mb-8">
-          Votre assistante IA et votre numéro fixe sont en cours de création. Cela prend moins d'une minute.
+          Votre assistante IA et votre numéro fixe sont en cours de création. Cela prend environ 30 secondes.
         </p>
 
         {/* Steps */}
