@@ -100,7 +100,7 @@ export default function Onboarding({ onDone }: Props) {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      await fetch(
+      const res = await fetch(
         'https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/provision-artisan',
         {
           method: 'POST',
@@ -110,6 +110,17 @@ export default function Onboarding({ onDone }: Props) {
           },
         }
       )
+      if (!res.ok) {
+        const err = await res.text()
+        console.error('provision-artisan error:', res.status, err)
+        if (res.status === 404) {
+          // Profil introuvable — données onboarding non sauvegardées
+          // Rediriger vers onboarding pour re-saisir les infos
+          clearInterval(pollRef.current!)
+          setTimedOut(true)
+          setStep(1, 'error')
+        }
+      }
     } catch (e) {
       console.error('Auto-provision trigger failed:', e)
     }

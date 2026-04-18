@@ -187,7 +187,8 @@ export default function OnboardingPage({ userEmail }: Props) {
             ).join('\n'),
       }
 
-      await supabase.from('profiles').upsert({ id: session.user.id, ...profileUpdate })
+      const { error: upsertError } = await supabase.from('profiles').upsert({ id: session.user.id, ...profileUpdate })
+      if (upsertError) throw new Error(`Erreur sauvegarde profil : ${upsertError.message}`)
 
       // Créer la session Stripe
       const plan = PLANS.find(p => p.id === selectedPlan)!
