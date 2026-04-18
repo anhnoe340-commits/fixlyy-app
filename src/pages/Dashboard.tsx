@@ -1431,14 +1431,26 @@ function IntegrationsPage({ accent }: { accent: string }) {
               📅
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold">Cal.com</p>
-              <p className="text-xs text-gray-400 mt-0.5">Liya partage votre lien de réservation aux clients qui demandent un rendez-vous</p>
+              <p className="text-sm font-semibold">Cal.com — Prise de rendez-vous</p>
+              <p className="text-xs text-gray-400 mt-0.5">Votre assistante partage votre lien aux clients qui demandent un créneau</p>
             </div>
-            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${profile?.onboarding_calendar ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-              {profile?.onboarding_calendar ? 'Connecté' : 'Non connecté'}
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${profile?.onboarding_calendar ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              {profile?.onboarding_calendar ? 'Connecté' : 'À configurer'}
             </span>
           </div>
-          <Field label="Lien de réservation Cal.com">
+
+          {!profile?.onboarding_calendar && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-1.5">
+              <p className="font-semibold text-gray-700">3 étapes pour activer la prise de RDV :</p>
+              <p><span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold mr-1.5" style={{ background: accent }}>1</span>Créez un compte gratuit sur{' '}
+                <a href="https://cal.com" target="_blank" rel="noreferrer" className="underline font-medium" style={{ color: accent }}>cal.com</a>
+              </p>
+              <p><span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold mr-1.5" style={{ background: accent }}>2</span>Dans Cal.com, allez dans <strong>Partager</strong> et copiez votre lien (ex: https://cal.com/jean-dupont)</p>
+              <p><span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold mr-1.5" style={{ background: accent }}>3</span>Collez-le ci-dessous et enregistrez</p>
+            </div>
+          )}
+
+          <Field label="Votre lien de réservation Cal.com">
             <input value={calUrl} onChange={e => setCalUrl(e.target.value)}
               placeholder="https://cal.com/votre-nom"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
@@ -1446,8 +1458,8 @@ function IntegrationsPage({ accent }: { accent: string }) {
           <div className="flex items-center justify-between mt-3">
             <p className="text-xs text-gray-400">
               {profile?.onboarding_calendar
-                ? `Lien actif : ${profile.onboarding_calendar}`
-                : 'Trouvez votre lien sur cal.com → Partager'}
+                ? `Lien actif · votre assistante l'utilise déjà`
+                : 'Optionnel — laissez vide si vous ne souhaitez pas de prise de RDV'}
             </p>
             <div className="flex items-center gap-2">
               {calSaved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
