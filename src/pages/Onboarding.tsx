@@ -25,10 +25,10 @@ export default function Onboarding({ onDone }: Props) {
   const [twilioNumber, setTwilioNumber] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [steps, setSteps] = useState([
-    { label: 'Votre compte est prêt',             status: 'done'    as StepStatus },
-    { label: 'Création de votre assistante IA',   status: 'loading' as StepStatus },
-    { label: 'Attribution de votre numéro fixe',  status: 'pending' as StepStatus },
-    { label: 'Configuration de votre espace',     status: 'pending' as StepStatus },
+    { label: 'Votre compte est prêt',              status: 'done'    as StepStatus },
+    { label: 'Création de votre assistante IA',    status: 'loading' as StepStatus },
+    { label: 'Attribution de votre numéro Fixlyy', status: 'pending' as StepStatus },
+    { label: 'Configuration de votre espace',      status: 'pending' as StepStatus },
   ])
   const [timedOut, setTimedOut] = useState(false)
   const [retrying, setRetrying] = useState(false)
@@ -48,10 +48,10 @@ export default function Onboarding({ onDone }: Props) {
     startedAt.current = Date.now()
     setTimedOut(false)
     setSteps([
-      { label: 'Votre compte est prêt',             status: 'done'    },
-      { label: 'Création de votre assistante IA',   status: 'loading' },
-      { label: 'Attribution de votre numéro fixe',  status: 'pending' },
-      { label: 'Configuration de votre espace',     status: 'pending' },
+      { label: 'Votre compte est prêt',              status: 'done'    },
+      { label: 'Création de votre assistante IA',    status: 'loading' },
+      { label: 'Attribution de votre numéro Fixlyy', status: 'pending' },
+      { label: 'Configuration de votre espace',      status: 'pending' },
     ])
 
     if (pollRef.current) clearInterval(pollRef.current)
@@ -154,14 +154,7 @@ export default function Onboarding({ onDone }: Props) {
       <div className="min-h-screen flex flex-col items-center justify-center bg-white px-4">
         <div className="w-full max-w-sm">
           <div className="flex justify-center mb-8">
-            <div className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg"
-              style={{ background: `linear-gradient(135deg, ${BRAND}, #4070e8)` }}>
-              <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                <circle cx="18" cy="18" r="14" stroke="white" strokeWidth="2.5" opacity="0.4" />
-                <circle cx="18" cy="18" r="8" stroke="white" strokeWidth="2.5" />
-                <path d="M18 10v8l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
+            <img src="/logo-icon.png" alt="Fixlyy" className="w-20 h-20 object-contain" />
           </div>
 
           <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">
