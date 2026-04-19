@@ -192,12 +192,189 @@ type CallRow = {
   created_at: string
 }
 
+const STATUS_LABELS: Record<string, string> = { new: 'Nouveau', pending: 'En attente', urgent: 'Urgent', done: 'Traité', spam: 'Spam' }
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  urgent:  { bg: '#FEE2E2', text: '#B91C1C' },
+  pending: { bg: '#FEF3C7', text: '#92400E' },
+  new:     { bg: '#DBEAFE', text: '#1D4ED8' },
+  done:    { bg: '#D1FAE5', text: '#065F46' },
+  spam:    { bg: '#F3F4F6', text: '#6B7280' },
+}
+
+function parseTranscript(raw: string | null): { role: 'agent' | 'user'; text: string }[] {
+  if (!raw) return []
+  return raw.split('\n').filter(Boolean).map(line => {
+    if (/^(AI|Agent|Assistant)\s*:/i.test(line)) return { role: 'agent' as const, text: line.replace(/^(AI|Agent|Assistant)\s*:\s*/i, '') }
+    if (/^(User|Utilisateur|Client)\s*:/i.test(line)) return { role: 'user' as const, text: line.replace(/^(User|Utilisateur|Client)\s*:\s*/i, '') }
+    return { role: 'agent' as const, text: line }
+  })
+}
+
+function CopyBtn({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+      className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0 ml-2">
+      {copied
+        ? <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+        : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" strokeWidth={2}/><path strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>}
+    </button>
+  )
+}
+
+function CallDetailPanel({ call: c, onClose, onStatusChange, accent }: { call: CallRow; onClose: () => void; onStatusChange: (id: string, s: string) => void; accent: string }) {
+  const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
+  const fmtAgo = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 1) return "à l'instant"
+    if (m < 60) return `il y a ${m} min`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `il y a ${h}h`
+    return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  }
+  const fmtDur = (s: number | null) => {
+    if (!s) return null
+    const m = Math.floor(s / 60), sec = s % 60
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+  }
+  const lines = parseTranscript(c.transcript)
+
+  return (
+    <>
+      {/* Overlay */}
+      <div className="fixed inset-0 bg-black/20 z-30" onClick={onClose} />
+      {/* Drawer */}
+      <div className="fixed right-0 top-0 h-full w-[440px] bg-white shadow-2xl z-40 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0"
+              style={{ background: accent + '20', color: accent }}>
+              {(c.caller_name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2)}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm">{c.caller_name || 'Inconnu'}</p>
+              {c.caller_phone && <p className="text-xs text-gray-400">{c.caller_phone}</p>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {c.status !== 'spam' ? (
+              <select value={c.status}
+                onChange={e => onStatusChange(c.id, e.target.value)}
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer outline-none"
+                style={{ background: sc.bg, color: sc.text }}>
+                <option value="new">Nouveau</option>
+                <option value="pending">En attente</option>
+                <option value="urgent">Urgent</option>
+                <option value="done">Traité</option>
+              </select>
+            ) : (
+              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: sc.bg, color: sc.text }}>Spam</span>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Meta */}
+        <div className="flex items-center gap-4 px-5 py-2.5 border-b border-gray-100 bg-gray-50">
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" d="M12 6v6l4 2"/></svg>
+            {fmtAgo(c.created_at)}
+          </span>
+          {fmtDur(c.duration_seconds) && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+              {fmtDur(c.duration_seconds)}
+            </span>
+          )}
+        </div>
+
+        {/* Scroll body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+          {/* Données extraites */}
+          <section>
+            <h3 className="text-sm font-semibold mb-3">Données extraites</h3>
+
+            {/* Contact */}
+            <div className="mb-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: accent }}>Contact</p>
+              <div className="space-y-1.5">
+                {c.caller_name && (
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div><span className="text-[10px] text-gray-400 block">Nom</span><span className="text-xs font-medium">{c.caller_name}</span></div>
+                    <CopyBtn value={c.caller_name} />
+                  </div>
+                )}
+                {c.caller_phone && (
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div><span className="text-[10px] text-gray-400 block">Téléphone</span><span className="text-xs font-medium">{c.caller_phone}</span></div>
+                    <CopyBtn value={c.caller_phone} />
+                  </div>
+                )}
+                {c.caller_address && (
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                    <div><span className="text-[10px] text-gray-400 block">Adresse</span><span className="text-xs font-medium">{c.caller_address}</span></div>
+                    <CopyBtn value={c.caller_address} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Intervention */}
+            {c.reason && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: accent }}>Intervention</p>
+                <div className="flex items-start justify-between bg-gray-50 rounded-lg px-3 py-2">
+                  <div><span className="text-[10px] text-gray-400 block">Motif</span><span className="text-xs font-medium">{c.reason}</span></div>
+                  <CopyBtn value={c.reason} />
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Résumé */}
+          {c.summary && (
+            <section>
+              <h3 className="text-sm font-semibold mb-2">Résumé de l'appel</h3>
+              <div className="bg-gray-50 rounded-lg px-3 py-3 text-xs text-gray-600 leading-relaxed border border-gray-100">
+                {c.summary}
+              </div>
+            </section>
+          )}
+
+          {/* Transcription */}
+          {lines.length > 0 && (
+            <section>
+              <h3 className="text-sm font-semibold mb-3">Transcription</h3>
+              <div className="space-y-2">
+                {lines.map((l, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-[10px] font-semibold w-12 flex-shrink-0 pt-0.5" style={{ color: l.role === 'agent' ? accent : '#374151' }}>
+                      {l.role === 'agent' ? 'Agent' : 'Client'}
+                    </span>
+                    <p className="text-xs text-gray-700 leading-relaxed">{l.text}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 function CallsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
   const { profile } = useProfile()
   const [calls, setCalls] = useState<CallRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
+  const [selectedCall, setSelectedCall] = useState<CallRow | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -207,7 +384,7 @@ function CallsPage({ accent }: { accent: string }) {
 
     const sub = supabase.channel('calls-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
-        payload => setCalls(prev => [payload.new as CallRow, ...prev])
+        payload => { setCalls(prev => [payload.new as CallRow, ...prev]) }
       )
       .subscribe()
 
@@ -216,6 +393,7 @@ function CallsPage({ accent }: { accent: string }) {
 
   const updateStatus = async (id: string, status: string) => {
     setCalls(prev => prev.map(c => c.id === id ? { ...c, status } : c))
+    if (selectedCall?.id === id) setSelectedCall(prev => prev ? { ...prev, status } : null)
     await supabase.from('calls').update({ status }).eq('id', id)
   }
 
@@ -232,19 +410,21 @@ function CallsPage({ accent }: { accent: string }) {
         <StatCard label="Total appels" value={String(calls.length)} trend="depuis le début" />
         <StatCard label="Assistante" value={profile?.assistant_name || 'Mia'} trend="active 24/7" trendUp accent={accent} />
       </div>
+
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Cliquez sur un statut pour le modifier</p></div>
+          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Cliquez sur une ligne pour voir les détails</p></div>
           <div className="flex gap-1.5">
-            {['all', 'new', 'pending', 'urgent', 'done', 'spam'].map(f => (
+            {['all','new','pending','urgent','done','spam'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`text-xs px-2.5 py-1 rounded-md transition-colors ${filter === f ? 'text-white font-medium' : 'border border-gray-200 hover:bg-gray-50'}`}
                 style={filter === f ? { background: f === 'spam' ? '#6B7280' : accent } : {}}>
-                {f === 'all' ? 'Tous' : f === 'new' ? 'Nouveau' : f === 'pending' ? 'En attente' : f === 'urgent' ? 'Urgent' : f === 'done' ? 'Traité' : 'Spam'}
+                {f === 'all' ? 'Tous' : STATUS_LABELS[f]}
               </button>
             ))}
           </div>
         </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
@@ -255,13 +435,72 @@ function CallsPage({ accent }: { accent: string }) {
             <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici dès que votre assistante aura traité un appel</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {filtered.map(c => (
-              <CallRowItem key={c.id} call={c} accent={accent} onStatusChange={updateStatus} />
-            ))}
-          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Contact</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Motif</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Date / Heure</th>
+                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(c => {
+                const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
+                const fmtDate = (iso: string) => {
+                  const d = new Date(iso)
+                  const diff = Date.now() - d.getTime()
+                  const m = Math.floor(diff / 60000)
+                  if (m < 60) return `${m} min ago`
+                  const h = Math.floor(m / 60)
+                  if (h < 24) return `${h}h ago`
+                  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                }
+                return (
+                  <tr key={c.id}
+                    onClick={() => setSelectedCall(c)}
+                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
+                          style={{ background: accent + '15', color: accent }}>
+                          {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-[13px]">{c.caller_name || 'Inconnu'}</p>
+                          {c.caller_phone && <p className="text-[11px] text-gray-400">{c.caller_phone}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4 text-[13px] text-gray-500 max-w-[180px] truncate">
+                      {c.status === 'spam' ? <span className="italic text-gray-400">Prospection commerciale</span> : (c.reason || 'Demande générale')}
+                    </td>
+                    <td className="py-3 pr-4 text-[13px] text-gray-500 whitespace-nowrap">
+                      {new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      <br />
+                      <span className="text-[11px] text-gray-400">{fmtDate(c.created_at)}</span>
+                    </td>
+                    <td className="py-3">
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: sc.bg, color: sc.text }}>
+                        {STATUS_LABELS[c.status] || c.status}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
       </Card>
+
+      {selectedCall && (
+        <CallDetailPanel
+          call={selectedCall}
+          onClose={() => setSelectedCall(null)}
+          onStatusChange={updateStatus}
+          accent={accent}
+        />
+      )}
     </div>
   )
 }
@@ -1644,126 +1883,6 @@ function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: st
   )
 }
 
-function CallRowItem({ call: c, accent, onStatusChange }: { call: CallRow; accent: string; onStatusChange: (id: string, status: string) => void }) {
-  const [tab, setTab] = useState<'summary' | 'transcript' | null>(null)
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-  const fmtDur = (s: number | null) => {
-    if (!s) return null
-    if (s < 60) return `${s}s`
-    return `${Math.floor(s / 60)}min${s % 60 > 0 ? String(s % 60).padStart(2, '0') : ''}`
-  }
-  const initials = (name: string | null) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?'
-
-  const statusColors: Record<string, { bg: string; text: string }> = {
-    urgent: { bg: '#FEE2E2', text: '#B91C1C' },
-    pending: { bg: '#FEF3C7', text: '#92400E' },
-    new: { bg: '#DBEAFE', text: '#1D4ED8' },
-    done: { bg: '#D1FAE5', text: '#065F46' },
-    spam: { bg: '#F3F4F6', text: '#6B7280' },
-  }
-  const sc = statusColors[c.status] || statusColors.new
-  const isSpam = c.status === 'spam'
-
-  const toggleTab = (t: 'summary' | 'transcript') => setTab(prev => prev === t ? null : t)
-
-  return (
-    <div className={`py-3 ${isSpam ? 'opacity-60' : ''}`}>
-      <div className="flex items-start gap-3">
-        {/* Avatar */}
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5"
-          style={{ background: isSpam ? '#F3F4F6' : accent + '20', color: isSpam ? '#9CA3AF' : accent }}>
-          {initials(c.caller_name)}
-        </div>
-
-        {/* Contenu principal */}
-        <div className="flex-1 min-w-0">
-          {/* Ligne 1 : nom + heure */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-medium">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
-            {c.caller_phone && c.caller_name && (
-              <span className="text-xs text-gray-400">{c.caller_phone}</span>
-            )}
-            {isSpam && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium">Prospection</span>
-            )}
-          </div>
-
-          {/* Ligne 2 : métadonnées */}
-          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-            <span className="text-[11px] text-gray-400">{fmtDate(c.created_at)} · {fmtTime(c.created_at)}</span>
-            {fmtDur(c.duration_seconds) && (
-              <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" d="M12 6v6l4 2"/></svg>
-                {fmtDur(c.duration_seconds)}
-              </span>
-            )}
-            {c.reason && !isSpam && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
-                {c.reason}
-              </span>
-            )}
-            {c.caller_address && !isSpam && (
-              <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                {c.caller_address}
-              </span>
-            )}
-          </div>
-
-          {/* Boutons expand — seulement si pas spam */}
-          {!isSpam && (c.summary || c.transcript) && (
-            <div className="flex gap-2 mt-1.5">
-              {c.summary && (
-                <button onClick={() => toggleTab('summary')}
-                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${tab === 'summary' ? 'border-transparent text-white font-medium' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                  style={tab === 'summary' ? { background: accent } : {}}>
-                  Résumé
-                </button>
-              )}
-              {c.transcript && (
-                <button onClick={() => toggleTab('transcript')}
-                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${tab === 'transcript' ? 'border-transparent text-white font-medium' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                  style={tab === 'transcript' ? { background: accent } : {}}>
-                  Transcription
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Contenu expandé */}
-          {tab === 'summary' && c.summary && (
-            <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 leading-relaxed border border-gray-100">
-              {c.summary}
-            </div>
-          )}
-          {tab === 'transcript' && c.transcript && (
-            <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 leading-relaxed border border-gray-100 max-h-56 overflow-y-auto whitespace-pre-wrap font-mono">
-              {c.transcript}
-            </div>
-          )}
-        </div>
-
-        {/* Statut (droite) */}
-        <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          {isSpam ? (
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: sc.bg, color: sc.text }}>Spam</span>
-          ) : (
-            <select value={c.status}
-              onChange={e => onStatusChange(c.id, e.target.value)}
-              className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 cursor-pointer outline-none"
-              style={{ background: sc.bg, color: sc.text }}>
-              <option value="new">Nouveau</option>
-              <option value="pending">En attente</option>
-              <option value="urgent">Urgent</option>
-              <option value="done">Traité</option>
-            </select>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── Agenda Page ───────────────────────────────────────────────────────────────
 function AgendaPage({ accent, onGoToIntegrations }: { accent: string; onGoToIntegrations: () => void }) {
