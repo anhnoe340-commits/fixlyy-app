@@ -179,7 +179,18 @@ function SidebarGroup({ label, children, defaultOpen = false }: { label: string;
 }
 
 // ── Calls Page ────────────────────────────────────────────────────────────────
-type CallRow = { id: string; caller_name: string | null; caller_phone: string | null; summary: string | null; status: string; created_at: string }
+type CallRow = {
+  id: string
+  caller_name: string | null
+  caller_phone: string | null
+  caller_address: string | null
+  summary: string | null
+  transcript: string | null
+  reason: string | null
+  status: string
+  duration_seconds: number | null
+  created_at: string
+}
 
 function CallsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
@@ -225,11 +236,11 @@ function CallsPage({ accent }: { accent: string }) {
         <div className="flex items-center justify-between mb-4">
           <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Cliquez sur un statut pour le modifier</p></div>
           <div className="flex gap-1.5">
-            {['all', 'new', 'pending', 'urgent', 'done'].map(f => (
+            {['all', 'new', 'pending', 'urgent', 'done', 'spam'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
                 className={`text-xs px-2.5 py-1 rounded-md transition-colors ${filter === f ? 'text-white font-medium' : 'border border-gray-200 hover:bg-gray-50'}`}
-                style={filter === f ? { background: accent } : {}}>
-                {f === 'all' ? 'Tous' : f === 'new' ? 'Nouveau' : f === 'pending' ? 'En attente' : f === 'urgent' ? 'Urgent' : 'Traité'}
+                style={filter === f ? { background: f === 'spam' ? '#6B7280' : accent } : {}}>
+                {f === 'all' ? 'Tous' : f === 'new' ? 'Nouveau' : f === 'pending' ? 'En attente' : f === 'urgent' ? 'Urgent' : f === 'done' ? 'Traité' : 'Spam'}
               </button>
             ))}
           </div>
@@ -1634,46 +1645,120 @@ function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: st
 }
 
 function CallRowItem({ call: c, accent, onStatusChange }: { call: CallRow; accent: string; onStatusChange: (id: string, status: string) => void }) {
-  const [expanded, setExpanded] = useState(false)
+  const [tab, setTab] = useState<'summary' | 'transcript' | null>(null)
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  const fmtDur = (s: number | null) => {
+    if (!s) return null
+    if (s < 60) return `${s}s`
+    return `${Math.floor(s / 60)}min${s % 60 > 0 ? String(s % 60).padStart(2, '0') : ''}`
+  }
   const initials = (name: string | null) => name ? name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) : '?'
-  const statusColors = {
+
+  const statusColors: Record<string, { bg: string; text: string }> = {
     urgent: { bg: '#FEE2E2', text: '#B91C1C' },
     pending: { bg: '#FEF3C7', text: '#92400E' },
     new: { bg: '#DBEAFE', text: '#1D4ED8' },
     done: { bg: '#D1FAE5', text: '#065F46' },
+    spam: { bg: '#F3F4F6', text: '#6B7280' },
   }
-  const sc = statusColors[c.status as keyof typeof statusColors] || statusColors.new
+  const sc = statusColors[c.status] || statusColors.new
+  const isSpam = c.status === 'spam'
+
+  const toggleTab = (t: 'summary' | 'transcript') => setTab(prev => prev === t ? null : t)
 
   return (
-    <div className="py-2.5">
-      <div className="flex items-start gap-3 cursor-pointer" onClick={() => c.summary && setExpanded(!expanded)}>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5" style={{ background: accent + '20', color: accent }}>
+    <div className={`py-3 ${isSpam ? 'opacity-60' : ''}`}>
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5"
+          style={{ background: isSpam ? '#F3F4F6' : accent + '20', color: isSpam ? '#9CA3AF' : accent }}>
           {initials(c.caller_name)}
         </div>
+
+        {/* Contenu principal */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
-          <p className={`text-xs text-gray-400 mt-0.5 ${expanded ? '' : 'truncate'}`}>
-            {c.summary || 'Résumé non disponible'}
-          </p>
-          {c.summary && (
-            <button className="text-[10px] text-gray-300 hover:text-gray-500 mt-0.5 transition-colors">
-              {expanded ? '▲ Réduire' : '▼ Voir le résumé complet'}
-            </button>
+          {/* Ligne 1 : nom + heure */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
+            {c.caller_phone && c.caller_name && (
+              <span className="text-xs text-gray-400">{c.caller_phone}</span>
+            )}
+            {isSpam && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium">Prospection</span>
+            )}
+          </div>
+
+          {/* Ligne 2 : métadonnées */}
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+            <span className="text-[11px] text-gray-400">{fmtDate(c.created_at)} · {fmtTime(c.created_at)}</span>
+            {fmtDur(c.duration_seconds) && (
+              <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" d="M12 6v6l4 2"/></svg>
+                {fmtDur(c.duration_seconds)}
+              </span>
+            )}
+            {c.reason && !isSpam && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
+                {c.reason}
+              </span>
+            )}
+            {c.caller_address && !isSpam && (
+              <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                {c.caller_address}
+              </span>
+            )}
+          </div>
+
+          {/* Boutons expand — seulement si pas spam */}
+          {!isSpam && (c.summary || c.transcript) && (
+            <div className="flex gap-2 mt-1.5">
+              {c.summary && (
+                <button onClick={() => toggleTab('summary')}
+                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${tab === 'summary' ? 'border-transparent text-white font-medium' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                  style={tab === 'summary' ? { background: accent } : {}}>
+                  Résumé
+                </button>
+              )}
+              {c.transcript && (
+                <button onClick={() => toggleTab('transcript')}
+                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${tab === 'transcript' ? 'border-transparent text-white font-medium' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                  style={tab === 'transcript' ? { background: accent } : {}}>
+                  Transcription
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Contenu expandé */}
+          {tab === 'summary' && c.summary && (
+            <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 leading-relaxed border border-gray-100">
+              {c.summary}
+            </div>
+          )}
+          {tab === 'transcript' && c.transcript && (
+            <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg p-3 leading-relaxed border border-gray-100 max-h-56 overflow-y-auto whitespace-pre-wrap font-mono">
+              {c.transcript}
+            </div>
           )}
         </div>
-        <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
-          <p className="text-xs text-gray-400">{fmtTime(c.created_at)}</p>
-          <select value={c.status}
-            onChange={e => { e.stopPropagation(); onStatusChange(c.id, e.target.value) }}
-            onClick={e => e.stopPropagation()}
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 cursor-pointer outline-none"
-            style={{ background: sc.bg, color: sc.text }}>
-            <option value="new">Nouveau</option>
-            <option value="pending">En attente</option>
-            <option value="urgent">Urgent</option>
-            <option value="done">Traité</option>
-          </select>
+
+        {/* Statut (droite) */}
+        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+          {isSpam ? (
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: sc.bg, color: sc.text }}>Spam</span>
+          ) : (
+            <select value={c.status}
+              onChange={e => onStatusChange(c.id, e.target.value)}
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 cursor-pointer outline-none"
+              style={{ background: sc.bg, color: sc.text }}>
+              <option value="new">Nouveau</option>
+              <option value="pending">En attente</option>
+              <option value="urgent">Urgent</option>
+              <option value="done">Traité</option>
+            </select>
+          )}
         </div>
       </div>
     </div>
