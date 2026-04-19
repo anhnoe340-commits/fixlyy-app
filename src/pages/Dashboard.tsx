@@ -508,6 +508,23 @@ function CallsPage({ accent }: { accent: string }) {
 // ── Contacts Page ─────────────────────────────────────────────────────────────
 type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string; lastCallSummary?: string | null; lastCallDate?: string | null }
 
+// Parseur VCF minimal
+function parseVcf(text: string): { name: string; phone: string | null; email: string | null }[] {
+  const cards = text.split(/BEGIN:VCARD/i).filter(c => c.includes('END:VCARD'))
+  return cards.map(card => {
+    const getName = () => {
+      const fn = card.match(/^FN[^:]*:(.+)$/m)?.[1]?.trim()
+      if (fn) return fn
+      const n = card.match(/^N[^:]*:(.+)$/m)?.[1]?.trim()
+      if (n) return n.split(';').filter(Boolean).reverse().join(' ')
+      return ''
+    }
+    const phone = card.match(/^TEL[^:]*:(.+)$/m)?.[1]?.trim().replace(/\s+/g, '') || null
+    const email = card.match(/^EMAIL[^:]*:(.+)$/m)?.[1]?.trim() || null
+    return { name: getName(), phone, email }
+  }).filter(c => c.name)
+}
+
 function ContactsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
   const [contacts, setContacts] = useState<ContactRow[]>([])
@@ -517,7 +534,8 @@ function ContactsPage({ accent }: { accent: string }) {
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '' })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<string | null>(null)
   useEffect(() => {
     if (!user) return
     Promise.all([
@@ -560,23 +578,57 @@ function ContactsPage({ accent }: { accent: string }) {
     await supabase.from('contacts').delete().eq('id', id)
   }
 
+  const handleVcfImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setImporting(true); setImportResult(null)
+    const text = await file.text()
+    const parsed = parseVcf(text)
+    let added = 0
+    for (const c of parsed) {
+      const { error } = await supabase.rpc('insert_contact', {
+        p_name: c.name, p_phone: c.phone, p_email: c.email, p_address: null,
+      })
+      if (!error) added++
+    }
+    // Recharger la liste
+    const { data: contactsData } = await supabase.rpc('get_contacts')
+    setContacts((contactsData as ContactRow[]) || [])
+    setImporting(false)
+    setImportResult(`${added} contact${added > 1 ? 's' : ''} importé${added > 1 ? 's' : ''}`)
+    setTimeout(() => setImportResult(null), 4000)
+    e.target.value = ''
+  }
+
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 
   return (
-    <div className="relative">
+    <div>
       <PageHeader title="Contacts" sub="Gérez votre base de données clients" />
       <Card>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <p className="text-sm font-semibold">Contacts ({contacts.length})</p>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            {importResult && <span className="text-xs text-emerald-600 font-medium">✓ {importResult}</span>}
             <input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
-              className="border border-gray-200 rounded-md px-3 py-1.5 text-xs outline-none focus:border-gray-400 w-44" />
+              className="border border-gray-200 rounded-md px-3 py-1.5 text-xs outline-none focus:border-gray-400 w-40" />
+            {/* Import VCF */}
+            <label className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors flex items-center gap-1.5">
+              {importing
+                ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Import…</>
+                : <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                  Importer VCF
+                </>}
+              <input type="file" accept=".vcf,.vcard" className="hidden" onChange={handleVcfImport} />
+            </label>
             <button onClick={() => { setPanelOpen(true); setForm({ name: '', phone: '', email: '', address: '' }) }}
-              className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-              + Ajouter un contact
+              className="text-xs px-3 py-1.5 rounded-md text-white font-medium flex items-center gap-1" style={{ background: accent }}>
+              + Ajouter
             </button>
           </div>
         </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
@@ -584,26 +636,26 @@ function ContactsPage({ accent }: { accent: string }) {
         ) : filtered.length === 0 ? (
           <div className="text-center py-10">
             <p className="text-sm text-gray-400">{search ? 'Aucun résultat' : 'Aucun contact encore'}</p>
-            {!search && <p className="text-xs text-gray-300 mt-1">Cliquez sur "Ajouter un contact" pour commencer</p>}
+            {!search && <p className="text-xs text-gray-300 mt-1">Ajoutez un contact ou importez un fichier VCF depuis votre téléphone</p>}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
             {filtered.map(c => (
-              <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors">
+              <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors overflow-hidden">
                 <div className="w-9 h-9 rounded-full border flex items-center justify-center text-sm font-semibold flex-shrink-0"
                   style={{ background: accent + '15', color: accent, borderColor: accent + '30' }}>
                   {initials(c.name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{c.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
+                  <p className="text-sm font-medium truncate">{c.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
                   {c.lastCallSummary && (
-                    <p className="text-xs text-gray-500 mt-1 italic truncate">📞 {c.lastCallSummary}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">📞 {c.lastCallSummary}</p>
                   )}
                 </div>
-                <p className="text-xs text-gray-300 mr-2 flex-shrink-0">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
+                <p className="text-xs text-gray-300 flex-shrink-0">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
                 <button onClick={() => handleDelete(c.id)}
-                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm">
+                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0">
                   ×
                 </button>
               </div>
@@ -612,15 +664,19 @@ function ContactsPage({ accent }: { accent: string }) {
         )}
       </Card>
 
+      {/* Panneau nouveau contact */}
       {panelOpen && (
-        <div className="fixed inset-0 z-40 flex">
-          <div className="flex-1 bg-black/20" onClick={() => setPanelOpen(false)} />
-          <div className="w-96 bg-white shadow-2xl h-full flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <>
+          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setPanelOpen(false)} />
+          <div className="fixed right-0 top-0 h-full w-[400px] bg-white shadow-2xl z-40 flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <p className="text-sm font-semibold">Nouveau contact</p>
-              <button onClick={() => setPanelOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-lg">×</button>
+              <button onClick={() => setPanelOpen(false)}
+                className="text-gray-400 hover:text-gray-700 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
+            <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
               <Field label="Nom complet *">
                 <input autoFocus placeholder="Ex : Marie Dupont" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
@@ -633,27 +689,28 @@ function ContactsPage({ accent }: { accent: string }) {
                 <input placeholder="marie@exemple.fr" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
               </Field>
-              <Field label="Adresse">
+              <Field label="Adresse postale">
                 <input placeholder="12 rue de la Paix, Paris" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
               </Field>
+              <p className="text-[11px] text-gray-400">Vous pouvez aussi importer plusieurs contacts d'un coup depuis un fichier VCF (export depuis votre téléphone ou Google Contacts).</p>
             </div>
             {saveError && (
-              <div className="mx-6 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 break-all">
+              <div className="mx-5 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
                 Erreur : {saveError}
               </div>
             )}
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
               <button onClick={() => setPanelOpen(false)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Annuler</button>
               <button onClick={handleAdd} disabled={saving || !form.name.trim()}
                 className="flex-1 py-2.5 rounded-lg text-white text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ background: accent }}>
                 {saving && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                Ajouter le contact
+                Ajouter
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
@@ -1580,7 +1637,13 @@ function IntegrationsPage({ accent }: { accent: string }) {
   const [copied, setCopied] = useState(false)
 
   const saveCalUrl = async () => {
-    await updateProfile({ onboarding_calendar: calUrl.trim() || null } as any)
+    // Normaliser l'URL : s'assurer qu'elle commence par https://
+    let normalized = calUrl.trim()
+    if (normalized && !/^https?:\/\//i.test(normalized)) {
+      normalized = 'https://' + normalized.replace(/^https?:\/*/i, '')
+    }
+    if (normalized !== calUrl) setCalUrl(normalized)
+    await updateProfile({ onboarding_calendar: normalized || null } as any)
     setCalSaved(true)
     setTimeout(() => setCalSaved(false), 2500)
   }
