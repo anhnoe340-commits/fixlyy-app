@@ -14,9 +14,16 @@ export default function ResetPasswordPage() {
 
   // Supabase envoie le token dans le hash : #access_token=...&type=recovery
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event) => {
+    // Vérification immédiate du hash (évite la race condition si l'événement a déjà été traité)
+    if (window.location.hash.includes('type=recovery')) {
+      setReady(true)
+      return
+    }
+    // Fallback : écoute l'événement si le hash n'est pas encore traité
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') setReady(true)
     })
+    return () => subscription.unsubscribe()
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {
