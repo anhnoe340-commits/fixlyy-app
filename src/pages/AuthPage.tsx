@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 const BRAND = '#2850c8'
 const NAVY  = '#0F172A'
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuth()
-  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -18,6 +19,18 @@ export default function AuthPage() {
     e.preventDefault()
     setError('')
     setSuccess('')
+
+    if (mode === 'forgot') {
+      setLoading(true)
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      setLoading(false)
+      if (error) setError('Une erreur est survenue. Vérifiez l\'adresse email.')
+      else setSuccess('Email envoyé ! Consultez votre boîte mail pour réinitialiser votre mot de passe.')
+      return
+    }
+
     if (mode === 'signup' && password !== confirm) {
       setError('Les mots de passe ne correspondent pas.')
       return
@@ -32,6 +45,10 @@ export default function AuthPage() {
       else setSuccess('Compte créé ! Vérifiez vos emails pour confirmer.')
     }
     setLoading(false)
+  }
+
+  function switchMode(m: 'login' | 'signup' | 'forgot') {
+    setMode(m); setError(''); setSuccess('')
   }
 
   return (
@@ -84,10 +101,12 @@ export default function AuthPage() {
           </div>
 
           <h2 className="text-2xl font-bold mb-1 tracking-tight">
-            {mode === 'login' ? 'Connexion à votre compte' : 'Créer un compte'}
+            {mode === 'login' ? 'Connexion à votre compte' : mode === 'signup' ? 'Créer un compte' : 'Mot de passe oublié'}
           </h2>
           <p className="text-sm text-gray-500 mb-6">
-            {mode === 'login' ? 'Gérez vos appels et vos devis.' : 'Commencez votre essai gratuit de 7 jours.'}
+            {mode === 'login' ? 'Gérez vos appels et vos devis.'
+              : mode === 'signup' ? 'Commencez votre essai gratuit de 7 jours.'
+              : 'Entrez votre email pour recevoir un lien de réinitialisation.'}
           </p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -103,17 +122,27 @@ export default function AuthPage() {
                 onBlur={e => (e.target.style.borderColor = '')}
               />
             </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 block mb-1">Mot de passe</label>
-              <input
-                type="password" required value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                onFocus={e => (e.target.style.borderColor = BRAND)}
-                onBlur={e => (e.target.style.borderColor = '')}
-              />
-            </div>
+            {mode !== 'forgot' && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-600">Mot de passe</label>
+                  {mode === 'login' && (
+                    <button type="button" onClick={() => switchMode('forgot')}
+                      className="text-xs hover:underline" style={{ color: BRAND }}>
+                      Mot de passe oublié ?
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password" required value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                  onFocus={e => (e.target.style.borderColor = BRAND)}
+                  onBlur={e => (e.target.style.borderColor = '')}
+                />
+              </div>
+            )}
             {mode === 'signup' && (
               <div>
                 <label className="text-xs font-medium text-gray-600 block mb-1">Confirmer le mot de passe</label>
@@ -140,19 +169,29 @@ export default function AuthPage() {
               className="w-full text-white rounded-lg py-2.5 text-sm font-semibold transition-opacity disabled:opacity-50 hover:opacity-90"
               style={{ background: BRAND }}
             >
-              {loading ? 'Chargement...' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}
+              {loading ? 'Chargement...'
+                : mode === 'login' ? 'Se connecter'
+                : mode === 'signup' ? 'Créer mon compte'
+                : 'Envoyer le lien'}
             </button>
           </form>
 
           <p className="text-center text-xs text-gray-500 mt-5">
-            {mode === 'login' ? 'Pas encore de compte ? ' : 'Déjà un compte ? '}
-            <button
-              onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setSuccess('') }}
-              className="font-medium hover:underline"
-              style={{ color: BRAND }}
-            >
-              {mode === 'login' ? "S'inscrire" : 'Se connecter'}
-            </button>
+            {mode === 'forgot' ? (
+              <>
+                <button onClick={() => switchMode('login')} className="font-medium hover:underline" style={{ color: BRAND }}>
+                  ← Retour à la connexion
+                </button>
+              </>
+            ) : (
+              <>
+                {mode === 'login' ? 'Pas encore de compte ? ' : 'Déjà un compte ? '}
+                <button onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
+                  className="font-medium hover:underline" style={{ color: BRAND }}>
+                  {mode === 'login' ? "S'inscrire" : 'Se connecter'}
+                </button>
+              </>
+            )}
           </p>
         </div>
       </div>
