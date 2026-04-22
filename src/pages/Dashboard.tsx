@@ -910,12 +910,12 @@ function GreetingPage({ accent }: { accent: string }) {
 
         {/* Salutation personnalisée */}
         <Card>
-          <div className="flex items-center justify-between py-1">
-            <div>
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Activer le message de salutation personnalisé</p>
               <p className="text-xs text-gray-400 mt-0.5">L'assistante utilise le prénom du client s'il est connu</p>
             </div>
-            <Toggle defaultOn={personalizedGreeting} accent={accent} onChange={setPersonalizedGreeting} />
+            <Toggle defaultOn={personalizedGreeting} accent={accent} onChange={setPersonalizedGreeting} className="flex-shrink-0" />
           </div>
         </Card>
 
@@ -1104,12 +1104,12 @@ function CallTransferPage({ accent }: { accent: string }) {
       <div className="flex flex-col gap-4">
         {/* Transfert externe */}
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Transfert d'appel externe</p>
               <p className="text-xs text-gray-400 mt-0.5">Transférer les appels vers un numéro de téléphone externe</p>
             </div>
-            <Toggle defaultOn={externalTransfer} accent={accent} onChange={setExternalTransfer} />
+            <Toggle defaultOn={externalTransfer} accent={accent} onChange={setExternalTransfer} className="flex-shrink-0" />
           </div>
           {externalTransfer && (
             <Field label="Numéro de destination">
@@ -1144,12 +1144,12 @@ function CallTransferPage({ accent }: { accent: string }) {
 
         {/* Transfert vers des employés */}
         <Card>
-          <div className="flex items-center justify-between mb-1">
-            <div>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Transférer vers des employés</p>
               <p className="text-xs text-gray-400 mt-0.5">L'assistante transfère l'appel vers un employé disponible</p>
             </div>
-            <Toggle defaultOn={transferToEmployees} accent={accent} onChange={setTransferToEmployees} />
+            <Toggle defaultOn={transferToEmployees} accent={accent} onChange={setTransferToEmployees} className="flex-shrink-0" />
           </div>
           {transferToEmployees && (
             <div className="mt-4 pt-4 border-t border-gray-100">
@@ -1160,12 +1160,12 @@ function CallTransferPage({ accent }: { accent: string }) {
 
         {/* Transfert entre employés */}
         <Card>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Transfert entre employés</p>
               <p className="text-xs text-gray-400 mt-0.5">Permettre aux employés de transférer des appels entre eux</p>
             </div>
-            <Toggle defaultOn={interEmployeeTransfer} accent={accent} onChange={setInterEmployeeTransfer} />
+            <Toggle defaultOn={interEmployeeTransfer} accent={accent} onChange={setInterEmployeeTransfer} className="flex-shrink-0" />
           </div>
         </Card>
       </div>
@@ -1192,12 +1192,12 @@ function PostProcessingPage({ accent }: { accent: string }) {
       <PageHeader title="Post-traitement" sub="Actions effectuées automatiquement après chaque appel" />
       <div className="flex flex-col gap-4">
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Envoyer un email de notification après l'appel</p>
               <p className="text-xs text-gray-400 mt-0.5">Recevez un résumé de chaque appel par email dès la fin de la conversation</p>
             </div>
-            <Toggle defaultOn={emailNotif} accent={accent} onChange={setEmailNotif} />
+            <Toggle defaultOn={emailNotif} accent={accent} onChange={setEmailNotif} className="flex-shrink-0" />
           </div>
           {emailNotif && (
             <Field label="Adresse email de notification">
@@ -2099,9 +2099,12 @@ function Toggle({ defaultOn, accent, onChange, className = '' }: { defaultOn: bo
 
 function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: string; defaultOn: boolean; accent: string }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <div><p className="text-sm font-medium">{label}</p><p className="text-xs text-gray-400 mt-0.5">{desc}</p></div>
-      <Toggle defaultOn={defaultOn} accent={accent} className="ml-4" />
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-gray-100 last:border-0">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+      </div>
+      <Toggle defaultOn={defaultOn} accent={accent} className="flex-shrink-0" />
     </div>
   )
 }
