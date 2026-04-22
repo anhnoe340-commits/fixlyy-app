@@ -11,11 +11,35 @@ type Page =
 
 const BRAND = '#2850c8'
 
+// ── Mise à jour automatique de l'assistant Vapi à chaque session ─────────────
+async function syncAssistant() {
+  const sessionKey = 'mia_synced_v2'
+  if (sessionStorage.getItem(sessionKey)) return // déjà fait cette session
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/provision-artisan`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force_update: true }),
+    })
+    sessionStorage.setItem(sessionKey, '1')
+  } catch { /* silencieux — ne bloque pas l'app */ }
+}
+
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { profile, uploadLogo } = useProfile()
   const [page, setPage] = useState<Page>('calls')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Ferme la sidebar mobile à chaque changement de page
+  useEffect(() => { setSidebarOpen(false) }, [page])
+
+  // Sync automatique de l'assistant au chargement (une fois par session)
+  useEffect(() => {
+    if (profile) syncAssistant()
+  }, [!!profile])
 
   if (!profile) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -27,8 +51,11 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-[#F5F5F4] text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
+      {/* Overlay mobile sidebar */}
+      {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/40 z-10" onClick={() => setSidebarOpen(false)} />}
+
       {/* Sidebar — dark */}
-      <aside className="w-56 bg-[#0F172A] flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20">
+      <aside className={`w-56 bg-[#0F172A] flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
 
         {/* Logo + entreprise */}
         <div className="px-4 py-4 flex items-center gap-3 border-b border-white/10">
@@ -87,12 +114,32 @@ export default function Dashboard() {
         </div>
       </aside>
 
+      {/* Bottom nav — mobile uniquement */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 flex h-14 safe-bottom">
+        {([
+          { p: 'calls',    icon: <PhoneIcon />,    label: 'Appels' },
+          { p: 'contacts', icon: <UserIcon />,     label: 'Contacts' },
+          { p: 'agenda',   icon: <CalendarIcon />, label: 'Agenda' },
+          { p: 'stats',    icon: <ChartIcon />,    label: 'Stats' },
+        ] as { p: Page; icon: React.ReactNode; label: string }[]).map(({ p, icon, label }) => (
+          <button key={p} onClick={() => setPage(p)}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors"
+            style={{ color: page === p ? accent : '#9CA3AF' }}>
+            <span className="w-5 h-5">{icon}</span>
+            <span className="text-[10px] font-medium">{label}</span>
+          </button>
+        ))}
+      </nav>
+
       {/* Main */}
-      <div className="flex-1 flex flex-col ml-56">
+      <div className="flex-1 flex flex-col md:ml-56">
         {/* Topbar */}
-        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 flex items-center justify-between px-6 h-[52px]">
-          <div className="flex items-center gap-1.5 text-sm text-gray-400">
-            <span className="text-gray-700 font-medium">{PAGE_LABELS[page]}</span>
+        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 h-[52px]">
+          <div className="flex items-center gap-3">
+            <button className="md:hidden p-1.5 -ml-1 text-gray-500 hover:text-gray-700 transition-colors" onClick={() => setSidebarOpen(o => !o)}>
+              <MenuIcon />
+            </button>
+            <span className="text-gray-700 font-medium text-sm">{PAGE_LABELS[page]}</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
@@ -101,7 +148,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto overflow-x-hidden pb-20 md:pb-6">
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
           {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
@@ -245,7 +292,7 @@ function CallDetailPanel({ call: c, onClose, onStatusChange, accent }: { call: C
       {/* Overlay */}
       <div className="fixed inset-0 bg-black/20 z-30" onClick={onClose} />
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-[440px] bg-white shadow-2xl z-40 flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 h-full w-full md:w-[440px] bg-white shadow-2xl z-40 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3 min-w-0">
@@ -404,7 +451,7 @@ function CallsPage({ accent }: { accent: string }) {
   return (
     <div>
       <PageHeader title="Appels" sub="Gérez et consultez vos appels reçus" />
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <StatCard label="Appels aujourd'hui" value={String(todayCalls.length)} trend="via votre assistante" trendUp={todayCalls.length > 0} />
         <StatCard label="Appels urgents" value={String(urgentCount)} trend={urgentCount > 0 ? 'à traiter' : 'aucun en attente'} trendUp={false} />
         <StatCard label="Total appels" value={String(calls.length)} trend="depuis le début" />
@@ -412,12 +459,12 @@ function CallsPage({ accent }: { accent: string }) {
       </div>
 
       <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Cliquez sur une ligne pour voir les détails</p></div>
-          <div className="flex gap-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Appuyez sur une ligne pour voir les détails</p></div>
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 flex-shrink-0">
             {['all','new','pending','urgent','done','spam'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${filter === f ? 'text-white font-medium' : 'border border-gray-200 hover:bg-gray-50'}`}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors whitespace-nowrap flex-shrink-0 ${filter === f ? 'text-white font-medium' : 'border border-gray-200 hover:bg-gray-50'}`}
                 style={filter === f ? { background: f === 'spam' ? '#6B7280' : accent } : {}}>
                 {f === 'all' ? 'Tous' : STATUS_LABELS[f]}
               </button>
@@ -435,61 +482,92 @@ function CallsPage({ accent }: { accent: string }) {
             <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici dès que votre assistante aura traité un appel</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Contact</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Motif</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Date / Heure</th>
-                <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Vue mobile : cartes */}
+            <div className="md:hidden flex flex-col divide-y divide-gray-50">
               {filtered.map(c => {
                 const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
-                const fmtDate = (iso: string) => {
-                  const d = new Date(iso)
-                  const diff = Date.now() - d.getTime()
-                  const m = Math.floor(diff / 60000)
-                  if (m < 60) return `${m} min ago`
-                  const h = Math.floor(m / 60)
-                  if (h < 24) return `${h}h ago`
-                  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-                }
                 return (
-                  <tr key={c.id}
-                    onClick={() => setSelectedCall(c)}
-                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
-                          style={{ background: accent + '15', color: accent }}>
-                          {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
-                        </div>
-                        <div>
-                          <p className="font-medium text-[13px]">{c.caller_name || 'Inconnu'}</p>
-                          {c.caller_phone && <p className="text-[11px] text-gray-400">{c.caller_phone}</p>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 pr-4 text-[13px] text-gray-500 max-w-[180px] truncate">
-                      {c.status === 'spam' ? <span className="italic text-gray-400">Prospection commerciale</span> : (c.reason || 'Demande générale')}
-                    </td>
-                    <td className="py-3 pr-4 text-[13px] text-gray-500 whitespace-nowrap">
-                      {new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                      <br />
-                      <span className="text-[11px] text-gray-400">{fmtDate(c.created_at)}</span>
-                    </td>
-                    <td className="py-3">
-                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: sc.bg, color: sc.text }}>
+                  <div key={c.id} onClick={() => setSelectedCall(c)}
+                    className="flex items-center gap-3 py-3 cursor-pointer active:bg-gray-50">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
+                      style={{ background: accent + '15', color: accent }}>
+                      {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[13px] truncate">{c.caller_name || 'Inconnu'}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{c.status === 'spam' ? 'Prospection commerciale' : (c.reason || c.caller_phone || 'Demande générale')}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.text }}>
                         {STATUS_LABELS[c.status] || c.status}
                       </span>
-                    </td>
-                  </tr>
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(c.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+                  </div>
                 )
               })}
-            </tbody>
-          </table>
+            </div>
+
+            {/* Vue desktop : tableau */}
+            <table className="hidden md:table w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Contact</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Motif</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Date / Heure</th>
+                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(c => {
+                  const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
+                  const fmtDate = (iso: string) => {
+                    const d = new Date(iso)
+                    const diff = Date.now() - d.getTime()
+                    const m = Math.floor(diff / 60000)
+                    if (m < 60) return `${m} min`
+                    const h = Math.floor(m / 60)
+                    if (h < 24) return `${h}h`
+                    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                  }
+                  return (
+                    <tr key={c.id}
+                      onClick={() => setSelectedCall(c)}
+                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
+                            style={{ background: accent + '15', color: accent }}>
+                            {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-[13px]">{c.caller_name || 'Inconnu'}</p>
+                            {c.caller_phone && <p className="text-[11px] text-gray-400">{c.caller_phone}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 text-[13px] text-gray-500 max-w-[180px] truncate">
+                        {c.status === 'spam' ? <span className="italic text-gray-400">Prospection commerciale</span> : (c.reason || 'Demande générale')}
+                      </td>
+                      <td className="py-3 pr-4 text-[13px] text-gray-500 whitespace-nowrap">
+                        {new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        <br />
+                        <span className="text-[11px] text-gray-400">{fmtDate(c.created_at)}</span>
+                      </td>
+                      <td className="py-3">
+                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: sc.bg, color: sc.text }}>
+                          {STATUS_LABELS[c.status] || c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </>
         )}
       </Card>
 
@@ -507,6 +585,37 @@ function CallsPage({ accent }: { accent: string }) {
 
 // ── Contacts Page ─────────────────────────────────────────────────────────────
 type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string; lastCallSummary?: string | null; lastCallDate?: string | null }
+
+// Parseur CSV contacts (supporte : name/nom, phone/tel/téléphone, email/mail, address/adresse)
+function parseCsv(text: string): { name: string; phone: string | null; email: string | null; address: string | null }[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return []
+  const sep = lines[0].includes(';') ? ';' : ','
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/['"]/g, ''))
+  const idx = (keys: string[]) => headers.findIndex(h => keys.some(k => h.includes(k)))
+  const iName    = idx(['name', 'nom', 'full'])
+  const iFirst   = idx(['first', 'prénom', 'prenom', 'firstname'])
+  const iLast    = idx(['last', 'famille', 'lastname', 'surname'])
+  const iPhone   = idx(['phone', 'tel', 'mobile', 'portable', 'numéro', 'numero'])
+  const iEmail   = idx(['email', 'mail', 'courriel'])
+  const iAddr    = idx(['address', 'adresse', 'addr'])
+  return lines.slice(1).map(line => {
+    const cols = line.split(sep).map(c => c.trim().replace(/^["']|["']$/g, ''))
+    let name = ''
+    if (iName >= 0 && cols[iName]) name = cols[iName]
+    else if (iFirst >= 0 || iLast >= 0) {
+      const first = iFirst >= 0 ? cols[iFirst] || '' : ''
+      const last  = iLast  >= 0 ? cols[iLast]  || '' : ''
+      name = `${first} ${last}`.trim()
+    }
+    return {
+      name,
+      phone:   iPhone >= 0 ? cols[iPhone]  || null : null,
+      email:   iEmail  >= 0 ? cols[iEmail]  || null : null,
+      address: iAddr   >= 0 ? cols[iAddr]   || null : null,
+    }
+  }).filter(c => c.name)
+}
 
 // Parseur VCF minimal
 function parseVcf(text: string): { name: string; phone: string | null; email: string | null }[] {
@@ -578,25 +687,39 @@ function ContactsPage({ accent }: { accent: string }) {
     await supabase.from('contacts').delete().eq('id', id)
   }
 
+  const [importingCsv, setImportingCsv] = useState(false)
+
+  const importContacts = async (list: { name: string; phone: string | null; email: string | null; address?: string | null }[]) => {
+    let added = 0
+    for (const c of list) {
+      const { error } = await supabase.rpc('insert_contact', {
+        p_name: c.name, p_phone: c.phone || null, p_email: c.email || null, p_address: c.address || null,
+      })
+      if (!error) added++
+    }
+    const { data: contactsData } = await supabase.rpc('get_contacts')
+    setContacts((contactsData as ContactRow[]) || [])
+    setImportResult(`${added} contact${added > 1 ? 's' : ''} importé${added > 1 ? 's' : ''}`)
+    setTimeout(() => setImportResult(null), 4000)
+  }
+
   const handleVcfImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user) return
     setImporting(true); setImportResult(null)
     const text = await file.text()
-    const parsed = parseVcf(text)
-    let added = 0
-    for (const c of parsed) {
-      const { error } = await supabase.rpc('insert_contact', {
-        p_name: c.name, p_phone: c.phone, p_email: c.email, p_address: null,
-      })
-      if (!error) added++
-    }
-    // Recharger la liste
-    const { data: contactsData } = await supabase.rpc('get_contacts')
-    setContacts((contactsData as ContactRow[]) || [])
+    await importContacts(parseVcf(text).map(c => ({ ...c, address: null })))
     setImporting(false)
-    setImportResult(`${added} contact${added > 1 ? 's' : ''} importé${added > 1 ? 's' : ''}`)
-    setTimeout(() => setImportResult(null), 4000)
+    e.target.value = ''
+  }
+
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setImportingCsv(true); setImportResult(null)
+    const text = await file.text()
+    await importContacts(parseCsv(text))
+    setImportingCsv(false)
     e.target.value = ''
   }
 
@@ -621,6 +744,16 @@ function ContactsPage({ accent }: { accent: string }) {
                   Importer VCF
                 </>}
               <input type="file" accept=".vcf,.vcard" className="hidden" onChange={handleVcfImport} />
+            </label>
+            {/* Import CSV */}
+            <label className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors flex items-center gap-1.5">
+              {importingCsv
+                ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Import…</>
+                : <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                  Importer CSV
+                </>}
+              <input type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
             </label>
             <button onClick={() => { setPanelOpen(true); setForm({ name: '', phone: '', email: '', address: '' }) }}
               className="text-xs px-3 py-1.5 rounded-md text-white font-medium flex items-center gap-1" style={{ background: accent }}>
@@ -649,9 +782,6 @@ function ContactsPage({ accent }: { accent: string }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{c.name}</p>
                   <p className="text-xs text-gray-400 mt-0.5 truncate">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
-                  {c.lastCallSummary && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">📞 {c.lastCallSummary}</p>
-                  )}
                 </div>
                 <p className="text-xs text-gray-300 flex-shrink-0">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
                 <button onClick={() => handleDelete(c.id)}
@@ -668,7 +798,7 @@ function ContactsPage({ accent }: { accent: string }) {
       {panelOpen && (
         <>
           <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setPanelOpen(false)} />
-          <div className="fixed right-0 top-0 h-full w-[400px] bg-white shadow-2xl z-40 flex flex-col">
+          <div className="fixed right-0 top-0 h-full w-full md:w-[400px] bg-white shadow-2xl z-40 flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <p className="text-sm font-semibold">Nouveau contact</p>
               <button onClick={() => setPanelOpen(false)}
@@ -1439,6 +1569,8 @@ function AssistantPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
   const [saved, setSaved] = useState(false)
   const [extraLangs, setExtraLangs] = useState<string[]>([])
+  const [updating, setUpdating] = useState(false)
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null)
 
   if (!profile) return null
 
@@ -1446,6 +1578,25 @@ function AssistantPage({ accent }: { accent: string }) {
     await updateProfile({ assistant_name: profile.assistant_name, assistant_voice: profile.assistant_voice })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+  }
+
+  const handleUpdateAssistant = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    setUpdating(true); setUpdateMsg(null)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/provision-artisan`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_update: true }),
+      })
+      const data = await res.json()
+      setUpdateMsg(data.updated ? '✓ Mia mise à jour avec les nouveaux outils' : data.success ? '✓ Déjà à jour' : 'Erreur lors de la mise à jour')
+    } catch {
+      setUpdateMsg('Erreur réseau')
+    }
+    setUpdating(false)
+    setTimeout(() => setUpdateMsg(null), 4000)
   }
 
   const availableLangs = ['Anglais', 'Espagnol', 'Allemand', 'Italien', 'Portugais', 'Arabe']
@@ -1514,11 +1665,20 @@ function AssistantPage({ accent }: { accent: string }) {
           </div>
         </Card>
 
-        <div className="flex justify-end">
-          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
-          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-            Enregistrer les modifications
-          </button>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            {updateMsg && <span className={`text-xs font-medium ${updateMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>{updateMsg}</span>}
+            <button onClick={handleUpdateAssistant} disabled={updating}
+              className="text-xs px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
+              {updating ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Mise à jour…</> : '↑ Mettre à jour Mia'}
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            {saved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
+            <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
+              Enregistrer les modifications
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1948,145 +2108,235 @@ function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: st
 
 
 // ── Agenda Page ───────────────────────────────────────────────────────────────
-function AgendaPage({ accent, onGoToIntegrations }: { accent: string; onGoToIntegrations: () => void }) {
+type AppointmentRow = { id: string; client_name: string | null; client_phone: string | null; reason: string | null; appointment_date: string; appointment_time: string; duration_minutes: number; status: string; created_at: string }
+
+function AgendaPage({ accent, onGoToIntegrations: _onGoToIntegrations }: { accent: string; onGoToIntegrations: () => void }) {
   const { user } = useAuth()
-  const { profile } = useProfile()
-  const [pendingCalls, setPendingCalls] = useState<(CallRow & { caller_address?: string | null })[]>([])
+  const [calls, setCalls] = useState<CallRow[]>([])
+  const [appointments, setAppointments] = useState<AppointmentRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedDate, setSelectedDate] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d })
+  const [viewMonth, setViewMonth] = useState<Date>(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 
   useEffect(() => {
     if (!user) return
-    supabase.from('calls').select('*').eq('artisan_id', user.id)
-      .in('status', ['new', 'pending'])
-      .order('created_at', { ascending: false })
-      .limit(20)
-      .then(({ data }) => { setPendingCalls(data || []); setLoading(false) })
+    const since = new Date(); since.setDate(since.getDate() - 90)
+    Promise.all([
+      supabase.from('calls').select('*').eq('artisan_id', user.id)
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: false }),
+      supabase.from('appointments').select('*').eq('artisan_id', user.id)
+        .gte('appointment_date', since.toISOString().split('T')[0])
+        .order('appointment_date', { ascending: true }),
+    ]).then(([{ data: callsData }, { data: apptData }]) => {
+      setCalls(callsData || [])
+      setAppointments(apptData || [])
+      setLoading(false)
+    })
   }, [user])
 
-  // Génère les 7 jours de la semaine courante
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    const day = d.getDay() === 0 ? 6 : d.getDay() - 1 // lundi = 0
-    d.setDate(d.getDate() - day + i)
-    return d
+  const today = new Date(); today.setHours(0,0,0,0)
+
+  const callsForDay = (d: Date) => calls.filter(c => {
+    const cd = new Date(c.created_at); cd.setHours(0,0,0,0)
+    return cd.getTime() === d.getTime()
   })
-  const today = new Date().toDateString()
+
+  const apptForDay = (d: Date) => appointments.filter(a => {
+    const ad = new Date(a.appointment_date + 'T12:00:00'); ad.setHours(0,0,0,0)
+    return ad.getTime() === d.getTime()
+  })
+
+  // Build calendar grid for viewMonth
+  const firstDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1)
+  const lastDay = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0)
+  const startOffset = (firstDay.getDay() + 6) % 7 // Mon=0
+  const calDays: (Date | null)[] = [
+    ...Array(startOffset).fill(null),
+    ...Array.from({ length: lastDay.getDate() }, (_, i) => new Date(viewMonth.getFullYear(), viewMonth.getMonth(), i + 1))
+  ]
+
+  const selectedCalls = callsForDay(selectedDate)
+  const pendingCalls = calls.filter(c => ['new', 'pending', 'urgent'].includes(c.status))
+
+  const goToPrevMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))
+  const goToNextMonth = () => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))
+  const goToToday = () => {
+    const t = new Date(); t.setHours(0,0,0,0)
+    setSelectedDate(t)
+    setViewMonth(new Date(t.getFullYear(), t.getMonth(), 1))
+  }
+
+  const statusStyle = (status: string) => {
+    if (status === 'urgent') return 'bg-red-100 text-red-700'
+    if (status === 'spam')   return 'bg-gray-100 text-gray-500'
+    if (status === 'done')   return 'bg-emerald-100 text-emerald-700'
+    return 'bg-amber-100 text-amber-700'
+  }
 
   return (
     <div>
-      <PageHeader title="Agenda" sub="Vos rappels en attente et rendez-vous de la semaine" />
+      <PageHeader title="Agenda" sub="Historique de vos appels par jour" />
 
-      {/* Semaine courante */}
-      <Card className="mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">Cette semaine</p>
-          <p className="text-xs text-gray-400">
-            {weekDays[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} – {weekDays[6].toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </p>
-        </div>
-        <div className="grid grid-cols-7 gap-2">
-          {weekDays.map((d, i) => {
-            const isToday = d.toDateString() === today
-            const dayLabel = d.toLocaleDateString('fr-FR', { weekday: 'short' })
-            const dayNum = d.getDate()
-            const callsThisDay = pendingCalls.filter(c =>
-              new Date(c.created_at).toDateString() === d.toDateString()
-            )
-            return (
-              <div key={i} className={`rounded-xl p-3 text-center transition-colors ${isToday ? 'text-white' : 'bg-gray-50'}`}
-                style={isToday ? { background: accent } : {}}>
-                <p className={`text-[11px] font-medium uppercase tracking-wide ${isToday ? 'text-white/80' : 'text-gray-400'}`}>{dayLabel}</p>
-                <p className={`text-xl font-semibold mt-0.5 ${isToday ? 'text-white' : 'text-gray-700'}`}>{dayNum}</p>
-                {callsThisDay.length > 0 && (
-                  <div className={`mt-1.5 text-[11px] font-semibold px-1.5 py-0.5 rounded-full inline-block ${isToday ? 'bg-white/20 text-white' : 'text-white'}`}
-                    style={!isToday ? { background: accent } : {}}>
-                    {callsThisDay.length}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </Card>
-
-      {/* Rappels à faire */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-[1fr_300px]">
+        {/* ── Calendrier ── */}
         <Card>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold">Rappels en attente</p>
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
-              {pendingCalls.length}
-            </span>
-          </div>
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : pendingCalls.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-2xl mb-2">✓</p>
-              <p className="text-sm text-gray-500 font-medium">Tout est traité</p>
-              <p className="text-xs text-gray-400 mt-1">Aucun rappel en attente</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {pendingCalls.map(c => (
-                <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5" style={{ background: accent + '20', color: accent }}>
-                    {(c.caller_name || c.caller_phone || '?').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
-                    <p className="text-xs text-gray-400 truncate mt-0.5">{c.caller_phone}</p>
-                    <p className="text-xs text-gray-500 mt-1 truncate italic">{c.summary?.slice(0, 60)}…</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${c.status === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {c.status === 'urgent' ? 'Urgent' : 'En attente'}
-                    </span>
-                    <p className="text-[10px] text-gray-300 mt-1.5">
-                      {new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* Cal.com */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Prise de rendez-vous</p>
-          <p className="text-xs text-gray-400 mb-4">Liya partage votre lien de réservation aux clients qui en font la demande</p>
-          {profile?.onboarding_calendar ? (
-            <div>
-              <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-lg border border-emerald-200 mb-3">
-                <span className="text-emerald-600 text-sm">✓</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-emerald-700">Cal.com connecté</p>
-                  <p className="text-[11px] text-emerald-600 truncate">{profile.onboarding_calendar}</p>
-                </div>
-              </div>
-              <a href={profile.onboarding_calendar} target="_blank" rel="noreferrer"
-                className="block text-center text-xs px-4 py-2.5 rounded-lg text-white font-medium transition-opacity hover:opacity-90"
-                style={{ background: accent }}>
-                Ouvrir mon agenda Cal.com →
-              </a>
-            </div>
-          ) : (
-            <div className="text-center py-6">
-              <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3 text-xl">
-                📅
-              </div>
-              <p className="text-sm text-gray-600 font-medium">Aucun agenda configuré</p>
-              <p className="text-xs text-gray-400 mt-1 mb-4">Ajoutez votre lien Cal.com pour que Liya propose des créneaux aux clients</p>
-              <button onClick={onGoToIntegrations}
-                className="text-xs px-4 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-                Configurer Cal.com
+          {/* Navigation mois */}
+          <div className="flex items-center justify-between mb-5">
+            <button onClick={goToPrevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-semibold capitalize">
+                {viewMonth.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+              </p>
+              <button onClick={goToToday} className="text-[11px] px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
+                Aujourd'hui
               </button>
             </div>
-          )}
+            <button onClick={goToNextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+
+          {/* En-têtes jours */}
+          <div className="grid grid-cols-7 mb-1">
+            {['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d => (
+              <div key={d} className="text-center text-[11px] font-medium text-gray-400 py-1">{d}</div>
+            ))}
+          </div>
+
+          {/* Grille jours */}
+          <div className="grid grid-cols-7 gap-1">
+            {calDays.map((d, i) => {
+              if (!d) return <div key={i} />
+              const dc = callsForDay(d)
+              const ac = apptForDay(d)
+              const hasUrgent = dc.some(c => c.status === 'urgent')
+              const hasCalls = dc.length > 0
+              const hasAppt = ac.length > 0
+              const isSel = d.getTime() === selectedDate.getTime()
+              const isTod = d.getTime() === today.getTime()
+              return (
+                <button key={i} onClick={() => setSelectedDate(d)}
+                  className={`relative flex flex-col items-center justify-center h-10 w-full rounded-lg transition-all text-sm font-medium
+                    ${isSel ? 'text-white shadow-sm' : 'hover:bg-gray-100 text-gray-700'}`}
+                  style={isSel ? { background: accent } : {}}>
+                  <span style={isTod && !isSel ? { color: accent, fontWeight: 700 } : {}}>{d.getDate()}</span>
+                  {(hasCalls || hasAppt) && (
+                    <div className="absolute bottom-1 flex gap-0.5">
+                      {hasCalls && <div className={`w-1 h-1 rounded-full ${isSel ? 'bg-white/80' : hasUrgent ? 'bg-red-500' : ''}`}
+                        style={!isSel && !hasUrgent ? { background: accent } : {}} />}
+                      {hasAppt && <div className={`w-1 h-1 rounded-full ${isSel ? 'bg-white/80' : 'bg-emerald-500'}`} />}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Légende */}
+          <div className="flex gap-4 mt-4 pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full" style={{ background: accent }} />
+              <span className="text-[11px] text-gray-400">Appels</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="text-[11px] text-gray-400">Urgents</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-[11px] text-gray-400">Rendez-vous</span>
+            </div>
+          </div>
         </Card>
+
+        {/* ── Panneau droit ── */}
+        <div className="flex flex-col gap-4">
+          {/* Appels du jour sélectionné */}
+          <Card>
+            <div className="mb-3">
+              <p className="text-sm font-semibold capitalize">
+                {selectedDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">{selectedCalls.length} appel{selectedCalls.length !== 1 ? 's' : ''}</p>
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-6"><div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" /></div>
+            ) : selectedCalls.length === 0 ? (
+              <div className="text-center py-5">
+                <p className="text-2xl mb-1">📅</p>
+                <p className="text-xs text-gray-400">Aucun appel ce jour</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-52 overflow-y-auto">
+                {selectedCalls.map(c => (
+                  <div key={c.id} className="p-2.5 rounded-lg bg-gray-50">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <p className="text-xs font-medium truncate">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${statusStyle(c.status)}`}>
+                        {STATUS_LABELS[c.status] || c.status}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-400">{new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    {c.summary && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{c.summary}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Rendez-vous du jour */}
+          {apptForDay(selectedDate).length > 0 && (
+            <Card>
+              <p className="text-xs font-semibold mb-3">Rendez-vous</p>
+              <div className="flex flex-col gap-2">
+                {apptForDay(selectedDate).map(a => (
+                  <div key={a.id} className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <p className="text-xs font-medium truncate text-emerald-800">{a.client_name || a.client_phone || 'Client inconnu'}</p>
+                      <span className="text-[10px] font-semibold text-emerald-600 flex-shrink-0">
+                        {a.appointment_time.slice(0, 5)}
+                      </span>
+                    </div>
+                    {a.reason && <p className="text-[11px] text-emerald-600 truncate">{a.reason}</p>}
+                    {a.client_phone && <p className="text-[11px] text-emerald-500 mt-0.5">{a.client_phone}</p>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Rappels en attente */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold">Rappels en attente</p>
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
+                {pendingCalls.length}
+              </span>
+            </div>
+            {pendingCalls.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-xl">✓</p>
+                <p className="text-xs text-gray-400 mt-1">Tout est traité</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                {pendingCalls.slice(0, 8).map(c => (
+                  <div key={c.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50">
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.status === 'urgent' ? '#EF4444' : accent }} />
+                    <p className="text-xs truncate flex-1">{c.caller_name || c.caller_phone || 'Inconnu'}</p>
+                    <span className="text-[10px] text-gray-400 flex-shrink-0">
+                      {new Date(c.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   )
@@ -2150,14 +2400,14 @@ function StatsPage({ accent }: { accent: string }) {
       <PageHeader title="Statistiques" sub="Vue d'ensemble de votre activité téléphonique" />
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <StatCard label="Total appels" value={String(totalCalls)} trend="depuis le début" />
         <StatCard label="Aujourd'hui" value={String(todayCount)} trend="appels reçus" trendUp={todayCount > 0} />
         <StatCard label="Durée moyenne" value={avgMinStr} trend="par appel" />
         <StatCard label="Contacts" value={String(contacts)} trend="dans votre base" trendUp={contacts > 0} accent={accent} />
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* Graphique 7 jours */}
         <Card>
           <p className="text-sm font-semibold mb-4">Appels — 7 derniers jours</p>
