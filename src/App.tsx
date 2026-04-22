@@ -6,6 +6,7 @@ import OnboardingPage from '@/pages/OnboardingPage'
 import Onboarding from '@/pages/Onboarding'
 import Dashboard from '@/pages/Dashboard'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import { supabase } from '@/lib/supabase'
 
 function Spinner() {
@@ -77,5 +78,6 @@ function AppContent() {
 
 export default function App() {
   if (window.location.pathname === '/accept') return <AcceptQuotePage />
+  if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
   return <AuthProvider><AppContent /></AuthProvider>
 }
