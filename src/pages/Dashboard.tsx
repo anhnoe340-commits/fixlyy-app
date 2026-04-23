@@ -1565,12 +1565,24 @@ function HoursPage({ accent }: { accent: string }) {
 }
 
 // ── Assistant Page ────────────────────────────────────────────────────────────
+function formatFrPhone(e164: string): string {
+  const local = e164.replace('+33', '0')
+  return local.replace(/(\d{2})(?=\d)/g, '$1 ').trim()
+}
+
 function AssistantPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
   const [saved, setSaved] = useState(false)
   const [extraLangs, setExtraLangs] = useState<string[]>([])
   const [updating, setUpdating] = useState(false)
   const [updateMsg, setUpdateMsg] = useState<string | null>(null)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+
+  function copyCode(code: string) {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
+  }
 
   if (!profile) return null
 
@@ -1663,6 +1675,57 @@ function AssistantPage({ accent }: { accent: string }) {
               <span>▶</span> Écouter
             </button>
           </div>
+        </Card>
+
+        {/* Renvoi d'appel */}
+        <Card>
+          <p className="text-sm font-semibold mb-1">Renvoi d'appel vers Mia</p>
+          <p className="text-xs text-gray-400 mb-4">Composez l'un de ces codes depuis votre téléphone pour rediriger vos appels vers votre assistante.</p>
+
+          {profile.twilio_number ? (
+            <>
+              {/* Numéro Mia */}
+              <div className="rounded-xl border-2 p-4 mb-4 text-center" style={{ borderColor: accent + '30', background: accent + '06' }}>
+                <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: accent }}>Votre numéro Fixlyy</p>
+                <p className="text-2xl font-bold tracking-wide text-gray-900">{formatFrPhone(profile.twilio_number)}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Mia répond sur ce numéro</p>
+              </div>
+
+              {/* Codes USSD */}
+              <div className="flex flex-col gap-3">
+                {[
+                  { label: 'Renvoi total', desc: 'Tous vos appels → Mia (recommandé)', code: `**21*${profile.twilio_number}#`, badge: true },
+                  { label: 'Si occupé',    desc: 'Quand vous êtes déjà en ligne',       code: `**67*${profile.twilio_number}#`, badge: false },
+                  { label: 'Si pas de réponse', desc: 'Quand vous ne décrochez pas',    code: `**61*${profile.twilio_number}#`, badge: false },
+                ].map(opt => (
+                  <div key={opt.code} className="border border-gray-200 rounded-xl p-3.5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <p className="text-xs font-semibold text-gray-800">{opt.label}</p>
+                      {opt.badge && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: accent }}>Recommandé</span>
+                      )}
+                      <p className="text-xs text-gray-400 ml-auto">{opt.desc}</p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                      <code className="text-sm font-mono text-gray-700 flex-1">{opt.code}</code>
+                      <button onClick={() => copyCode(opt.code)}
+                        className="text-xs font-medium px-2.5 py-1 rounded-md transition-all flex-shrink-0"
+                        style={{ background: copiedCode === opt.code ? '#10b981' : accent + '15', color: copiedCode === opt.code ? 'white' : accent }}>
+                        {copiedCode === opt.code ? '✓ Copié' : 'Copier'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 p-3 bg-gray-50 rounded-xl text-xs text-gray-500">
+                <span className="font-semibold">Comment faire :</span> composez le code depuis votre téléphone et appuyez sur Appel. Actif immédiatement.
+                <span className="block mt-1 text-gray-400">Pour annuler tous les renvois : <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-200">##002#</code></span>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4 text-sm text-gray-400">Numéro Mia en cours d'attribution…</div>
+          )}
         </Card>
 
         <div className="flex justify-between items-center">
