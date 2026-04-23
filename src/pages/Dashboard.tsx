@@ -448,128 +448,181 @@ function CallsPage({ accent }: { accent: string }) {
   const todayCalls = calls.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString())
   const urgentCount = calls.filter(c => c.status === 'urgent').length
 
-  return (
-    <div>
-      <PageHeader title="Appels" sub="Gérez et consultez vos appels reçus" />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <StatCard label="Appels aujourd'hui" value={String(todayCalls.length)} trend="via votre assistante" trendUp={todayCalls.length > 0} />
-        <StatCard label="Appels urgents" value={String(urgentCount)} trend={urgentCount > 0 ? 'à traiter' : 'aucun en attente'} trendUp={false} />
-        <StatCard label="Total appels" value={String(calls.length)} trend="depuis le début" />
-        <StatCard label="Assistante" value={profile?.assistant_name || 'Mia'} trend="active 24/7" trendUp accent={accent} />
-      </div>
+  const fmtRelative = (iso: string) => {
+    const d = new Date(iso)
+    const diff = Date.now() - d.getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 1) return 'À l\'instant'
+    if (m < 60) return `${m} min`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h`
+    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  }
 
-      <Card>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div><p className="text-sm font-semibold">Appels récents</p><p className="text-xs text-gray-400 mt-0.5">Appuyez sur une ligne pour voir les détails</p></div>
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5 flex-shrink-0">
-            {['all','new','pending','urgent','done','spam'].map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors whitespace-nowrap flex-shrink-0 ${filter === f ? 'text-white font-medium' : 'border border-gray-200 hover:bg-gray-50'}`}
-                style={filter === f ? { background: f === 'spam' ? '#6B7280' : accent } : {}}>
-                {f === 'all' ? 'Tous' : STATUS_LABELS[f]}
-              </button>
-            ))}
+  const FILTER_CONFIG = [
+    { key: 'all',     label: 'Tous',    dot: null },
+    { key: 'new',     label: 'Nouveau', dot: STATUS_COLORS.new.text },
+    { key: 'pending', label: 'En attente', dot: STATUS_COLORS.pending.text },
+    { key: 'urgent',  label: 'Urgent',  dot: STATUS_COLORS.urgent.text },
+    { key: 'done',    label: 'Traité',  dot: STATUS_COLORS.done.text },
+    { key: 'spam',    label: 'Spam',    dot: '#9CA3AF' },
+  ]
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* ── Header compact ── */}
+      <div className="px-4 pt-5 pb-3 md:px-6 md:pt-6">
+        <div className="flex items-end justify-between mb-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Tableau de bord</p>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">Appels</h1>
           </div>
+          {urgentCount > 0 && (
+            <div className="flex items-center gap-1.5 bg-red-50 border border-red-100 rounded-xl px-3 py-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-semibold text-red-600">{urgentCount} urgent{urgentCount > 1 ? 's' : ''}</span>
+            </div>
+          )}
         </div>
 
+        {/* Slim stats row */}
+        <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+          {[
+            { label: "Aujourd'hui", value: todayCalls.length, sub: 'appels' },
+            { label: 'Total',       value: calls.length,      sub: 'reçus' },
+            { label: 'Urgents',     value: urgentCount,        sub: 'à rappeler', red: urgentCount > 0 },
+            { label: 'Assistante',  value: profile?.assistant_name || 'Mia', sub: 'active 24/7', brand: true },
+          ].map(s => (
+            <div key={s.label} className="flex-shrink-0 flex flex-col bg-white border border-gray-100 rounded-2xl px-4 py-3 min-w-[100px] shadow-sm">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</span>
+              <span className={`text-lg font-bold leading-none ${s.red ? 'text-red-500' : s.brand ? '' : 'text-gray-900'}`}
+                style={s.brand ? { color: accent } : {}}>
+                {s.value}
+              </span>
+              <span className="text-[10px] text-gray-400 mt-0.5">{s.sub}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Filter pills ── */}
+      <div className="flex gap-2 overflow-x-auto px-4 md:px-6 pb-3 pt-1 scrollbar-none">
+        {FILTER_CONFIG.map(f => {
+          const active = filter === f.key
+          return (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+              className={`flex items-center gap-1.5 text-[12px] font-semibold px-3.5 py-1.5 rounded-full transition-all whitespace-nowrap flex-shrink-0 ${active ? 'shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              style={active ? { background: accent, color: '#fff' } : {}}>
+              {f.dot && !active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: f.dot }} />}
+              {f.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── List ── */}
+      <div className="flex-1 px-4 md:px-6 pb-6">
         {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center py-16">
+            <div className="w-5 h-5 border-2 border-gray-200 border-t-transparent rounded-full animate-spin" style={{ borderTopColor: accent }} />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-sm text-gray-400">Aucun appel pour l'instant</p>
-            <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici dès que votre assistante aura traité un appel</p>
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-400">Aucun appel</p>
+            <p className="text-xs text-gray-300 mt-1">Ils apparaîtront ici dès que Mia aura traité un appel</p>
           </div>
         ) : (
           <>
-            {/* Vue mobile : cartes */}
-            <div className="md:hidden flex flex-col divide-y divide-gray-50">
+            {/* Mobile */}
+            <div className="md:hidden flex flex-col gap-2">
               {filtered.map(c => {
                 const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
+                const initials = (c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)
+                const isSpam = c.status === 'spam'
                 return (
                   <div key={c.id} onClick={() => setSelectedCall(c)}
-                    className="flex items-center gap-3 py-3 cursor-pointer active:bg-gray-50">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
-                      style={{ background: accent + '15', color: accent }}>
-                      {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                    className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 px-4 py-3.5 cursor-pointer active:scale-[0.99] transition-all shadow-sm"
+                    style={{ borderLeftWidth: 3, borderLeftColor: sc.text }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0"
+                      style={{ background: isSpam ? '#F3F4F6' : (sc.bg), color: isSpam ? '#9CA3AF' : sc.text }}>
+                      {initials}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-[13px] truncate">{c.caller_name || 'Inconnu'}</p>
-                      <p className="text-[11px] text-gray-400 truncate">{c.status === 'spam' ? 'Prospection commerciale' : (c.reason || c.caller_phone || 'Demande générale')}</p>
+                      <p className={`font-semibold text-[13px] truncate ${isSpam ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                        {c.caller_name || 'Inconnu'}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                        {isSpam ? 'Prospection commerciale' : (c.reason || c.caller_phone || 'Demande générale')}
+                      </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.text }}>
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.text }}>
                         {STATUS_LABELS[c.status] || c.status}
                       </span>
-                      <span className="text-[10px] text-gray-400">
-                        {new Date(c.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-                      </span>
+                      <span className="text-[10px] text-gray-400">{fmtRelative(c.created_at)}</span>
                     </div>
                   </div>
                 )
               })}
             </div>
 
-            {/* Vue desktop : tableau */}
-            <table className="hidden md:table w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Contact</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Motif</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2 pr-4">Date / Heure</th>
-                  <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider pb-2">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(c => {
-                  const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
-                  const fmtDate = (iso: string) => {
-                    const d = new Date(iso)
-                    const diff = Date.now() - d.getTime()
-                    const m = Math.floor(diff / 60000)
-                    if (m < 60) return `${m} min`
-                    const h = Math.floor(m / 60)
-                    if (h < 24) return `${h}h`
-                    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-                  }
-                  return (
-                    <tr key={c.id}
-                      onClick={() => setSelectedCall(c)}
-                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors">
-                      <td className="py-3 pr-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0"
-                            style={{ background: accent + '15', color: accent }}>
-                            {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+            {/* Desktop */}
+            <div className="hidden md:block bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-50 bg-gray-50/60">
+                    <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-5 py-3 pr-4">Contact</th>
+                    <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider py-3 pr-4">Motif</th>
+                    <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider py-3 pr-4">Reçu</th>
+                    <th className="text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider py-3">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(c => {
+                    const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
+                    const isSpam = c.status === 'spam'
+                    return (
+                      <tr key={c.id} onClick={() => setSelectedCall(c)}
+                        className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 cursor-pointer transition-colors"
+                        style={{ borderLeftWidth: 3, borderLeftColor: sc.text }}>
+                        <td className="py-3 px-5 pr-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                              style={{ background: isSpam ? '#F3F4F6' : sc.bg, color: isSpam ? '#9CA3AF' : sc.text }}>
+                              {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                            </div>
+                            <div>
+                              <p className={`font-semibold text-[13px] ${isSpam ? 'text-gray-400 line-through' : ''}`}>{c.caller_name || 'Inconnu'}</p>
+                              {c.caller_phone && <p className="text-[11px] text-gray-400">{c.caller_phone}</p>}
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-[13px]">{c.caller_name || 'Inconnu'}</p>
-                            {c.caller_phone && <p className="text-[11px] text-gray-400">{c.caller_phone}</p>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 pr-4 text-[13px] text-gray-500 max-w-[180px] truncate">
-                        {c.status === 'spam' ? <span className="italic text-gray-400">Prospection commerciale</span> : (c.reason || 'Demande générale')}
-                      </td>
-                      <td className="py-3 pr-4 text-[13px] text-gray-500 whitespace-nowrap">
-                        {new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                        <br />
-                        <span className="text-[11px] text-gray-400">{fmtDate(c.created_at)}</span>
-                      </td>
-                      <td className="py-3">
-                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ background: sc.bg, color: sc.text }}>
-                          {STATUS_LABELS[c.status] || c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="py-3 pr-4 text-[13px] text-gray-500 max-w-[200px] truncate">
+                          {isSpam ? <span className="italic text-gray-400">Prospection commerciale</span> : (c.reason || 'Demande générale')}
+                        </td>
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <p className="text-[13px] text-gray-700 font-medium">{fmtRelative(c.created_at)}</p>
+                          <p className="text-[11px] text-gray-400">{new Date(c.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </td>
+                        <td className="py-3">
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ background: sc.bg, color: sc.text }}>
+                            {STATUS_LABELS[c.status] || c.status}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
-      </Card>
+      </div>
 
       {selectedCall && (
         <CallDetailPanel
