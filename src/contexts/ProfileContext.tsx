@@ -21,6 +21,7 @@ export interface Profile {
   greeting_closed: string
   twilio_number: string | null
   onboarding_calendar: string | null
+  stripe_customer_id: string | null
 }
 
 interface ProfileContextType {
@@ -47,6 +48,7 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   greeting_closed: "Bonjour, vous appelez en dehors de nos heures d'ouverture. Je note votre demande et nous vous rappelons rapidement.",
   twilio_number: null,
   onboarding_calendar: null,
+  stripe_customer_id: null,
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null)

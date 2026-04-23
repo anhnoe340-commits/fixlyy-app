@@ -2206,48 +2206,145 @@ function TimezonePage({ accent }: { accent: string }) {
 
 // ── Subscription Page ─────────────────────────────────────────────────────────
 function SubscriptionPage({ accent }: { accent: string }) {
-  const [selected, setSelected] = useState(1)
+  const { user } = useAuth()
+  const { profile } = useProfile()
+  const [callCount, setCallCount] = useState<number | null>(null)
+  const [monthCallCount, setMonthCallCount] = useState<number | null>(null)
+  const [selected, setSelected] = useState<number | null>(null)
+
+  // Calcul de l'essai
+  const TRIAL_DAYS = 7
+  const trialStart = user?.created_at ? new Date(user.created_at) : new Date()
+  const trialEnd = new Date(trialStart); trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS)
+  const now = new Date()
+  const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+  const isTrialActive = now < trialEnd
+  const trialPct = Math.min(100, Math.round(((now.getTime() - trialStart.getTime()) / (trialEnd.getTime() - trialStart.getTime())) * 100))
+  const hasPaid = !!profile?.stripe_customer_id
+
+  useEffect(() => {
+    if (!user) return
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    Promise.all([
+      supabase.from('calls').select('id', { count: 'exact', head: true }).eq('artisan_id', user.id),
+      supabase.from('calls').select('id', { count: 'exact', head: true }).eq('artisan_id', user.id).gte('created_at', startOfMonth),
+    ]).then(([{ count: total }, { count: month }]) => {
+      setCallCount(total ?? 0)
+      setMonthCallCount(month ?? 0)
+    })
+  }, [user])
+
   const plans = [
-    { name: 'Solo', price: 79, desc: '150 appels · 1 artisan', features: ['Secrétaire IA 24/7', 'SMS résumé 30 sec', 'Prise de RDV', 'Support email'] },
-    { name: 'Pro', price: 149, desc: 'Appels illimités · 1 artisan', features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
-    { name: 'Équipe', price: 249, desc: 'Appels illimités · 5 artisans', features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
+    { id: 0, name: 'Solo',   price: 79,  desc: '150 appels inclus · 1 artisan',   features: ['Secrétaire IA 24/7', 'Email résumé après appel', 'Prise de RDV', 'Support email'] },
+    { id: 1, name: 'Pro',    price: 149, desc: 'Appels illimités · 1 artisan',     features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
+    { id: 2, name: 'Équipe', price: 249, desc: 'Appels illimités · 5 artisans',    features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
   ]
+
+  const currentPlanName = hasPaid ? 'Pro' : 'Essai gratuit'
+
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader section="Plateforme" title="Abonnement" />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {plans.map((p, i) => (
-          <div key={i} onClick={() => setSelected(i)}
-            className="bg-white rounded-2xl p-5 cursor-pointer transition-all shadow-sm"
-            style={{ border: selected === i ? `2px solid ${accent}` : '1px solid #F3F4F6', boxShadow: selected === i ? `0 0 0 4px ${accent}15` : '0 1px 3px 0 rgb(0 0 0 / 0.05)' }}>
-            {p.popular && (
-              <div className="text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block mb-3 uppercase tracking-wide" style={{ background: accent + '15', color: accent }}>
-                Populaire
-              </div>
-            )}
-            <p className="font-bold text-gray-900 text-sm mb-1">{p.name}</p>
-            <p className="text-3xl font-bold tracking-tight mb-0.5" style={{ color: accent }}>{p.price}<span className="text-sm font-normal text-gray-400"> €/mois</span></p>
-            <p className="text-xs text-gray-400 mb-4">{p.desc}</p>
-            <div className="flex flex-col gap-2">
-              {p.features.map((f, j) => (
-                <div key={j} className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: accent + '15', color: accent }}>✓</span>
-                  {f}
-                </div>
-              ))}
+      {/* ── Bannière essai ── */}
+      {isTrialActive && !hasPaid && (
+        <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4"
+          style={{ background: daysLeft <= 2 ? '#FEF2F2' : '#FFFBEB', border: `1px solid ${daysLeft <= 2 ? '#FECACA' : '#FDE68A'}` }}>
+          <div className="flex items-center gap-3">
+            <span className="text-xl">{daysLeft <= 2 ? '⚠️' : '🎁'}</span>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: daysLeft <= 2 ? '#B91C1C' : '#92400E' }}>
+                {daysLeft === 0 ? "Votre essai se termine aujourd'hui" : `Essai gratuit — ${daysLeft} jour${daysLeft > 1 ? 's' : ''} restant${daysLeft > 1 ? 's' : ''}`}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: daysLeft <= 2 ? '#DC2626' : '#B45309' }}>
+                Se termine le {trialEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
             </div>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="hidden sm:block w-24">
+              <div className="h-1.5 bg-white/60 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${trialPct}%`, background: daysLeft <= 2 ? '#EF4444' : '#F59E0B' }} />
+              </div>
+              <p className="text-[10px] text-right mt-0.5" style={{ color: daysLeft <= 2 ? '#DC2626' : '#B45309' }}>{trialPct}% écoulé</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── KPI row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Appels ce mois', value: monthCallCount === null ? '…' : String(monthCallCount), sub: 'depuis le 1er', icon: '📞' },
+          { label: 'Appels au total', value: callCount === null ? '…' : String(callCount), sub: 'depuis le début', icon: '📊' },
+          { label: 'Forfait actuel', value: currentPlanName, sub: hasPaid ? 'actif' : `${daysLeft}j restants`, icon: '👑', highlight: true },
+          { label: 'Statut', value: hasPaid ? 'Actif' : 'Essai', sub: hasPaid ? 'abonnement en cours' : 'sans carte bancaire', icon: hasPaid ? '✅' : '🔓' },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{s.label}</p>
+              <span className="text-base">{s.icon}</span>
+            </div>
+            <p className="text-xl font-bold leading-none" style={s.highlight ? { color: accent } : { color: '#111827' }}>{s.value}</p>
+            <p className="text-[10px] text-gray-400 mt-1">{s.sub}</p>
           </div>
         ))}
       </div>
 
+      {/* ── Séparateur ── */}
+      <div className="text-center pt-2">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Tarifs</p>
+        <p className="text-base font-bold text-gray-900">Choisissez votre formule</p>
+        <p className="text-xs text-gray-400 mt-0.5">Sans engagement · annulation à tout moment</p>
+      </div>
+
+      {/* ── Plans ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {plans.map((p) => {
+          const isActive = selected === p.id
+          return (
+            <div key={p.id} onClick={() => setSelected(p.id)}
+              className="bg-white rounded-2xl p-5 cursor-pointer transition-all relative overflow-hidden"
+              style={{
+                border: isActive ? `2px solid ${accent}` : '1px solid #F3F4F6',
+                boxShadow: isActive ? `0 0 0 4px ${accent}12` : '0 1px 3px 0 rgb(0 0 0/0.05)',
+              }}>
+              {p.popular && (
+                <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
+                  Recommandé
+                </div>
+              )}
+              <div className={p.popular ? 'pt-5' : ''}>
+                <p className="font-bold text-gray-900 mb-1">{p.name}</p>
+                <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
+                  {p.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
+                </p>
+                <p className="text-xs text-gray-400 mb-4">{p.desc}</p>
+                <div className="flex flex-col gap-2">
+                  {p.features.map((f, j) => (
+                    <div key={j} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: accent + '15', color: accent }}>✓</span>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── CTA ── */}
       <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
         <div>
           <p className="text-sm font-semibold" style={{ color: accent }}>Garantie satisfait ou remboursé 30 jours</p>
           <p className="text-xs text-gray-500 mt-0.5">Annulez à tout moment · support@fixlyy.fr</p>
         </div>
-        <button className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0" style={{ background: accent }}>
-          Activer mon plan
+        <button
+          disabled={selected === null}
+          className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-40"
+          style={{ background: accent }}>
+          {selected === null ? 'Choisir un plan' : `Activer ${plans[selected].name}`}
         </button>
       </div>
     </div>
