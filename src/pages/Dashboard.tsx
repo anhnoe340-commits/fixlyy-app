@@ -2211,6 +2211,8 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [callCount, setCallCount] = useState<number | null>(null)
   const [monthCallCount, setMonthCallCount] = useState<number | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
   // Calcul de l'essai
   const TRIAL_DAYS = 7
@@ -2235,10 +2237,38 @@ function SubscriptionPage({ accent }: { accent: string }) {
   }, [user])
 
   const plans = [
-    { id: 0, name: 'Solo',   price: 79,  desc: '150 appels inclus · 1 artisan',   features: ['Secrétaire IA 24/7', 'Email résumé après appel', 'Prise de RDV', 'Support email'] },
-    { id: 1, name: 'Pro',    price: 149, desc: 'Appels illimités · 1 artisan',     features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
-    { id: 2, name: 'Équipe', price: 249, desc: 'Appels illimités · 5 artisans',    features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
+    { id: 0, name: 'Solo',   price: 79,  priceId: 'price_1TJv9uB5dBerNSsDbvCQFO2P', desc: '150 appels inclus · 1 artisan',   features: ['Secrétaire IA 24/7', 'Email résumé après appel', 'Prise de RDV', 'Support email'] },
+    { id: 1, name: 'Pro',    price: 149, priceId: 'price_1TJv9uB5dBerNSsDpOIyE2UP', desc: 'Appels illimités · 1 artisan',     features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
+    { id: 2, name: 'Équipe', price: 249, priceId: 'price_1TJv9vB5dBerNSsDlnsXltWh', desc: 'Appels illimités · 5 artisans',    features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
   ]
+
+  async function handleCheckout() {
+    if (selected === null) return
+    setCheckoutError('')
+    setCheckoutLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Non authentifié')
+      const plan = plans[selected]
+      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          priceId: plan.priceId,
+          trade: profile?.company_type ?? '',
+          company: profile?.company_name ?? '',
+          email: user?.email ?? '',
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok || result.error) throw new Error(result.error || result.message || `Erreur ${res.status}`)
+      if (!result.url) throw new Error('URL de paiement manquante')
+      window.location.href = result.url
+    } catch (e: any) {
+      setCheckoutError(e.message)
+      setCheckoutLoading(false)
+    }
+  }
 
   const currentPlanName = hasPaid ? 'Pro' : 'Essai gratuit'
 
@@ -2335,18 +2365,53 @@ function SubscriptionPage({ accent }: { accent: string }) {
       </div>
 
       {/* ── CTA ── */}
-      <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
-        <div>
-          <p className="text-sm font-semibold" style={{ color: accent }}>Garantie satisfait ou remboursé 30 jours</p>
-          <p className="text-xs text-gray-500 mt-0.5">Annulez à tout moment · support@fixlyy.fr</p>
+      {checkoutError && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{checkoutError}</p>
+      )}
+
+      {hasPaid && isTrialActive ? (
+        /* Déjà souscrit, essai en cours */
+        <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+          <div className="flex items-center gap-3">
+            <span className="text-xl">✅</span>
+            <div>
+              <p className="text-sm font-semibold text-emerald-800">Abonnement Pro activé</p>
+              <p className="text-xs text-emerald-700 mt-0.5">
+                Votre essai gratuit se termine le {trialEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.
+                Votre abonnement démarrera automatiquement à cette date.
+              </p>
+            </div>
+          </div>
         </div>
-        <button
-          disabled={selected === null}
-          className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-40"
-          style={{ background: accent }}>
-          {selected === null ? 'Choisir un plan' : `Activer ${plans[selected].name}`}
-        </button>
-      </div>
+      ) : hasPaid && !isTrialActive ? (
+        /* Abonné actif — portail Stripe */
+        <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: accent }}>Abonnement actif</p>
+            <p className="text-xs text-gray-500 mt-0.5">Gérez vos factures et votre abonnement · support@fixlyy.fr</p>
+          </div>
+          <a href="https://billing.stripe.com/p/login/test_28o5lx0WJeRgflK144"
+            className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 no-underline"
+            style={{ background: accent }}>
+            Gérer mon abonnement
+          </a>
+        </div>
+      ) : (
+        /* Pas encore souscrit → Stripe checkout */
+        <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: accent }}>Garantie satisfait ou remboursé 30 jours</p>
+            <p className="text-xs text-gray-500 mt-0.5">Annulez à tout moment · support@fixlyy.fr</p>
+          </div>
+          <button
+            onClick={handleCheckout}
+            disabled={selected === null || checkoutLoading}
+            className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-40"
+            style={{ background: accent }}>
+            {checkoutLoading ? 'Redirection…' : selected === null ? 'Choisir un plan' : `Activer ${plans[selected].name}`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
