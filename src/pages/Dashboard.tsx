@@ -1544,128 +1544,92 @@ function BusinessDetailsPage({ accent, uploadLogo: _uploadLogo }: { accent: stri
     { label: 'Traité', color: 'bg-emerald-100 text-emerald-700' },
   ]
 
+  const inputCls = 'w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60'
+
   return (
-    <div>
-      <PageHeader title="Détails de l'entreprise" sub="Informations utilisées par votre assistante pour se présenter" />
-      <div className="flex flex-col gap-4">
-        {/* Infos principales */}
-        <Card>
-          <p className="text-sm font-semibold mb-4">Informations générales</p>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Nom de l'entreprise">
-              <input value={profile.company_name || ''} onChange={e => updateProfile({ company_name: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Type d'activité">
-              <select value={profile.company_type || ''} onChange={e => updateProfile({ company_type: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
-                <option value="">Sélectionner...</option>
-                {['Plomberie / Chauffage / Climatisation', 'Électricité / Solaire', 'Services à domicile', 'Menuiserie / Charpenterie', 'Peinture / Décoration', 'Serrurerie', 'Jardinage / Paysagisme', 'Autre'].map(t => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Adresse">
-              <input value={profile.address || ''} onChange={e => updateProfile({ address: e.target.value })}
-                placeholder="12 rue de la Paix, 75001 Paris"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Téléphone">
-              <input value={profile.phone || ''} onChange={e => updateProfile({ phone: e.target.value })}
-                placeholder="+33 6 00 00 00 00"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Email">
-              <input value={profile.email || ''} onChange={e => updateProfile({ email: e.target.value })}
-                placeholder="contact@entreprise.fr"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Site web">
-              <input defaultValue="" placeholder="https://www.monentreprise.fr"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            </Field>
-          </div>
-          <div className="mt-4">
-            <Field label="Description de l'entreprise">
-              <textarea
-                defaultValue=""
-                placeholder="Décrivez votre activité, vos spécialités et votre zone d'intervention..."
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 resize-none"
-              />
-            </Field>
-          </div>
-        </Card>
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Plateforme" title="Détails entreprise" />
 
-        {/* Compétences */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Compétences</p>
-          <p className="text-xs text-gray-400 mb-4">Vos domaines d'expertise communiqués aux clients lors des appels</p>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {skills.map((s, i) => (
-              <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: accent + '15', color: accent }}>
-                {s}
-                <button onClick={() => setSkills(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-70 ml-0.5">×</button>
-              </div>
-            ))}
-            <div className="flex items-center gap-1.5">
-              <input value={newSkill} onChange={e => setNewSkill(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addSkill()}
-                placeholder="Ajouter une compétence..."
-                className="text-xs border border-dashed border-gray-300 rounded-full px-3 py-1.5 outline-none focus:border-gray-400 w-44" />
-              <button onClick={addSkill} className="text-xs px-2.5 py-1.5 rounded-full text-white" style={{ background: accent }}>+</button>
-            </div>
-          </div>
-        </Card>
-
-        {/* Statuts des appels */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Statuts des appels</p>
-          <p className="text-xs text-gray-400 mb-4">Étiquettes utilisées pour classer vos appels</p>
-          <div className="flex gap-2 flex-wrap">
-            {callStatuses.map((s, i) => (
-              <span key={i} className={`text-xs font-semibold px-3 py-1.5 rounded-full ${s.color}`}>{s.label}</span>
-            ))}
-            <span className="text-xs px-3 py-1.5 rounded-full border border-dashed border-gray-300 text-gray-400 cursor-pointer hover:border-gray-400">
-              + Ajouter un statut
-            </span>
-          </div>
-        </Card>
-
-        {/* Codes postaux / Zone d'intervention */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Zone d'intervention</p>
-          <p className="text-xs text-gray-400 mb-4">Codes postaux couverts avec rayon d'intervention</p>
-          <div className="flex flex-col gap-2 mb-3">
-            {postalCodes.map((pc, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg">
-                <span className="text-sm font-medium flex-1">{pc.code}</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-gray-400">Rayon :</span>
-                  <select value={pc.radius} onChange={e => setPostalCodes(prev => prev.map((p, idx) => idx === i ? { ...p, radius: +e.target.value } : p))}
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1 outline-none">
-                    {[5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>{r} km</option>)}
-                  </select>
-                </div>
-                <button onClick={() => setPostalCodes(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 text-sm">×</button>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input value={newPostal} onChange={e => setNewPostal(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addPostal()}
-              placeholder="Ex : 75001"
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            <button onClick={addPostal} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
-              + Ajouter
-            </button>
-          </div>
-        </Card>
-
-        <div className="flex justify-end">
-          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
-          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-            Enregistrer les modifications
-          </button>
+      <Card>
+        <p className="text-sm font-semibold mb-4">Informations générales</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Nom de l'entreprise">
+            <input value={profile.company_name || ''} onChange={e => updateProfile({ company_name: e.target.value })} className={inputCls} />
+          </Field>
+          <Field label="Type d'activité">
+            <select value={profile.company_type || ''} onChange={e => updateProfile({ company_type: e.target.value })} className={inputCls}>
+              <option value="">Sélectionner…</option>
+              {['Plomberie / Chauffage / Climatisation', 'Électricité / Solaire', 'Services à domicile', 'Menuiserie / Charpenterie', 'Peinture / Décoration', 'Serrurerie', 'Jardinage / Paysagisme', 'Autre'].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </Field>
+          <Field label="Adresse">
+            <input value={profile.address || ''} onChange={e => updateProfile({ address: e.target.value })} placeholder="12 rue de la Paix, 75001 Paris" className={inputCls} />
+          </Field>
+          <Field label="Téléphone">
+            <input value={profile.phone || ''} onChange={e => updateProfile({ phone: e.target.value })} placeholder="+33 6 00 00 00 00" className={inputCls} />
+          </Field>
+          <Field label="Email">
+            <input value={profile.email || ''} onChange={e => updateProfile({ email: e.target.value })} placeholder="contact@entreprise.fr" className={inputCls} />
+          </Field>
+          <Field label="Site web">
+            <input defaultValue="" placeholder="https://www.monentreprise.fr" className={inputCls} />
+          </Field>
         </div>
+        <div className="mt-4">
+          <Field label="Description de l'entreprise">
+            <textarea defaultValue="" placeholder="Décrivez votre activité, vos spécialités et votre zone d'intervention…" rows={3}
+              className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 resize-none bg-gray-50/60" />
+          </Field>
+        </div>
+      </Card>
+
+      <Card>
+        <p className="text-sm font-semibold mb-1">Compétences</p>
+        <p className="text-xs text-gray-400 mb-3">Vos domaines d'expertise communiqués aux clients lors des appels</p>
+        <div className="flex flex-wrap gap-2">
+          {skills.map((s, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: accent + '15', color: accent }}>
+              {s}
+              <button onClick={() => setSkills(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-60 leading-none">×</button>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <input value={newSkill} onChange={e => setNewSkill(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkill()}
+              placeholder="Ajouter…"
+              className="text-xs border border-dashed border-gray-200 rounded-full px-3 py-1.5 outline-none focus:border-gray-400 w-36 bg-transparent" />
+            <button onClick={addSkill} className="text-xs px-2.5 py-1.5 rounded-full text-white font-bold" style={{ background: accent }}>+</button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <p className="text-sm font-semibold mb-1">Zone d'intervention</p>
+        <p className="text-xs text-gray-400 mb-3">Codes postaux couverts avec rayon d'intervention</p>
+        <div className="flex flex-col gap-2 mb-3">
+          {postalCodes.map((pc, i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-gray-50/60 border border-gray-100 rounded-xl">
+              <span className="text-sm font-semibold flex-1">{pc.code}</span>
+              <select value={pc.radius} onChange={e => setPostalCodes(prev => prev.map((p, idx) => idx === i ? { ...p, radius: +e.target.value } : p))}
+                className="text-xs border border-gray-100 rounded-lg px-2 py-1 outline-none bg-white">
+                {[5, 10, 15, 20, 30, 50].map(r => <option key={r} value={r}>{r} km</option>)}
+              </select>
+              <button onClick={() => setPostalCodes(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 text-lg leading-none">×</button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input value={newPostal} onChange={e => setNewPostal(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPostal()}
+            placeholder="Ex : 75001"
+            className="flex-1 border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+          <button onClick={addPostal} className="text-sm px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>+ Ajouter</button>
+        </div>
+      </Card>
+
+      <div className="flex justify-end items-center gap-3">
+        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+        <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
+          Enregistrer
+        </button>
       </div>
     </div>
   )
@@ -1703,33 +1667,27 @@ function HoursPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Horaires d'ouverture" sub="Configurez les heures de disponibilité de votre assistante" />
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Plateforme" title="Horaires" />
+
       <Card>
-        <div className="flex items-center justify-between mb-5">
-          <p className="text-sm font-semibold">Plages horaires</p>
-          <div className="flex items-center gap-3">
-            {saved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
-            <button onClick={handleSave} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>Enregistrer</button>
-          </div>
-        </div>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {days.map((d, i) => (
-            <div key={d.day} className="flex items-center gap-4">
-              <span className="text-sm font-medium w-28">{d.day}</span>
+            <div key={d.day} className="flex items-center gap-3 py-1">
+              <span className="text-sm font-semibold text-gray-700 w-24 flex-shrink-0">{d.day}</span>
               {d.on ? (
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex items-center gap-2 flex-1">
                   <input type="time" value={d.open} onChange={e => updateDay(i, 'open', e.target.value)}
-                    className="border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-400" />
-                  <span className="text-gray-300">–</span>
+                    className="border border-gray-100 rounded-xl px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-300 bg-gray-50/60" />
+                  <span className="text-gray-300 text-xs">—</span>
                   <input type="time" value={d.close} onChange={e => updateDay(i, 'close', e.target.value)}
-                    className="border border-gray-200 rounded-md px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-400" />
+                    className="border border-gray-100 rounded-xl px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-300 bg-gray-50/60" />
                 </div>
               ) : (
-                <span className="text-sm text-gray-300 italic">Fermé</span>
+                <span className="text-sm font-medium text-gray-300 flex-1">Fermé</span>
               )}
               <button onClick={() => updateDay(i, 'on', !d.on)}
-                className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ml-auto"
+                className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
                 style={{ background: d.on ? accent : '#D1D5DB' }}>
                 <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
               </button>
@@ -1737,6 +1695,13 @@ function HoursPage({ accent }: { accent: string }) {
           ))}
         </div>
       </Card>
+
+      <div className="flex justify-end items-center gap-3">
+        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+        <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
+          Enregistrer
+        </button>
+      </div>
     </div>
   )
 }
@@ -1790,69 +1755,68 @@ function AssistantPage({ accent }: { accent: string }) {
 
   const availableLangs = ['Anglais', 'Espagnol', 'Allemand', 'Italien', 'Portugais', 'Arabe']
 
+  const inputCls2 = 'w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60'
+
   return (
-    <div>
-      <PageHeader title="Paramètres de l'assistant" sub="Configurez l'identité et la voix de votre assistante IA" />
-      <div className="flex flex-col gap-4">
-        <Card>
-          <p className="text-sm font-semibold mb-4">Identité</p>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Prénom de l'assistante">
-              <input value={profile.assistant_name || ''} onChange={e => updateProfile({ assistant_name: e.target.value })}
-                placeholder="Mia"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            </Field>
-            <Field label="Type de voix">
-              <select value={profile.assistant_voice || ''} onChange={e => updateProfile({ assistant_voice: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
-                {['Féminin conviviale', 'Féminin professionnelle', 'Féminin énergique', 'Masculin convivial', 'Masculin professionnel'].map(v => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </Card>
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Plateforme" title="Mon assistante" />
 
-        <Card>
-          <p className="text-sm font-semibold mb-4">Langue</p>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <Field label="Langue principale">
-              <select defaultValue="Français" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none">
-                <option>Français</option>
-                <option>Anglais</option>
-                <option>Espagnol</option>
-              </select>
-            </Field>
-          </div>
-          <Field label="Langues supplémentaires">
-            <div className="flex flex-wrap gap-2 mt-1">
-              {extraLangs.map((lang, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full" style={{ background: accent + '15', color: accent }}>
-                  {lang}
-                  <button onClick={() => setExtraLangs(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-70">×</button>
-                </div>
-              ))}
-              {availableLangs.filter(l => !extraLangs.includes(l)).map(lang => (
-                <button key={lang} onClick={() => setExtraLangs(prev => [...prev, lang])}
-                  className="text-xs px-3 py-1.5 rounded-full border border-dashed border-gray-300 text-gray-400 hover:border-gray-400">
-                  + {lang}
-                </button>
-              ))}
-            </div>
+      <Card>
+        <p className="text-sm font-semibold mb-4">Identité</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Prénom de l'assistante">
+            <input value={profile.assistant_name || ''} onChange={e => updateProfile({ assistant_name: e.target.value })}
+              placeholder="Mia" className={inputCls2} />
           </Field>
-        </Card>
+          <Field label="Type de voix">
+            <select value={profile.assistant_voice || ''} onChange={e => updateProfile({ assistant_voice: e.target.value })} className={inputCls2}>
+              {['Féminin conviviale', 'Féminin professionnelle', 'Féminin énergique', 'Masculin convivial', 'Masculin professionnel'].map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </Card>
 
-        <Card>
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <p className="text-sm font-semibold">Prévisualisation de la voix</p>
-              <p className="text-xs text-gray-400 mt-0.5">Écoutez un exemple avec les paramètres actuels</p>
-            </div>
-            <button className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-2">
-              <span>▶</span> Écouter
-            </button>
+      <Card>
+        <p className="text-sm font-semibold mb-4">Langue</p>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <Field label="Langue principale">
+            <select defaultValue="Français" className={inputCls2}>
+              <option>Français</option><option>Anglais</option><option>Espagnol</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Langues supplémentaires">
+          <div className="flex flex-wrap gap-2 mt-1">
+            {extraLangs.map((lang, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: accent + '15', color: accent }}>
+                {lang}
+                <button onClick={() => setExtraLangs(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-60 leading-none">×</button>
+              </div>
+            ))}
+            {availableLangs.filter(l => !extraLangs.includes(l)).map(lang => (
+              <button key={lang} onClick={() => setExtraLangs(prev => [...prev, lang])}
+                className="text-xs px-3 py-1.5 rounded-full border border-dashed border-gray-200 text-gray-400 hover:border-gray-400 transition-colors">
+                + {lang}
+              </button>
+            ))}
           </div>
-        </Card>
+        </Field>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">Prévisualisation de la voix</p>
+            <p className="text-xs text-gray-400 mt-0.5">Écoutez un exemple avec les paramètres actuels</p>
+          </div>
+          <button className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-2 font-medium">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><polygon points="3,1 11,6 3,11"/></svg>
+            Écouter
+          </button>
+        </div>
+      </Card>
 
         {/* Renvoi d'appel */}
         <Card>
@@ -1905,20 +1869,19 @@ function AssistantPage({ accent }: { accent: string }) {
           )}
         </Card>
 
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            {updateMsg && <span className={`text-xs font-medium ${updateMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>{updateMsg}</span>}
-            <button onClick={handleUpdateAssistant} disabled={updating}
-              className="text-xs px-4 py-2.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50">
-              {updating ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Mise à jour…</> : '↑ Mettre à jour Mia'}
-            </button>
-          </div>
-          <div className="flex items-center gap-3">
-            {saved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
-            <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-              Enregistrer les modifications
-            </button>
-          </div>
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          {updateMsg && <span className={`text-xs font-semibold ${updateMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>{updateMsg}</span>}
+          <button onClick={handleUpdateAssistant} disabled={updating}
+            className="text-xs px-4 py-2.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50 font-medium">
+            {updating ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Mise à jour…</> : '↑ Synchroniser Mia'}
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
+            Enregistrer
+          </button>
         </div>
       </div>
     </div>
@@ -1950,45 +1913,39 @@ function WebhooksPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Webhooks" sub="Recevez des notifications en temps réel pour chaque événement d'appel" />
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{webhooks.length} webhook{webhooks.length !== 1 ? 's' : ''} configuré{webhooks.length !== 1 ? 's' : ''}</p>
-          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-            + Créer un webhook
-          </button>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-end justify-between">
+        <SettingsHeader section="Plateforme" title="Webhooks" />
+        <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
+          + Créer
+        </button>
+      </div>
 
+      <Card>
         {webhooks.length === 0 && !showAdd ? (
-          <div className="text-center py-12">
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-              <WebhookIcon />
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
             </div>
-            <p className="text-sm text-gray-400">Aucun webhook configuré</p>
-            <p className="text-xs text-gray-300 mt-1">Créez un webhook pour recevoir des données lors de chaque appel</p>
-            <button onClick={() => setShowAdd(true)} className="mt-4 text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
-              + Créer un webhook
-            </button>
+            <p className="text-sm font-medium text-gray-400">Aucun webhook configuré</p>
+            <p className="text-xs text-gray-300 mt-1">Recevez des données en temps réel lors de chaque appel</p>
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-100">
+          <div className="flex flex-col divide-y divide-gray-50">
             {webhooks.map(wh => (
               <div key={wh.id} className="py-3.5 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-mono text-gray-700 truncate">{wh.url}</p>
-                  <div className="flex gap-1.5 mt-1.5">
+                  <div className="flex gap-1.5 mt-1.5 flex-wrap">
                     {wh.events.map(ev => (
-                      <span key={ev} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{ev}</span>
+                      <span key={ev} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{ev}</span>
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {wh.active ? 'Actif' : 'Inactif'}
-                  </span>
-                  <button onClick={() => setWebhooks(prev => prev.filter(w => w.id !== wh.id))} className="text-gray-300 hover:text-red-500 text-sm">×</button>
-                </div>
+                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {wh.active ? 'Actif' : 'Inactif'}
+                </span>
+                <button onClick={() => setWebhooks(prev => prev.filter(w => w.id !== wh.id))} className="text-gray-300 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
               </div>
             ))}
           </div>
@@ -1999,14 +1956,14 @@ function WebhooksPage({ accent }: { accent: string }) {
             <Field label="URL du webhook">
               <input autoFocus value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
                 placeholder="https://votre-serveur.com/webhook"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 font-mono" />
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 font-mono bg-gray-50/60" />
             </Field>
             <div>
-              <label className="text-xs text-gray-500 block mb-2">Événements à écouter</label>
+              <label className="text-xs font-medium text-gray-500 block mb-2">Événements à écouter</label>
               <div className="flex flex-wrap gap-2">
                 {eventOptions.map(ev => (
                   <button key={ev} onClick={() => toggleEvent(ev)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${form.events.includes(ev) ? 'text-white border-transparent' : 'border-gray-200 text-gray-500 hover:border-gray-400'}`}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors font-medium ${form.events.includes(ev) ? 'text-white border-transparent' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
                     style={form.events.includes(ev) ? { background: accent } : {}}>
                     {ev}
                   </button>
@@ -2014,8 +1971,8 @@ function WebhooksPage({ accent }: { accent: string }) {
               </div>
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Créer le webhook</button>
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Créer le webhook</button>
             </div>
           </div>
         )}
@@ -2067,125 +2024,110 @@ function IntegrationsPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Intégrations" sub="Connectez Fixlyy à vos outils et configurez l'accès API" />
-      <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Plateforme" title="Intégrations" />
 
-        {/* Widget */}
-        <Card>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-xl flex-shrink-0">
-              🧩
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold">Widget Fixlyy</p>
-              <p className="text-xs text-gray-400 mt-0.5">Intégrez un bouton d'appel direct sur votre site web</p>
-            </div>
-            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">Non configuré</span>
+      <Card>
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-2xl border border-gray-100 bg-gray-50 flex items-center justify-center text-lg flex-shrink-0">🧩</div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Widget Fixlyy</p>
+            <p className="text-xs text-gray-400 mt-0.5">Bouton d'appel direct sur votre site web</p>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="text-xs text-gray-500 mb-2">Copiez ce code dans le <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> de votre site</p>
-            <div className="bg-gray-900 rounded-lg px-4 py-3 font-mono text-xs text-gray-300 relative">
-              {'<script src="https://widget.fixlyy.fr/v1.js" data-key="YOUR_KEY"></script>'}
-              <button className="absolute top-2 right-2 text-[10px] text-gray-400 hover:text-white px-2 py-1 rounded bg-gray-700">
-                Copier
-              </button>
-            </div>
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-400">Non configuré</span>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-50">
+          <p className="text-xs text-gray-400 mb-2">Copiez ce code dans le <code className="bg-gray-100 px-1.5 py-0.5 rounded-lg text-gray-600">&lt;head&gt;</code> de votre site</p>
+          <div className="bg-gray-900 rounded-xl px-4 py-3 font-mono text-xs text-gray-300 relative">
+            {'<script src="https://widget.fixlyy.fr/v1.js" data-key="YOUR_KEY"></script>'}
+            <button className="absolute top-2 right-2 text-[10px] text-gray-400 hover:text-white px-2 py-1 rounded-lg bg-gray-700 font-medium">Copier</button>
           </div>
-        </Card>
+        </div>
+      </Card>
 
-        {/* Clé API */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Clé API</p>
-          <p className="text-xs text-gray-400 mb-4">Utilisez cette clé pour intégrer Fixlyy dans vos propres applications</p>
-          {!apiKeyGenerated && !apiKey ? (
-            <button onClick={generateKey} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
-              Générer une clé API
+      <Card>
+        <p className="text-sm font-semibold mb-1">Clé API</p>
+        <p className="text-xs text-gray-400 mb-3">Intégrez Fixlyy dans vos propres applications</p>
+        {!apiKeyGenerated && !apiKey ? (
+          <button onClick={generateKey} className="text-sm px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>
+            Générer une clé API
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-gray-50/60 border border-gray-100 rounded-xl px-3 py-2.5 font-mono text-xs text-gray-600 overflow-hidden">
+              {generatedKey || apiKey}
+            </div>
+            <button onClick={copyKey} className={`text-xs px-3 py-2.5 rounded-xl border transition-colors font-medium ${copied ? 'border-emerald-200 text-emerald-600 bg-emerald-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+              {copied ? '✓ Copié' : 'Copier'}
             </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono text-xs text-gray-600 overflow-hidden">
-                {generatedKey || apiKey}
-              </div>
-              <button onClick={copyKey} className={`text-xs px-3 py-2 rounded-lg border transition-colors ${copied ? 'border-emerald-300 text-emerald-600 bg-emerald-50' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                {copied ? '✓ Copié' : 'Copier'}
-              </button>
-            </div>
-          )}
-        </Card>
+          </div>
+        )}
+      </Card>
 
-        {/* Domaines autorisés */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Domaines autorisés</p>
-          <p className="text-xs text-gray-400 mb-4">Seuls ces domaines peuvent utiliser votre clé API et widget</p>
-          <div className="flex flex-col gap-2 mb-3">
-            {authorizedDomains.map((domain, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
-                <span className="text-sm font-mono text-gray-700">{domain}</span>
-                <button onClick={() => setAuthorizedDomains(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 text-sm">×</button>
-              </div>
+      <Card>
+        <p className="text-sm font-semibold mb-1">Domaines autorisés</p>
+        <p className="text-xs text-gray-400 mb-3">Seuls ces domaines peuvent utiliser votre clé API et widget</p>
+        <div className="flex flex-col gap-2 mb-3">
+          {authorizedDomains.map((domain, i) => (
+            <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-gray-50/60 border border-gray-100 rounded-xl">
+              <span className="text-sm font-mono text-gray-700">{domain}</span>
+              <button onClick={() => setAuthorizedDomains(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-300 hover:text-red-500 text-lg leading-none">×</button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input value={newDomain} onChange={e => setNewDomain(e.target.value)} onKeyDown={e => e.key === 'Enter' && addDomain()}
+            placeholder="ex : monsite.fr"
+            className="flex-1 border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+          <button onClick={addDomain} className="text-sm px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>+ Ajouter</button>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-10 h-10 rounded-2xl border border-gray-100 bg-gray-50 flex items-center justify-center text-lg flex-shrink-0">📅</div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Cal.com — Prise de RDV</p>
+            <p className="text-xs text-gray-400 mt-0.5">Votre assistante partage votre lien aux clients qui demandent un créneau</p>
+          </div>
+          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${profile?.onboarding_calendar ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+            {profile?.onboarding_calendar ? 'Connecté' : 'À configurer'}
+          </span>
+        </div>
+
+        {!profile?.onboarding_calendar && (
+          <div className="mb-4 p-3.5 bg-gray-50/60 border border-gray-100 rounded-xl text-xs text-gray-600 space-y-1.5">
+            <p className="font-semibold text-gray-700 mb-2">3 étapes pour activer la prise de RDV :</p>
+            {[
+              <>Créez un compte gratuit sur <a href="https://cal.com" target="_blank" rel="noreferrer" className="underline font-medium" style={{ color: accent }}>cal.com</a></>,
+              <>Dans Cal.com, allez dans <strong>Partager</strong> et copiez votre lien</>,
+              <>Collez-le ci-dessous et enregistrez</>,
+            ].map((step, i) => (
+              <p key={i} className="flex items-start gap-2">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold flex-shrink-0 mt-0.5" style={{ background: accent }}>{i+1}</span>
+                <span>{step}</span>
+              </p>
             ))}
           </div>
-          <div className="flex gap-2">
-            <input value={newDomain} onChange={e => setNewDomain(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addDomain()}
-              placeholder="ex : monsite.fr"
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
-            <button onClick={addDomain} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
-              + Ajouter
+        )}
+
+        <Field label="Votre lien Cal.com">
+          <input value={calUrl} onChange={e => setCalUrl(e.target.value)}
+            placeholder="https://cal.com/votre-nom"
+            className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 mt-1" />
+        </Field>
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-xs text-gray-400">{profile?.onboarding_calendar ? "Lien actif · l'assistante l'utilise déjà" : 'Optionnel'}</p>
+          <div className="flex items-center gap-2">
+            {calSaved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+            <button onClick={saveCalUrl} disabled={calUrl === (profile?.onboarding_calendar || '')}
+              className="text-xs px-3 py-2 rounded-xl text-white font-semibold disabled:opacity-40 transition-opacity"
+              style={{ background: accent }}>
+              Enregistrer
             </button>
           </div>
-        </Card>
-
-        {/* Cal.com */}
-        <Card>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-xl flex-shrink-0">
-              📅
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold">Cal.com — Prise de rendez-vous</p>
-              <p className="text-xs text-gray-400 mt-0.5">Votre assistante partage votre lien aux clients qui demandent un créneau</p>
-            </div>
-            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${profile?.onboarding_calendar ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-              {profile?.onboarding_calendar ? 'Connecté' : 'À configurer'}
-            </span>
-          </div>
-
-          {!profile?.onboarding_calendar && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-600 space-y-1.5">
-              <p className="font-semibold text-gray-700">3 étapes pour activer la prise de RDV :</p>
-              <p><span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold mr-1.5" style={{ background: accent }}>1</span>Créez un compte gratuit sur{' '}
-                <a href="https://cal.com" target="_blank" rel="noreferrer" className="underline font-medium" style={{ color: accent }}>cal.com</a>
-              </p>
-              <p><span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold mr-1.5" style={{ background: accent }}>2</span>Dans Cal.com, allez dans <strong>Partager</strong> et copiez votre lien (ex: https://cal.com/jean-dupont)</p>
-              <p><span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold mr-1.5" style={{ background: accent }}>3</span>Collez-le ci-dessous et enregistrez</p>
-            </div>
-          )}
-
-          <Field label="Votre lien de réservation Cal.com">
-            <input value={calUrl} onChange={e => setCalUrl(e.target.value)}
-              placeholder="https://cal.com/votre-nom"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
-          </Field>
-          <div className="flex items-center justify-between mt-3">
-            <p className="text-xs text-gray-400">
-              {profile?.onboarding_calendar
-                ? `Lien actif · votre assistante l'utilise déjà`
-                : 'Optionnel — laissez vide si vous ne souhaitez pas de prise de RDV'}
-            </p>
-            <div className="flex items-center gap-2">
-              {calSaved && <span className="text-xs text-emerald-600 font-medium">✓ Enregistré</span>}
-              <button onClick={saveCalUrl}
-                disabled={calUrl === (profile?.onboarding_calendar || '')}
-                className="text-xs px-3 py-1.5 rounded-md text-white font-medium disabled:opacity-40 transition-opacity"
-                style={{ background: accent }}>
-                Enregistrer
-              </button>
-            </div>
-          </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -2210,53 +2152,53 @@ function TimezonePage({ accent }: { accent: string }) {
   const localDate = now.toLocaleDateString('fr-FR', { timeZone: timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
-    <div>
-      <PageHeader title="Fuseau horaire" sub="Configurez le fuseau horaire utilisé pour vos horaires et notifications" />
-      <div className="flex flex-col gap-4">
-        <Card>
-          <p className="text-sm font-semibold mb-4">Fuseau horaire de l'entreprise</p>
-          <Field label="Sélectionner un fuseau horaire">
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Plateforme" title="Fuseau horaire" />
+
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex-1 mr-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">Heure actuelle</p>
+            <p className="text-2xl font-bold text-gray-900 leading-none">{localTime}</p>
+            <p className="text-xs text-gray-400 mt-1 capitalize">{localDate}</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl bg-gray-50 border border-gray-100 flex-shrink-0">🌍</div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-50">
+          <Field label="Fuseau horaire">
             <select value={timezone} onChange={e => setTimezone(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400">
-              {timezones.map(tz => (
-                <option key={tz.value} value={tz.value}>{tz.label}</option>
-              ))}
+              className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 mt-1">
+              {timezones.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
             </select>
           </Field>
-          <div className="mt-4 px-4 py-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-400 mb-1">Heure actuelle dans ce fuseau</p>
-            <p className="text-xl font-semibold">{localTime}</p>
-            <p className="text-xs text-gray-500 mt-0.5 capitalize">{localDate}</p>
-          </div>
-        </Card>
-
-        <Card>
-          <p className="text-sm font-semibold mb-1">Impact sur votre configuration</p>
-          <p className="text-xs text-gray-400 mb-4">Ce fuseau horaire affecte les éléments suivants</p>
-          <div className="flex flex-col gap-2.5">
-            {[
-              { icon: '🕐', label: 'Horaires d\'ouverture', desc: 'Vos plages horaires sont interprétées dans ce fuseau' },
-              { icon: '📱', label: 'Notifications SMS et email', desc: 'Les résumés d\'appels affichent l\'heure locale' },
-              { icon: '📞', label: 'Logs d\'appels', desc: 'Les horodatages des appels utilisent ce fuseau' },
-            ].map((item, i) => (
-              <div key={i} className="flex items-start gap-3 px-3 py-2.5 bg-gray-50 rounded-lg">
-                <span className="text-base">{item.icon}</span>
-                <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <div className="flex justify-end">
-          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
-          <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2500) }}
-            className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-            Enregistrer
-          </button>
         </div>
+      </Card>
+
+      <Card>
+        <p className="text-sm font-semibold mb-3">Ce fuseau affecte</p>
+        <div className="flex flex-col gap-2">
+          {[
+            { icon: '🕐', label: "Horaires d'ouverture", desc: 'Vos plages horaires sont interprétées dans ce fuseau' },
+            { icon: '📧', label: 'Notifications email', desc: "Les résumés d'appels affichent l'heure locale" },
+            { icon: '📋', label: "Logs d'appels", desc: 'Les horodatages des appels utilisent ce fuseau' },
+          ].map((item, i) => (
+            <div key={i} className="flex items-start gap-3 px-3.5 py-3 bg-gray-50/60 border border-gray-100 rounded-xl">
+              <span className="text-base flex-shrink-0">{item.icon}</span>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{item.label}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="flex justify-end items-center gap-3">
+        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+        <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2500) }}
+          className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
+          Enregistrer
+        </button>
       </div>
     </div>
   )
@@ -2271,20 +2213,26 @@ function SubscriptionPage({ accent }: { accent: string }) {
     { name: 'Équipe', price: 249, desc: 'Appels illimités · 5 artisans', features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
   ]
   return (
-    <div>
-      <PageHeader title="Mon abonnement" sub="Choisissez la formule qui correspond à votre activité" />
-      <div className="grid grid-cols-3 gap-4 mb-5">
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Plateforme" title="Abonnement" />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {plans.map((p, i) => (
-          <div key={i} onClick={() => setSelected(i)} className="bg-white border rounded-xl p-5 cursor-pointer transition-all"
-            style={{ borderColor: selected === i ? accent : '#E5E7EB', borderWidth: selected === i ? 2 : 1, boxShadow: selected === i ? `0 0 0 4px ${accent}18` : 'none' }}>
-            {p.popular && <div className="text-xs font-semibold px-2.5 py-0.5 rounded-full inline-block mb-3" style={{ background: accent + '20', color: accent }}>Le plus populaire</div>}
-            <p className="font-semibold text-sm mb-1">{p.name}</p>
-            <p className="text-3xl font-bold tracking-tight" style={{ color: accent }}>{p.price}<span className="text-sm font-normal text-gray-400"> €/mois</span></p>
-            <p className="text-xs text-gray-400 mt-1 mb-4">{p.desc}</p>
+          <div key={i} onClick={() => setSelected(i)}
+            className="bg-white rounded-2xl p-5 cursor-pointer transition-all shadow-sm"
+            style={{ border: selected === i ? `2px solid ${accent}` : '1px solid #F3F4F6', boxShadow: selected === i ? `0 0 0 4px ${accent}15` : '0 1px 3px 0 rgb(0 0 0 / 0.05)' }}>
+            {p.popular && (
+              <div className="text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-block mb-3 uppercase tracking-wide" style={{ background: accent + '15', color: accent }}>
+                Populaire
+              </div>
+            )}
+            <p className="font-bold text-gray-900 text-sm mb-1">{p.name}</p>
+            <p className="text-3xl font-bold tracking-tight mb-0.5" style={{ color: accent }}>{p.price}<span className="text-sm font-normal text-gray-400"> €/mois</span></p>
+            <p className="text-xs text-gray-400 mb-4">{p.desc}</p>
             <div className="flex flex-col gap-2">
               {p.features.map((f, j) => (
                 <div key={j} className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] flex-shrink-0" style={{ background: accent + '20', color: accent }}>✓</span>
+                  <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: accent + '15', color: accent }}>✓</span>
                   {f}
                 </div>
               ))}
@@ -2292,12 +2240,15 @@ function SubscriptionPage({ accent }: { accent: string }) {
           </div>
         ))}
       </div>
-      <div className="rounded-xl px-5 py-4 flex items-center justify-between" style={{ background: accent + '12', border: `1px solid ${accent}30` }}>
+
+      <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
         <div>
           <p className="text-sm font-semibold" style={{ color: accent }}>Garantie satisfait ou remboursé 30 jours</p>
-          <p className="text-xs text-gray-500 mt-1">Annulez à tout moment sans frais · support@fixlyy.fr</p>
+          <p className="text-xs text-gray-500 mt-0.5">Annulez à tout moment · support@fixlyy.fr</p>
         </div>
-        <button className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>Activer mon plan</button>
+        <button className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0" style={{ background: accent }}>
+          Activer mon plan
+        </button>
       </div>
     </div>
   )
@@ -2428,7 +2379,7 @@ function AgendaPage({ accent, onGoToIntegrations: _onGoToIntegrations }: { accen
 
   return (
     <div>
-      <PageHeader title="Agenda" sub="Historique de vos appels par jour" />
+      <SettingsHeader section="Activité" title="Agenda" />
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-[1fr_300px]">
         {/* ── Calendrier ── */}
