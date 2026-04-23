@@ -1090,77 +1090,67 @@ function GreetingPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Paramètres de salutation" sub="Configurez les messages de votre assistante en fonction des horaires" />
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Répondre" title="Salutation" />
 
-      <div className="flex flex-col gap-4">
-        {/* Pendant les heures d'ouverture */}
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm font-semibold">Pendant les heures d'ouverture</p>
-              <p className="text-xs text-gray-400 mt-0.5">Message diffusé lors des appels reçus pendant vos heures d'activité</p>
-            </div>
-            <button onClick={() => {}} className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
-              <span>▶</span> Prévisualiser la voix
-            </button>
+      <Card>
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <p className="text-sm font-semibold">Heures d'ouverture</p>
+            <p className="text-xs text-gray-400 mt-0.5">Message diffusé lors des appels pendant vos heures d'activité</p>
           </div>
-          <textarea
-            value={profile.greeting_open || ''}
-            onChange={e => updateProfile({ greeting_open: e.target.value })}
-            rows={4}
-            placeholder="Ex : Bonjour, vous avez bien joint l'entreprise Dupont Plomberie. Je suis Mia, l'assistante de Marc. Comment puis-je vous aider ?"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 resize-none"
-          />
-        </Card>
-
-        {/* Hors heures d'ouverture */}
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm font-semibold">Hors heures d'ouverture</p>
-              <p className="text-xs text-gray-400 mt-0.5">Message diffusé en dehors de vos horaires d'activité</p>
-            </div>
-            <button onClick={() => {}} className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
-              <span>▶</span> Prévisualiser la voix
-            </button>
-          </div>
-          <textarea
-            value={profile.greeting_closed || ''}
-            onChange={e => updateProfile({ greeting_closed: e.target.value })}
-            rows={4}
-            placeholder="Ex : Bonjour, vous avez bien joint l'entreprise Dupont Plomberie. Nous sommes actuellement fermés. Laissez-moi votre message et nous vous rappellerons dès que possible."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 resize-none"
-          />
-        </Card>
-
-        {/* Salutation personnalisée */}
-        <Card>
-          <div className="flex items-center justify-between gap-4 py-1">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Activer le message de salutation personnalisé</p>
-              <p className="text-xs text-gray-400 mt-0.5">L'assistante utilise le prénom du client s'il est connu</p>
-            </div>
-            <Toggle defaultOn={personalizedGreeting} accent={accent} onChange={setPersonalizedGreeting} className="flex-shrink-0" />
-          </div>
-        </Card>
-
-        {/* Message de fin d'appel */}
-        <Card>
-          <p className="text-sm font-semibold mb-3">Message de fin d'appel</p>
-          <p className="text-xs text-gray-400 mb-3">Diffusé automatiquement à la fin de chaque appel</p>
-          <input
-            defaultValue="Merci pour votre appel. Bonne journée !"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-          />
-        </Card>
-
-        <div className="flex justify-end">
-          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
-          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-            Enregistrer les modifications
+          <button onClick={() => {}} className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-1.5 flex-shrink-0 font-medium">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><polygon points="3,1 11,6 3,11"/></svg>
+            Écouter
           </button>
         </div>
+        <textarea
+          value={profile.greeting_open || ''}
+          onChange={e => updateProfile({ greeting_open: e.target.value })}
+          rows={4}
+          placeholder="Ex : Bonjour, vous avez bien joint l'entreprise Dupont Plomberie. Je suis Mia, l'assistante de Marc. Comment puis-je vous aider ?"
+          className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 resize-none bg-gray-50/60"
+        />
+      </Card>
+
+      <Card>
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <p className="text-sm font-semibold">Hors heures d'ouverture</p>
+            <p className="text-xs text-gray-400 mt-0.5">Message diffusé en dehors de vos horaires d'activité</p>
+          </div>
+          <button onClick={() => {}} className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-1.5 flex-shrink-0 font-medium">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><polygon points="3,1 11,6 3,11"/></svg>
+            Écouter
+          </button>
+        </div>
+        <textarea
+          value={profile.greeting_closed || ''}
+          onChange={e => updateProfile({ greeting_closed: e.target.value })}
+          rows={4}
+          placeholder="Ex : Bonjour, vous avez bien joint l'entreprise Dupont Plomberie. Nous sommes actuellement fermés. Laissez-moi votre message et nous vous rappellerons dès que possible."
+          className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 resize-none bg-gray-50/60"
+        />
+      </Card>
+
+      <Card>
+        <ToggleRow label="Salutation personnalisée" desc="L'assistante utilise le prénom du client s'il est connu" defaultOn={personalizedGreeting} accent={accent} />
+      </Card>
+
+      <Card>
+        <p className="text-sm font-semibold mb-1">Message de fin d'appel</p>
+        <p className="text-xs text-gray-400 mb-3">Diffusé automatiquement à la fin de chaque conversation</p>
+        <input
+          defaultValue="Merci pour votre appel. Bonne journée !"
+          className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60"
+        />
+      </Card>
+
+      <div className="flex justify-end items-center gap-3">
+        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+        <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
+          Enregistrer
+        </button>
       </div>
     </div>
   )
@@ -1186,33 +1176,33 @@ function InboundReasonsPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Raisons d'appel entrantes" sub="Définissez les motifs pour lesquels vos clients vous appellent" />
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{reasons.length} raison{reasons.length > 1 ? 's' : ''} configurée{reasons.length > 1 ? 's' : ''}</p>
-          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-            + Ajouter une raison d'appel
-          </button>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-end justify-between">
+        <SettingsHeader section="Répondre" title="Raisons entrantes" />
+        <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
+          + Ajouter
+        </button>
+      </div>
 
-        {reasons.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-sm text-gray-400">Aucune raison d'appel configurée</p>
-            <p className="text-xs text-gray-300 mt-1">Ajoutez des raisons pour guider l'assistante lors des appels</p>
+      <Card>
+        {reasons.length === 0 && !showAdd ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+            </div>
+            <p className="text-sm font-medium text-gray-400">Aucune raison configurée</p>
+            <p className="text-xs text-gray-300 mt-1">Ajoutez des motifs pour guider l'assistante</p>
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-100">
+          <div className="flex flex-col divide-y divide-gray-50">
             {reasons.map(r => (
               <div key={r.id} className="flex items-center gap-4 py-3.5">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{r.label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>
+                  <p className="text-sm font-semibold text-gray-900">{r.label}</p>
+                  {r.desc && <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>}
                 </div>
                 <Toggle defaultOn={r.on} accent={accent} onChange={() => toggle(r.id)} />
-                <button onClick={() => remove(r.id)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">
-                  ×
-                </button>
+                <button onClick={() => remove(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none ml-1">×</button>
               </div>
             ))}
           </div>
@@ -1223,16 +1213,16 @@ function InboundReasonsPage({ accent }: { accent: string }) {
             <Field label="Intitulé de la raison">
               <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
                 placeholder="Ex : Demande de devis"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
             </Field>
             <Field label="Description (optionnel)">
               <input value={newDesc} onChange={e => setNewDesc(e.target.value)}
                 placeholder="Ex : L'assistante collecte le motif et planifie un rappel"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
             </Field>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Ajouter</button>
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Ajouter</button>
             </div>
           </div>
         )}
@@ -1257,37 +1247,33 @@ function OutboundReasonsPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Raisons d'appel sortantes" sub="Définissez les motifs pour lesquels votre assistante rappelle vos clients" />
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{reasons.length} raison{reasons.length !== 1 ? 's' : ''} configurée{reasons.length !== 1 ? 's' : ''}</p>
-          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-            + Ajouter une raison d'appel
-          </button>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-end justify-between">
+        <SettingsHeader section="Répondre" title="Raisons sortantes" />
+        <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
+          + Ajouter
+        </button>
+      </div>
 
+      <Card>
         {reasons.length === 0 && !showAdd ? (
-          <div className="text-center py-12">
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-              <PhoneOutIcon />
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 3h5m0 0v5m0-5l-6 6M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"/></svg>
             </div>
-            <p className="text-sm text-gray-400">Aucune raison d'appel sortant configurée</p>
-            <p className="text-xs text-gray-300 mt-1">Ajoutez des raisons pour que l'assistante puisse rappeler vos clients</p>
-            <button onClick={() => setShowAdd(true)} className="mt-4 text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
-              + Ajouter une raison d'appel
-            </button>
+            <p className="text-sm font-medium text-gray-400">Aucune raison configurée</p>
+            <p className="text-xs text-gray-300 mt-1">Ajoutez des motifs pour que l'assistante rappelle vos clients</p>
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-100">
+          <div className="flex flex-col divide-y divide-gray-50">
             {reasons.map(r => (
               <div key={r.id} className="flex items-center gap-4 py-3.5">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{r.label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>
+                  <p className="text-sm font-semibold text-gray-900">{r.label}</p>
+                  {r.desc && <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>}
                 </div>
                 <Toggle defaultOn={r.on} accent={accent} onChange={() => toggle(r.id)} />
-                <button onClick={() => remove(r.id)} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm ml-1">×</button>
+                <button onClick={() => remove(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none ml-1">×</button>
               </div>
             ))}
           </div>
@@ -1298,16 +1284,16 @@ function OutboundReasonsPage({ accent }: { accent: string }) {
             <Field label="Intitulé de la raison">
               <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
                 placeholder="Ex : Rappel devis envoyé"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
             </Field>
             <Field label="Description (optionnel)">
               <input value={newDesc} onChange={e => setNewDesc(e.target.value)}
                 placeholder="Ex : L'assistante rappelle le client 48h après l'envoi du devis"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400" />
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
             </Field>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Ajouter</button>
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Ajouter</button>
             </div>
           </div>
         )}
@@ -1324,77 +1310,53 @@ function CallTransferPage({ accent }: { accent: string }) {
   const [interEmployeeTransfer, setInterEmployeeTransfer] = useState(false)
 
   return (
-    <div>
-      <PageHeader title="Transfert d'appel" sub="Configurez le transfert d'appels vers des numéros externes ou des employés" />
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Répondre" title="Transfert d'appel" />
 
-      <div className="flex flex-col gap-4">
-        {/* Transfert externe */}
-        <Card>
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Transfert d'appel externe</p>
-              <p className="text-xs text-gray-400 mt-0.5">Transférer les appels vers un numéro de téléphone externe</p>
-            </div>
-            <Toggle defaultOn={externalTransfer} accent={accent} onChange={setExternalTransfer} className="flex-shrink-0" />
-          </div>
-          {externalTransfer && (
+      <Card>
+        <ToggleRow label="Transfert externe" desc="Transférer les appels vers un numéro de téléphone externe" defaultOn={externalTransfer} accent={accent} />
+        {externalTransfer && (
+          <div className="mt-3 pt-3 border-t border-gray-50">
             <Field label="Numéro de destination">
               <input value={externalNumber} onChange={e => setExternalNumber(e.target.value)}
                 placeholder="+33 6 00 00 00 00"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 mt-1" />
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 mt-1" />
             </Field>
-          )}
-        </Card>
-
-        {/* Heures actives de l'assistant */}
-        <Card>
-          <p className="text-sm font-semibold mb-1">Heures actives de l'assistant</p>
-          <p className="text-xs text-gray-400 mb-4">Le transfert d'appel est actif uniquement pendant ces horaires</p>
-          <div className="flex flex-col gap-3">
-            {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'].map((day, i) => (
-              <div key={day} className="flex items-center gap-4">
-                <span className="text-sm text-gray-600 w-24">{day}</span>
-                {i < 5 ? (
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <input type="time" defaultValue="09:00" className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
-                    <span>à</span>
-                    <input type="time" defaultValue="18:00" className="border border-gray-200 rounded-md px-2 py-1 text-xs text-center outline-none focus:border-gray-400" />
-                  </div>
-                ) : (
-                  <span className="text-xs text-gray-300 italic">Fermé</span>
-                )}
-              </div>
-            ))}
           </div>
-        </Card>
+        )}
+      </Card>
 
-        {/* Transfert vers des employés */}
-        <Card>
-          <div className="flex items-center justify-between gap-4 mb-1">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Transférer vers des employés</p>
-              <p className="text-xs text-gray-400 mt-0.5">L'assistante transfère l'appel vers un employé disponible</p>
+      <Card>
+        <p className="text-sm font-semibold mb-1">Plages horaires actives</p>
+        <p className="text-xs text-gray-400 mb-4">Le transfert n'est actif que pendant ces créneaux</p>
+        <div className="flex flex-col gap-3">
+          {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'].map((day, i) => (
+            <div key={day} className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-600 w-24 flex-shrink-0">{day}</span>
+              {i < 5 ? (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <input type="time" defaultValue="09:00" className="border border-gray-100 rounded-xl px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-300 bg-gray-50/60" />
+                  <span className="text-gray-300">—</span>
+                  <input type="time" defaultValue="18:00" className="border border-gray-100 rounded-xl px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-300 bg-gray-50/60" />
+                </div>
+              ) : (
+                <span className="text-xs font-medium text-gray-300">Fermé</span>
+              )}
             </div>
-            <Toggle defaultOn={transferToEmployees} accent={accent} onChange={setTransferToEmployees} className="flex-shrink-0" />
-          </div>
-          {transferToEmployees && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-xs text-gray-400 text-center py-4">Ajoutez d'abord des employés dans la section "Employés"</p>
-            </div>
-          )}
-        </Card>
+          ))}
+        </div>
+      </Card>
 
-        {/* Transfert entre employés */}
-        <Card>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Transfert entre employés</p>
-              <p className="text-xs text-gray-400 mt-0.5">Permettre aux employés de transférer des appels entre eux</p>
-            </div>
-            <Toggle defaultOn={interEmployeeTransfer} accent={accent} onChange={setInterEmployeeTransfer} className="flex-shrink-0" />
-          </div>
-        </Card>
-      </div>
+      <Card>
+        <ToggleRow label="Transférer vers les employés" desc="L'assistante transfère l'appel vers un employé disponible" defaultOn={transferToEmployees} accent={accent} />
+        {transferToEmployees && (
+          <p className="text-xs text-gray-400 pt-3 mt-3 border-t border-gray-50">Ajoutez d'abord des employés dans la section "Employés"</p>
+        )}
+      </Card>
+
+      <Card>
+        <ToggleRow label="Transfert entre employés" desc="Permettre aux employés de se transférer des appels" defaultOn={interEmployeeTransfer} accent={accent} />
+      </Card>
     </div>
   )
 }
@@ -1414,45 +1376,39 @@ function PostProcessingPage({ accent }: { accent: string }) {
   }
 
   return (
-    <div>
-      <PageHeader title="Post-traitement" sub="Actions effectuées automatiquement après chaque appel" />
-      <div className="flex flex-col gap-4">
-        <Card>
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Envoyer un email de notification après l'appel</p>
-              <p className="text-xs text-gray-400 mt-0.5">Recevez un résumé de chaque appel par email dès la fin de la conversation</p>
-            </div>
-            <Toggle defaultOn={emailNotif} accent={accent} onChange={setEmailNotif} className="flex-shrink-0" />
-          </div>
-          {emailNotif && (
-            <Field label="Adresse email de notification">
+    <div className="flex flex-col gap-4">
+      <SettingsHeader section="Répondre" title="Post-traitement" />
+
+      <Card>
+        <ToggleRow label="Email de notification" desc="Recevez un résumé de chaque appel par email dès la fin de la conversation" defaultOn={emailNotif} accent={accent} />
+        {emailNotif && (
+          <div className="mt-3 pt-3 border-t border-gray-50">
+            <Field label="Adresse email">
               <input
                 value={profile.email || ''}
                 onChange={e => updateProfile({ email: e.target.value })}
                 placeholder="votre@email.fr"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-gray-400 mt-1"
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 mt-1"
               />
             </Field>
-          )}
-        </Card>
-
-        <Card>
-          <p className="text-sm font-semibold mb-4">Contenu du résumé</p>
-          <div className="flex flex-col gap-3">
-            <ToggleRow label="Nom du client" desc="Inclure le nom et le numéro du client dans le résumé" defaultOn={true} accent={accent} />
-            <ToggleRow label="Résumé de l'appel" desc="Synthèse générée automatiquement par l'IA" defaultOn={true} accent={accent} />
-            <ToggleRow label="Durée de l'appel" desc="Durée totale de la conversation" defaultOn={true} accent={accent} />
-            <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
           </div>
-        </Card>
+        )}
+      </Card>
 
-        <div className="flex justify-end">
-          {saved && <span className="text-xs text-emerald-600 font-medium mr-3 self-center">✓ Enregistré</span>}
-          <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-lg text-white font-medium" style={{ background: accent }}>
-            Enregistrer les modifications
-          </button>
-        </div>
+      <Card>
+        <p className="text-sm font-semibold mb-1">Contenu du résumé</p>
+        <p className="text-xs text-gray-400 mb-3">Choisissez ce qui est inclus dans chaque email</p>
+        <ToggleRow label="Nom du client" desc="Nom et numéro de téléphone" defaultOn={true} accent={accent} />
+        <ToggleRow label="Résumé de l'appel" desc="Synthèse générée automatiquement par l'IA" defaultOn={true} accent={accent} />
+        <ToggleRow label="Durée de l'appel" desc="Durée totale de la conversation" defaultOn={true} accent={accent} />
+        <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
+      </Card>
+
+      <div className="flex justify-end items-center gap-3">
+        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+        <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
+          Enregistrer
+        </button>
       </div>
     </div>
   )
@@ -1477,41 +1433,36 @@ function EmployeesPage({ accent }: { accent: string }) {
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 
   return (
-    <div>
-      <PageHeader title="Employés" sub="Gérez les membres de votre équipe" />
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold">{employees.length} employé{employees.length !== 1 ? 's' : ''}</p>
-          <button onClick={() => setShowAdd(true)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium" style={{ background: accent }}>
-            + Ajouter un employé
-          </button>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-end justify-between">
+        <SettingsHeader section="Répondre" title="Employés" />
+        <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
+          + Ajouter
+        </button>
+      </div>
 
+      <Card>
         {employees.length === 0 && !showAdd ? (
-          <div className="text-center py-12">
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-              <TeamIcon />
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
-            <p className="text-sm text-gray-400">Aucun employé ajouté</p>
+            <p className="text-sm font-medium text-gray-400">Aucun employé</p>
             <p className="text-xs text-gray-300 mt-1">Ajoutez vos collaborateurs pour activer le transfert d'appels</p>
-            <button onClick={() => setShowAdd(true)} className="mt-4 text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>
-              + Ajouter un employé
-            </button>
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-100">
+          <div className="flex flex-col divide-y divide-gray-50">
             {employees.map(emp => (
               <div key={emp.id} className="group flex items-center gap-3 py-3.5">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0"
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0"
                   style={{ background: accent + '15', color: accent }}>
                   {initials(emp.name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{emp.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{[emp.email, emp.phone].filter(Boolean).join(' · ')}</p>
-                  {emp.role && <p className="text-xs text-gray-300 mt-0.5">{emp.role}</p>}
+                  <p className="text-sm font-semibold text-gray-900">{emp.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{[emp.role, emp.phone].filter(Boolean).join(' · ')}</p>
                 </div>
-                <button onClick={() => remove(emp.id)} className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-sm">×</button>
+                <button onClick={() => remove(emp.id)} className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none">×</button>
               </div>
             ))}
           </div>
@@ -1523,27 +1474,27 @@ function EmployeesPage({ accent }: { accent: string }) {
               <Field label="Nom complet *">
                 <input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="Marie Dupont"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
               </Field>
               <Field label="Rôle / Poste">
                 <input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                  placeholder="Plombier, Commercial..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                  placeholder="Plombier, Commercial…"
+                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
               </Field>
               <Field label="Email">
                 <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="marie@entreprise.fr"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
               </Field>
               <Field label="Téléphone">
                 <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="+33 6 00 00 00 00"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" />
+                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
               </Field>
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-lg border border-gray-200 text-gray-600">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-lg text-white font-medium" style={{ background: accent }}>Ajouter</button>
+              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
+              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Ajouter</button>
             </div>
           </div>
         )}
@@ -2358,7 +2309,16 @@ function PageHeader({ title, sub }: { title: string; sub: string }) {
 }
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-white border border-gray-200 rounded-xl p-5 ${className}`}>{children}</div>
+  return <div className={`bg-white border border-gray-100 rounded-2xl p-5 shadow-sm ${className}`}>{children}</div>
+}
+
+function SettingsHeader({ section, title }: { section: string; title: string }) {
+  return (
+    <div className="mb-5">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">{section}</p>
+      <h1 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h1>
+    </div>
+  )
 }
 
 function StatCard({ label, value, trend, trendUp, accent }: { label: string; value: string; trend: string; trendUp?: boolean; accent?: string }) {
