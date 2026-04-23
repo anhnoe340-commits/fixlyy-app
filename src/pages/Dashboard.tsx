@@ -4,7 +4,7 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 
 type Page =
-  | 'calls' | 'contacts' | 'agenda' | 'stats'
+  | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
   | 'subscription'
@@ -30,7 +30,7 @@ async function syncAssistant() {
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { profile, uploadLogo } = useProfile()
-  const [page, setPage] = useState<Page>('calls')
+  const [page, setPage] = useState<Page>('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Ferme la sidebar mobile à chaque changement de page
@@ -72,6 +72,7 @@ export default function Dashboard() {
         <nav className="flex-1 py-3 overflow-y-auto">
           {/* Section principale — toujours visible */}
           <p className="px-4 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">Activité</p>
+          <DarkNavItem icon={<HomeIcon />} label="Aujourd'hui" active={page === 'today'} onClick={() => setPage('today')} accent={accent} />
           <DarkNavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} accent={accent} />
           <DarkNavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} accent={accent} />
           <DarkNavItem icon={<CalendarIcon />} label="Agenda" active={page === 'agenda'} onClick={() => setPage('agenda')} accent={accent} />
@@ -117,9 +118,9 @@ export default function Dashboard() {
       {/* Bottom nav — mobile uniquement */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 flex h-14 safe-bottom">
         {([
+          { p: 'today',    icon: <HomeIcon />,     label: 'Accueil' },
           { p: 'calls',    icon: <PhoneIcon />,    label: 'Appels' },
           { p: 'contacts', icon: <UserIcon />,     label: 'Contacts' },
-          { p: 'agenda',   icon: <CalendarIcon />, label: 'Agenda' },
           { p: 'stats',    icon: <ChartIcon />,    label: 'Stats' },
         ] as { p: Page; icon: React.ReactNode; label: string }[]).map(({ p, icon, label }) => (
           <button key={p} onClick={() => setPage(p)}
@@ -149,6 +150,7 @@ export default function Dashboard() {
         </header>
 
         <main className="flex-1 p-4 md:p-6 overflow-y-auto overflow-x-hidden pb-20 md:pb-6">
+          {page === 'today' && <TodayPage accent={accent} onNavigate={setPage} />}
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
           {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
@@ -174,6 +176,7 @@ export default function Dashboard() {
 
 // ── Page Labels ───────────────────────────────────────────────────────────────
 const PAGE_LABELS: Record<Page, string> = {
+  today: "Aujourd'hui",
   calls: 'Appels',
   contacts: 'Contacts',
   agenda: 'Agenda',
@@ -221,6 +224,169 @@ function SidebarGroup({ label, children, defaultOpen = false }: { label: string;
         </span>
       </button>
       {open && <div>{children}</div>}
+    </div>
+  )
+}
+
+// ── Today Page ────────────────────────────────────────────────────────────────
+function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Page) => void }) {
+  const { user } = useAuth()
+  const { profile } = useProfile()
+  const [calls, setCalls] = useState<CallRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(100)
+      .then(({ data }) => { setCalls(data || []); setLoading(false) })
+  }, [user])
+
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir'
+  const today = new Date().toDateString()
+  const todayCalls = calls.filter(c => new Date(c.created_at).toDateString() === today)
+  const urgentCalls = calls.filter(c => c.status === 'urgent')
+  const pendingCalls = calls.filter(c => c.status === 'pending')
+  const recentCalls = calls.slice(0, 5)
+
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const fmtDate = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 1) return "À l'instant"
+    if (m < 60) return `${m} min`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h`
+    return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* ── Greeting ── */}
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">
+            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+            {greeting}, {profile?.company_name?.split(' ')[0] || 'artisan'} 👋
+          </h1>
+        </div>
+        {urgentCalls.length > 0 && (
+          <button onClick={() => onNavigate('calls')}
+            className="flex items-center gap-1.5 bg-red-50 border border-red-100 rounded-xl px-3 py-1.5 flex-shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-xs font-semibold text-red-600">{urgentCalls.length} urgent{urgentCalls.length > 1 ? 's' : ''}</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Stats row ── */}
+      {loading ? (
+        <div className="flex gap-3">
+          {[1,2,3].map(i => <div key={i} className="flex-1 h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Aujourd'hui", value: todayCalls.length, sub: 'appels', color: accent },
+            { label: 'À rappeler', value: urgentCalls.length + pendingCalls.length, sub: 'en attente', color: (urgentCalls.length + pendingCalls.length) > 0 ? '#EF4444' : '#10B981' },
+            { label: 'Total', value: calls.length, sub: 'depuis toujours', color: '#6B7280' },
+          ].map(s => (
+            <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
+              <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{s.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Urgent alert ── */}
+      {urgentCalls.length > 0 && (
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-red-700">À rappeler en priorité</p>
+            <button onClick={() => onNavigate('calls')} className="text-xs font-medium text-red-500 hover:underline">Voir tout</button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {urgentCalls.slice(0,3).map(c => (
+              <div key={c.id} className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-red-100">
+                <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-[11px] font-bold text-red-600 flex-shrink-0">
+                  {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[13px] text-gray-900 truncate">{c.caller_name || 'Inconnu'}</p>
+                  <p className="text-[11px] text-gray-400 truncate">{c.reason || c.caller_phone || 'Demande générale'}</p>
+                </div>
+                <span className="text-[10px] text-red-400 flex-shrink-0">{fmtDate(c.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Appels récents ── */}
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-50">
+          <p className="text-sm font-semibold text-gray-900">Appels récents</p>
+          <button onClick={() => onNavigate('calls')} className="text-xs font-medium hover:underline" style={{ color: accent }}>
+            Voir tout →
+          </button>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-4 h-4 border-2 border-gray-200 border-t-transparent rounded-full animate-spin" style={{ borderTopColor: accent }} />
+          </div>
+        ) : recentCalls.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            <p className="text-sm text-gray-400">Aucun appel pour l'instant</p>
+            <p className="text-xs text-gray-300 mt-1">Mia vous notifiera dès le premier appel</p>
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-50">
+            {recentCalls.map(c => {
+              const sc = STATUS_COLORS[c.status] || STATUS_COLORS.new
+              return (
+                <div key={c.id} className="flex items-center gap-3 px-4 py-3"
+                  style={{ borderLeftWidth: 3, borderLeftColor: sc.text }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                    style={{ background: sc.bg, color: sc.text }}>
+                    {(c.caller_name || '?').split(' ').map((w:string) => w[0]).join('').toUpperCase().slice(0,2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-[13px] text-gray-900 truncate">{c.caller_name || 'Inconnu'}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{c.status === 'spam' ? 'Prospection' : (c.reason || 'Demande générale')}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: sc.bg, color: sc.text }}>
+                      {STATUS_LABELS[c.status] || c.status}
+                    </span>
+                    <span className="text-[10px] text-gray-400">{fmtTime(c.created_at)}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Assistante active ── */}
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm px-4 py-4 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: accent + '15' }}>
+          <svg className="w-5 h-5" fill="none" stroke={accent} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900">{profile?.assistant_name || 'Mia'} est active</p>
+          <p className="text-xs text-gray-400 mt-0.5">Répond à vos appels 24h/24, 7j/7</p>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-1 flex-shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          En ligne
+        </span>
+      </div>
     </div>
   )
 }
@@ -779,73 +945,80 @@ function ContactsPage({ accent }: { accent: string }) {
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
 
   return (
-    <div>
-      <PageHeader title="Contacts" sub="Gérez votre base de données clients" />
-      <Card>
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <p className="text-sm font-semibold">Contacts ({contacts.length})</p>
-          <div className="flex gap-2 items-center flex-wrap">
-            {importResult && <span className="text-xs text-emerald-600 font-medium">✓ {importResult}</span>}
-            <input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
-              className="border border-gray-200 rounded-md px-3 py-1.5 text-xs outline-none focus:border-gray-400 w-40" />
-            {/* Import VCF */}
-            <label className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors flex items-center gap-1.5">
-              {importing
-                ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Import…</>
-                : <>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                  Importer VCF
-                </>}
-              <input type="file" accept=".vcf,.vcard" className="hidden" onChange={handleVcfImport} />
-            </label>
-            {/* Import CSV */}
-            <label className="text-xs px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 cursor-pointer transition-colors flex items-center gap-1.5">
-              {importingCsv
-                ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Import…</>
-                : <>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                  Importer CSV
-                </>}
-              <input type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
-            </label>
-            <button onClick={() => { setPanelOpen(true); setForm({ name: '', phone: '', email: '', address: '' }) }}
-              className="text-xs px-3 py-1.5 rounded-md text-white font-medium flex items-center gap-1" style={{ background: accent }}>
-              + Ajouter
-            </button>
-          </div>
+    <div className="flex flex-col gap-4">
+      {/* ── Header ── */}
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Base clients</p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Contacts</h1>
         </div>
+        <button onClick={() => { setPanelOpen(true); setForm({ name: '', phone: '', email: '', address: '' }) }}
+          className="flex items-center gap-1.5 text-sm font-semibold text-white px-4 py-2 rounded-xl shadow-sm transition-opacity hover:opacity-90"
+          style={{ background: accent }}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+          Ajouter
+        </button>
+      </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-10">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+      {/* ── Search + import bar ── */}
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm px-4 py-3 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[160px]">
+          <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input placeholder="Rechercher un contact…" value={search} onChange={e => setSearch(e.target.value)}
+            className="flex-1 text-sm outline-none placeholder-gray-300 bg-transparent" />
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {importResult && <span className="text-xs text-emerald-600 font-semibold">✓ {importResult}</span>}
+          <label className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors flex items-center gap-1.5 font-medium">
+            {importing ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"/>Import…</> : 'VCF'}
+            <input type="file" accept=".vcf,.vcard" className="hidden" onChange={handleVcfImport} />
+          </label>
+          <label className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors flex items-center gap-1.5 font-medium">
+            {importingCsv ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"/>Import…</> : 'CSV'}
+            <input type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
+          </label>
+        </div>
+        <p className="w-full text-[11px] text-gray-400 -mt-1">{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</p>
+      </div>
+
+      {/* ── List ── */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-5 h-5 border-2 border-gray-200 border-t-transparent rounded-full animate-spin" style={{ borderTopColor: accent }} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+            <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>
+            </svg>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-sm text-gray-400">{search ? 'Aucun résultat' : 'Aucun contact encore'}</p>
-            {!search && <p className="text-xs text-gray-300 mt-1">Ajoutez un contact ou importez un fichier VCF depuis votre téléphone</p>}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {filtered.map(c => (
-              <div key={c.id} className="group flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors overflow-hidden">
-                <div className="w-9 h-9 rounded-full border flex items-center justify-center text-sm font-semibold flex-shrink-0"
-                  style={{ background: accent + '15', color: accent, borderColor: accent + '30' }}>
-                  {initials(c.name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{c.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">{[c.phone, c.email].filter(Boolean).join(' · ')}</p>
-                </div>
-                <p className="text-xs text-gray-300 flex-shrink-0">{new Date(c.created_at).toLocaleDateString('fr-FR')}</p>
-                <button onClick={() => handleDelete(c.id)}
-                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0">
-                  ×
-                </button>
+          <p className="text-sm font-medium text-gray-400">{search ? 'Aucun résultat' : 'Aucun contact'}</p>
+          {!search && <p className="text-xs text-gray-300 mt-1">Importez un fichier VCF ou ajoutez manuellement</p>}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filtered.map(c => (
+            <div key={c.id} className="group flex items-center gap-3 bg-white border border-gray-100 rounded-2xl px-4 py-3.5 shadow-sm transition-all hover:border-gray-200">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0"
+                style={{ background: accent + '15', color: accent }}>
+                {initials(c.name)}
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-[13px] text-gray-900 truncate">{c.name}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 truncate">{[c.phone, c.email].filter(Boolean).join(' · ') || 'Aucune info'}</p>
+              </div>
+              <p className="text-[10px] text-gray-300 flex-shrink-0 hidden sm:block">{new Date(c.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</p>
+              <button onClick={() => handleDelete(c.id)}
+                className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0 text-lg leading-none">
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Panneau nouveau contact */}
       {panelOpen && (
@@ -2515,68 +2688,72 @@ function StatsPage({ accent }: { accent: string }) {
   const totalCalls = calls.length
 
   return (
-    <div>
-      <PageHeader title="Statistiques" sub="Vue d'ensemble de votre activité téléphonique" />
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <StatCard label="Total appels" value={String(totalCalls)} trend="depuis le début" />
-        <StatCard label="Aujourd'hui" value={String(todayCount)} trend="appels reçus" trendUp={todayCount > 0} />
-        <StatCard label="Durée moyenne" value={avgMinStr} trend="par appel" />
-        <StatCard label="Contacts" value={String(contacts)} trend="dans votre base" trendUp={contacts > 0} accent={accent} />
+    <div className="flex flex-col gap-4">
+      {/* ── Header ── */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Activité</p>
+        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Statistiques</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      {/* ── KPI row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Total appels', value: String(totalCalls), sub: 'depuis le début', color: accent },
+          { label: "Aujourd'hui", value: String(todayCount), sub: 'appels reçus', color: todayCount > 0 ? accent : '#9CA3AF' },
+          { label: 'Durée moy.', value: avgMinStr, sub: 'par appel', color: '#374151' },
+          { label: 'Contacts', value: String(contacts), sub: 'dans la base', color: contacts > 0 ? '#10B981' : '#9CA3AF' },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
+            <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Graphique 7 jours */}
-        <Card>
-          <p className="text-sm font-semibold mb-4">Appels — 7 derniers jours</p>
-          {totalCalls === 0 ? (
-            <div className="flex items-end justify-around h-28 gap-1.5">
-              {days7.map((d, i) => (
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">7 derniers jours</p>
+          <div className="flex items-end justify-around h-28 gap-1.5">
+            {days7.map((d, i) => {
+              const pct = d.count / maxDay
+              const isToday = d.date === today
+              return (
                 <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                  <span className="text-[10px] text-gray-400">0</span>
-                  <div className="w-full bg-gray-100 rounded-t-sm" style={{ height: '4px' }} />
-                  <span className="text-[9px] text-gray-400 text-center leading-tight">{d.label}</span>
+                  {d.count > 0 && <span className="text-[10px] text-gray-500 font-semibold">{d.count}</span>}
+                  <div className="w-full rounded-t-lg transition-all" style={{
+                    height: `${Math.max(pct * 96, d.count > 0 ? 8 : 3)}px`,
+                    background: isToday ? accent : accent + '40',
+                  }} />
+                  <span className={`text-[9px] text-center leading-tight ${isToday ? 'font-semibold' : 'text-gray-400'}`}
+                    style={isToday ? { color: accent } : {}}>{d.label}</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-end justify-around h-28 gap-1.5">
-              {days7.map((d, i) => {
-                const pct = d.count / maxDay
-                const isToday = d.date === today
-                return (
-                  <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                    {d.count > 0 && <span className="text-[10px] text-gray-500 font-medium">{d.count}</span>}
-                    <div className="w-full rounded-t-sm transition-all" style={{
-                      height: `${Math.max(pct * 96, d.count > 0 ? 8 : 4)}px`,
-                      background: isToday ? accent : accent + '60',
-                    }} />
-                    <span className="text-[9px] text-gray-400 text-center leading-tight">{d.label}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </Card>
+              )
+            })}
+          </div>
+        </div>
 
         {/* Répartition statuts */}
-        <Card>
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
           <p className="text-sm font-semibold mb-4">Répartition des statuts</p>
           {totalCalls === 0 ? (
             <div className="flex items-center justify-center h-28">
-              <p className="text-sm text-gray-400">Aucun appel pour l'instant</p>
+              <p className="text-sm text-gray-300">Aucun appel pour l'instant</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {statuses.map(s => {
                 const cnt = calls.filter(c => c.status === s.key).length
                 const pct = totalCalls > 0 ? Math.round((cnt / totalCalls) * 100) : 0
                 return (
                   <div key={s.key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-600">{s.label}</span>
-                      <span className="text-xs font-medium text-gray-700">{cnt} <span className="text-gray-400 font-normal">({pct}%)</span></span>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                        <span className="text-xs font-medium text-gray-600">{s.label}</span>
+                      </div>
+                      <span className="text-xs font-bold text-gray-700">{cnt} <span className="font-normal text-gray-400">({pct}%)</span></span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: s.color }} />
@@ -2586,34 +2763,31 @@ function StatsPage({ accent }: { accent: string }) {
               })}
             </div>
           )}
-        </Card>
+        </div>
       </div>
 
       {/* Taux de traitement */}
-      <Card>
-        <div className="flex items-center justify-between">
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+        <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-semibold">Taux de traitement</p>
             <p className="text-xs text-gray-400 mt-0.5">Appels marqués comme "Traité"</p>
           </div>
-          <div className="text-right">
-            <p className="text-[28px] font-semibold tracking-tight" style={{ color: accent }}>
-              {totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '—'}
-            </p>
-            <p className="text-xs text-gray-400">{doneCount} sur {totalCalls} appels</p>
-          </div>
+          <p className="text-[32px] font-bold tracking-tight leading-none" style={{ color: accent }}>
+            {totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '—'}
+          </p>
         </div>
-        {totalCalls > 0 && (
-          <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.round((doneCount / totalCalls) * 100)}%`, background: accent }} />
-          </div>
-        )}
-      </Card>
+        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '0%', background: accent }} />
+        </div>
+        <p className="text-xs text-gray-400 mt-2">{doneCount} sur {totalCalls} appels traités</p>
+      </div>
     </div>
   )
 }
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────────
+const HomeIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 6.5L8 2l6 4.5V14a1 1 0 01-1 1H9.5v-4h-3v4H3a1 1 0 01-1-1V6.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
 const PhoneIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5V2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const UserIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.2"/><path d="M2 13c0-3.314 2.686-6 6-6s6 2.686 6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const BotIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="6" cy="7.5" r="1" fill="currentColor"/><circle cx="10" cy="7.5" r="1" fill="currentColor"/><path d="M6 10.5c.5.5 3.5.5 4 0" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M8 2.5v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
