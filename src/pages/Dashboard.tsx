@@ -2214,15 +2214,26 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
 
-  // Calcul de l'essai
-  const TRIAL_DAYS = 7
-  const trialStart = user?.created_at ? new Date(user.created_at) : new Date()
-  const trialEnd = new Date(trialStart); trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS)
   const now = new Date()
-  const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-  const isTrialActive = now < trialEnd
-  const trialPct = Math.min(100, Math.round(((now.getTime() - trialStart.getTime()) / (trialEnd.getTime() - trialStart.getTime())) * 100))
-  const hasPaid = !!profile?.stripe_customer_id
+
+  // Statut réel depuis Stripe (via le webhook → profiles)
+  const subStatus = profile?.subscription_status ?? null   // trialing | active | canceled | past_due | null
+  const hasPaid   = !!profile?.stripe_customer_id
+  const isActive  = subStatus === 'active'
+  const isCanceled = subStatus === 'canceled'
+
+  // Date de fin d'essai : depuis Stripe si disponible, sinon fallback sur created_at + 7j
+  const trialEndDate: Date = profile?.subscription_trial_end
+    ? new Date(profile.subscription_trial_end)
+    : (() => { const d = new Date(user?.created_at ?? Date.now()); d.setDate(d.getDate() + 7); return d })()
+  const isTrialActive = subStatus === 'trialing' || (!hasPaid && now < trialEndDate)
+  const daysLeft = Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+  const trialStart = profile?.subscription_trial_end
+    ? new Date(trialEndDate.getTime() - 7 * 86400_000)
+    : new Date(user?.created_at ?? Date.now())
+  const trialPct = Math.min(100, Math.round(((now.getTime() - trialStart.getTime()) / (trialEndDate.getTime() - trialStart.getTime())) * 100))
+
+  const currentPlanLabel = profile?.subscription_plan ?? (hasPaid ? 'Pro' : 'Essai gratuit')
 
   useEffect(() => {
     if (!user) return
@@ -2270,14 +2281,25 @@ function SubscriptionPage({ accent }: { accent: string }) {
     }
   }
 
-  const currentPlanName = hasPaid ? 'Pro' : 'Essai gratuit'
-
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader section="Plateforme" title="Abonnement" />
 
+      {/* ── Bannière annulé ── */}
+      {isCanceled && (
+        <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <div className="flex items-center gap-3">
+            <span className="text-xl">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-red-800">Abonnement annulé</p>
+              <p className="text-xs text-red-600 mt-0.5">Votre assistante est désactivée. Réactivez votre abonnement pour reprendre.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Bannière essai ── */}
-      {isTrialActive && !hasPaid && (
+      {isTrialActive && (
         <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4"
           style={{ background: daysLeft <= 2 ? '#FEF2F2' : '#FFFBEB', border: `1px solid ${daysLeft <= 2 ? '#FECACA' : '#FDE68A'}` }}>
           <div className="flex items-center gap-3">
@@ -2287,7 +2309,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
                 {daysLeft === 0 ? "Votre essai se termine aujourd'hui" : `Essai gratuit — ${daysLeft} jour${daysLeft > 1 ? 's' : ''} restant${daysLeft > 1 ? 's' : ''}`}
               </p>
               <p className="text-xs mt-0.5" style={{ color: daysLeft <= 2 ? '#DC2626' : '#B45309' }}>
-                Se termine le {trialEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                Se termine le {trialEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
             </div>
           </div>
@@ -2307,8 +2329,8 @@ function SubscriptionPage({ accent }: { accent: string }) {
         {[
           { label: 'Appels ce mois', value: monthCallCount === null ? '…' : String(monthCallCount), sub: 'depuis le 1er', icon: '📞' },
           { label: 'Appels au total', value: callCount === null ? '…' : String(callCount), sub: 'depuis le début', icon: '📊' },
-          { label: 'Forfait actuel', value: currentPlanName, sub: hasPaid ? 'actif' : `${daysLeft}j restants`, icon: '👑', highlight: true },
-          { label: 'Statut', value: hasPaid ? 'Actif' : 'Essai', sub: hasPaid ? 'abonnement en cours' : 'sans carte bancaire', icon: hasPaid ? '✅' : '🔓' },
+          { label: 'Forfait actuel', value: currentPlanLabel, sub: isActive ? 'actif' : isTrialActive ? `${daysLeft}j restants` : isCanceled ? 'annulé' : '—', icon: '👑', highlight: true },
+          { label: 'Statut', value: isActive ? 'Actif' : isTrialActive ? 'Essai' : isCanceled ? 'Annulé' : 'Inactif', sub: isActive ? 'prélèvement mensuel' : isTrialActive ? `prélèvement le ${trialEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : isCanceled ? 'assistante désactivée' : '—', icon: isActive ? '✅' : isTrialActive ? '🎁' : '⚠️' },
         ].map(s => (
           <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
@@ -2369,21 +2391,27 @@ function SubscriptionPage({ accent }: { accent: string }) {
         <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{checkoutError}</p>
       )}
 
-      {hasPaid && isTrialActive ? (
-        /* Déjà souscrit, essai en cours */
+      {isTrialActive && hasPaid ? (
+        /* Carte enregistrée, essai en cours → prélèvement automatique dans X jours */
         <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
           <div className="flex items-center gap-3">
             <span className="text-xl">✅</span>
             <div>
-              <p className="text-sm font-semibold text-emerald-800">Abonnement Pro activé</p>
+              <p className="text-sm font-semibold text-emerald-800">Carte enregistrée · essai en cours</p>
               <p className="text-xs text-emerald-700 mt-0.5">
-                Votre essai gratuit se termine le {trialEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.
-                Votre abonnement démarrera automatiquement à cette date.
+                Vous serez prélevé automatiquement le{' '}
+                <strong>{trialEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</strong>.
+                Annulez avant cette date pour ne rien payer.
               </p>
             </div>
           </div>
+          <a href="https://billing.stripe.com/p/login/test_28o5lx0WJeRgflK144"
+            className="text-xs px-4 py-2 rounded-xl font-semibold hover:opacity-80 transition-opacity flex-shrink-0 no-underline"
+            style={{ background: '#DCFCE7', color: '#166534' }}>
+            Annuler
+          </a>
         </div>
-      ) : hasPaid && !isTrialActive ? (
+      ) : isActive ? (
         /* Abonné actif — portail Stripe */
         <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
           <div>
@@ -2397,18 +2425,18 @@ function SubscriptionPage({ accent }: { accent: string }) {
           </a>
         </div>
       ) : (
-        /* Pas encore souscrit → Stripe checkout */
+        /* Pas encore souscrit (ou annulé) → Stripe checkout */
         <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
           <div>
             <p className="text-sm font-semibold" style={{ color: accent }}>Garantie satisfait ou remboursé 30 jours</p>
-            <p className="text-xs text-gray-500 mt-0.5">Annulez à tout moment · support@fixlyy.fr</p>
+            <p className="text-xs text-gray-500 mt-0.5">Entrez votre carte maintenant · prélevé dans 7 jours · annulez quand vous voulez</p>
           </div>
           <button
             onClick={handleCheckout}
             disabled={selected === null || checkoutLoading}
             className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-40"
             style={{ background: accent }}>
-            {checkoutLoading ? 'Redirection…' : selected === null ? 'Choisir un plan' : `Activer ${plans[selected].name}`}
+            {checkoutLoading ? 'Redirection…' : selected === null ? 'Choisir un plan' : `Essayer ${plans[selected].name} gratuitement`}
           </button>
         </div>
       )}

@@ -22,6 +22,9 @@ export interface Profile {
   twilio_number: string | null
   onboarding_calendar: string | null
   stripe_customer_id: string | null
+  subscription_status: string | null       // trialing | active | canceled | past_due | unpaid
+  subscription_trial_end: string | null    // ISO date
+  subscription_plan: string | null         // Solo | Pro | Équipe
 }
 
 interface ProfileContextType {
@@ -49,6 +52,9 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   twilio_number: null,
   onboarding_calendar: null,
   stripe_customer_id: null,
+  subscription_status: null,
+  subscription_trial_end: null,
+  subscription_plan: null,
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null)
