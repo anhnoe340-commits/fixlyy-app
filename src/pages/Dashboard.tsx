@@ -2311,6 +2311,25 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [selected, setSelected] = useState<number | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
+  const [portalLoading, setPortalLoading] = useState(false)
+
+  async function openPortal() {
+    setPortalLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/create-portal-session', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } catch (e) {
+      console.error('Portal error:', e)
+    } finally {
+      setPortalLoading(false)
+    }
+  }
 
   const now = new Date()
 
@@ -2346,9 +2365,9 @@ function SubscriptionPage({ accent }: { accent: string }) {
   }, [user])
 
   const plans = [
-    { id: 0, name: 'Solo',   price: 79,  priceId: 'price_1TJv9uB5dBerNSsDbvCQFO2P', desc: '150 appels inclus · 1 artisan',   features: ['Secrétaire IA 24/7', 'Email résumé après appel', 'Prise de RDV', 'Support email'] },
-    { id: 1, name: 'Pro',    price: 149, priceId: 'price_1TJv9uB5dBerNSsDpOIyE2UP', desc: 'Appels illimités · 1 artisan',     features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
-    { id: 2, name: 'Équipe', price: 249, priceId: 'price_1TJv9vB5dBerNSsDlnsXltWh', desc: 'Appels illimités · 5 artisans',    features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
+    { id: 0, name: 'Solo',   price: 79,  priceId: 'price_1TPhYzBKWw2SqpykiRQX0buQ', desc: '150 appels inclus · 1 artisan',   features: ['Secrétaire IA 24/7', 'Email résumé après appel', 'Prise de RDV', 'Support email'] },
+    { id: 1, name: 'Pro',    price: 149, priceId: 'price_1TPhYzBKWw2SqpykAnnArDEa', desc: 'Appels illimités · 1 artisan',     features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
+    { id: 2, name: 'Équipe', price: 249, priceId: 'price_1TPhZ3BKWw2SqpykywFTJLNn', desc: 'Appels illimités · 5 artisans',    features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
   ]
 
   async function handleCheckout() {
@@ -2534,11 +2553,11 @@ function SubscriptionPage({ accent }: { accent: string }) {
               </p>
             </div>
           </div>
-          <a href="https://billing.stripe.com/p/login/test_28o5lx0WJeRgflK144"
-            className="text-xs px-4 py-2 rounded-xl font-semibold hover:opacity-80 transition-opacity flex-shrink-0 no-underline"
+          <button onClick={openPortal} disabled={portalLoading}
+            className="text-xs px-4 py-2 rounded-xl font-semibold hover:opacity-80 transition-opacity flex-shrink-0 disabled:opacity-50"
             style={{ background: '#DCFCE7', color: '#166534' }}>
-            Annuler
-          </a>
+            {portalLoading ? '…' : 'Annuler'}
+          </button>
         </div>
       ) : isActive ? (
         /* Abonné actif — portail Stripe */
@@ -2547,11 +2566,11 @@ function SubscriptionPage({ accent }: { accent: string }) {
             <p className="text-sm font-semibold" style={{ color: accent }}>Abonnement actif</p>
             <p className="text-xs text-gray-500 mt-0.5">Gérez vos factures et votre abonnement · support@fixlyy.fr</p>
           </div>
-          <a href="https://billing.stripe.com/p/login/test_28o5lx0WJeRgflK144"
-            className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 no-underline"
+          <button onClick={openPortal} disabled={portalLoading}
+            className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-50"
             style={{ background: accent }}>
-            Gérer mon abonnement
-          </a>
+            {portalLoading ? '…' : 'Gérer mon abonnement'}
+          </button>
         </div>
       ) : (
         /* Pas encore souscrit (ou annulé) → Stripe checkout */

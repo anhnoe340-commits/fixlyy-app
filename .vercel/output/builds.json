@@ -5,9 +5,7 @@
     "/opt/homebrew/Cellar/node/25.9.0_1/bin/node",
     "/opt/homebrew/bin/vercel",
     "build",
-    "--prod",
-    "--token",
-    "REDACTED"
+    "--prod"
   ],
   "cliVersion": "50.41.0",
   "builds": [
