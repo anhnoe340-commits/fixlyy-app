@@ -1304,59 +1304,157 @@ function OutboundReasonsPage({ accent }: { accent: string }) {
 
 // ── Call Transfer Page ────────────────────────────────────────────────────────
 function CallTransferPage({ accent }: { accent: string }) {
-  const [externalTransfer, setExternalTransfer] = useState(false)
-  const [externalNumber, setExternalNumber] = useState('')
-  const [transferToEmployees, setTransferToEmployees] = useState(false)
-  const [interEmployeeTransfer, setInterEmployeeTransfer] = useState(false)
+  const { profile, updateProfile } = useProfile()
+  const { user } = useAuth()
+
+  const [enabled, setEnabled] = useState(!!profile?.transfer_phone)
+  const [phone, setPhone] = useState(profile?.transfer_phone || profile?.phone || '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+
+  // Sync si le profil se charge après le mount
+  useEffect(() => {
+    if (profile?.transfer_phone) {
+      setEnabled(true)
+      setPhone(profile.transfer_phone)
+    } else if (profile?.phone && !phone) {
+      setPhone(profile.phone)
+    }
+  }, [profile?.transfer_phone, profile?.phone])
+
+  async function handleSave() {
+    setSaving(true)
+    setError('')
+    setSaved(false)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Non authentifié')
+
+      const res = await fetch(
+        'https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/update-vapi-assistant',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ transfer_enabled: enabled, transfer_phone: phone }),
+        }
+      )
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`)
+
+      // Mettre à jour le contexte local
+      await updateProfile({ transfer_phone: enabled && phone ? phone : null } as any)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <SettingsHeader section="Répondre" title="Transfert d'appel" />
+      <SettingsHeader section="Répondre" title="Transfert intelligent" />
+
+      {/* Explication */}
+      <div className="rounded-2xl px-5 py-4" style={{ background: accent + '08', border: `1px solid ${accent}18` }}>
+        <p className="text-sm font-semibold mb-1" style={{ color: accent }}>Comment ça fonctionne</p>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Quand activé, votre assistante IA peut transférer l'appel en direct vers votre téléphone — uniquement si le client insiste absolument pour parler à un humain, ou en cas d'urgence extrême (fuite de gaz, inondation). Dans tous les autres cas, elle prend le message et vous envoie le résumé.
+        </p>
+      </div>
 
       <Card>
-        <ToggleRow label="Transfert externe" desc="Transférer les appels vers un numéro de téléphone externe" defaultOn={externalTransfer} accent={accent} />
-        {externalTransfer && (
-          <div className="mt-3 pt-3 border-t border-gray-50">
-            <Field label="Numéro de destination">
-              <input value={externalNumber} onChange={e => setExternalNumber(e.target.value)}
-                placeholder="+33 6 00 00 00 00"
-                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 mt-1" />
-            </Field>
+        {/* Toggle activation */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Transfert intelligent</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {enabled ? 'Activé — l\'IA peut transférer les appels urgents' : 'Désactivé — l\'IA prend toujours le message'}
+            </p>
+          </div>
+          <button
+            onClick={() => setEnabled(v => !v)}
+            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0"
+            style={{ background: enabled ? accent : '#E5E7EB' }}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
+        {/* Champ numéro — visible si activé */}
+        {enabled && (
+          <div className="mt-4 pt-4 border-t border-gray-50">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Numéro de destination
+            </label>
+            <p className="text-xs text-gray-400 mb-2">
+              Votre vrai téléphone portable. L'IA appellera ce numéro pour transférer en direct.
+            </p>
+            <input
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+33 6 00 00 00 00"
+              className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60"
+            />
+            <p className="text-[10px] text-gray-300 mt-1.5">Format international recommandé · ex: +33612345678</p>
           </div>
         )}
       </Card>
 
-      <Card>
-        <p className="text-sm font-semibold mb-1">Plages horaires actives</p>
-        <p className="text-xs text-gray-400 mb-4">Le transfert n'est actif que pendant ces créneaux</p>
-        <div className="flex flex-col gap-3">
-          {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'].map((day, i) => (
-            <div key={day} className="flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-600 w-24 flex-shrink-0">{day}</span>
-              {i < 5 ? (
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <input type="time" defaultValue="09:00" className="border border-gray-100 rounded-xl px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-300 bg-gray-50/60" />
-                  <span className="text-gray-300">—</span>
-                  <input type="time" defaultValue="18:00" className="border border-gray-100 rounded-xl px-2.5 py-1.5 text-xs text-center outline-none focus:border-gray-300 bg-gray-50/60" />
-                </div>
-              ) : (
-                <span className="text-xs font-medium text-gray-300">Fermé</span>
-              )}
-            </div>
-          ))}
+      {/* Scénarios déclencheurs */}
+      {enabled && (
+        <Card>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quand l'IA transfère</p>
+          <div className="flex flex-col gap-2">
+            {[
+              { icon: '🚨', label: 'Fuite de gaz ou urgence vitale', always: true },
+              { icon: '🌊', label: 'Inondation majeure en cours', always: true },
+              { icon: '❌', label: 'Client refuse catégoriquement de laisser un message', always: true },
+            ].map((s, i) => (
+              <div key={i} className="flex items-center gap-3 text-xs text-gray-600">
+                <span className="text-base">{s.icon}</span>
+                <span>{s.label}</span>
+                {s.always && <span className="ml-auto text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">Toujours</span>}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-50">
+            <p className="text-[11px] text-gray-400">Dans tous les autres cas (devis, RDV, questions), l'IA prend le message et vous envoie un SMS résumé.</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Erreur */}
+      {error && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
+      )}
+
+      {/* Bouton sauvegarde */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving || (enabled && !phone)}
+          className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:opacity-90 transition-opacity disabled:opacity-40"
+          style={{ background: accent }}>
+          {saving ? 'Mise à jour…' : saved ? '✓ Sauvegardé' : 'Sauvegarder'}
+        </button>
+        {saved && <p className="text-xs text-emerald-600">Votre assistante a été mise à jour sur VAPI.</p>}
+      </div>
+
+      {/* Statut actuel */}
+      {profile?.transfer_phone && (
+        <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+          <span className="text-base">📱</span>
+          <div>
+            <p className="text-xs font-semibold text-emerald-800">Transfert actif</p>
+            <p className="text-xs text-emerald-600 mt-0.5">Destination : {profile.transfer_phone}</p>
+          </div>
         </div>
-      </Card>
-
-      <Card>
-        <ToggleRow label="Transférer vers les employés" desc="L'assistante transfère l'appel vers un employé disponible" defaultOn={transferToEmployees} accent={accent} />
-        {transferToEmployees && (
-          <p className="text-xs text-gray-400 pt-3 mt-3 border-t border-gray-50">Ajoutez d'abord des employés dans la section "Employés"</p>
-        )}
-      </Card>
-
-      <Card>
-        <ToggleRow label="Transfert entre employés" desc="Permettre aux employés de se transférer des appels" defaultOn={interEmployeeTransfer} accent={accent} />
-      </Card>
+      )}
     </div>
   )
 }
