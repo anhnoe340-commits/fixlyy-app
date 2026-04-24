@@ -2343,6 +2343,37 @@ function SubscriptionPage({ accent }: { accent: string }) {
         ))}
       </div>
 
+      {/* ── Barre appels mensuels (Solo uniquement) ── */}
+      {(() => {
+        const plan = (profile?.subscription_plan ?? '').toLowerCase()
+        const isUnlimited = plan.includes('pro') || plan.includes('équipe') || plan.includes('equipe') || plan.includes('team')
+        if (isUnlimited || monthCallCount === null) return null
+        const LIMIT = 150
+        const pct = Math.min(100, Math.round((monthCallCount / LIMIT) * 100))
+        const isWarn = monthCallCount >= 120
+        const isOver = monthCallCount >= LIMIT
+        return (
+          <div className="rounded-2xl px-5 py-4" style={{ background: isOver ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#F9FAFB', border: `1px solid ${isOver ? '#FECACA' : isWarn ? '#FDE68A' : '#F3F4F6'}` }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold" style={{ color: isOver ? '#B91C1C' : isWarn ? '#92400E' : '#374151' }}>
+                {isOver ? '🚫 Limite atteinte — assistante en pause' : isWarn ? '⚠️ Vous approchez de votre limite' : '📞 Appels ce mois-ci'}
+              </p>
+              <p className="text-sm font-bold tabular-nums" style={{ color: isOver ? '#DC2626' : isWarn ? '#D97706' : '#111827' }}>
+                {monthCallCount} <span className="text-xs font-normal text-gray-400">/ {LIMIT}</span>
+              </p>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: isOver ? '#FECACA' : isWarn ? '#FDE68A' : '#E5E7EB' }}>
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: isOver ? '#EF4444' : isWarn ? '#F59E0B' : accent }} />
+            </div>
+            {isOver ? (
+              <p className="text-xs mt-1.5" style={{ color: '#DC2626' }}>Votre assistante reprendra automatiquement le 1er du mois prochain. Passez au forfait Pro pour des appels illimités.</p>
+            ) : (
+              <p className="text-xs mt-1.5 text-gray-400">{LIMIT - monthCallCount} appels restants ce mois · forfait Solo</p>
+            )}
+          </div>
+        )
+      })()}
+
       {/* ── Séparateur ── */}
       <div className="text-center pt-2">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Tarifs</p>
