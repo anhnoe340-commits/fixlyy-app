@@ -11,9 +11,12 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 
-// ── Marqueurs pour injecter/remplacer le bloc urgences dans le prompt ──────────
+// ── Marqueurs pour injecter/remplacer les blocs dans le prompt ───────────────
 const MARKER_START = '\n\n<!-- FIXLYY_URGENCES_DEBUT -->'
 const MARKER_END = '<!-- FIXLYY_URGENCES_FIN -->'
+
+const ML_MARKER_START = '\n\n<!-- FIXLYY_MULTILINGUAL_DEBUT -->'
+const ML_MARKER_END = '<!-- FIXLYY_MULTILINGUAL_FIN -->'
 
 // ── Base de données des urgences par métier ───────────────────────────────────
 const URGENCY_BY_TRADE: Record<string, string[]> = {
@@ -294,6 +297,57 @@ Dis : "Je comprends, c'est une situation urgente. Je contacte immédiatement vot
 Ne minimise jamais. Ne propose jamais un RDV pour une vraie urgence.`
 }
 
+// ── Bloc multilingue à injecter dans le prompt ───────────────────────────────
+function buildMultilingualBlock(): string {
+  return `## DÉTECTION DE LANGUE ET RÉPONSE MULTILINGUE
+
+RÈGLE FONDAMENTALE : Détecte automatiquement la langue parlée par le client dès ses premiers mots et réponds TOUJOURS dans cette même langue, naturellement et sans jamais le signaler.
+
+LANGUES SUPPORTÉES : français, anglais, espagnol, portugais, arabe, turc, roumain, polonais, italien, allemand — et toute autre langue que tu peux reconnaître.
+
+COMPORTEMENT MULTILINGUE :
+- Tu parles au client dans SA langue, avec le même niveau de professionnalisme et de naturel qu'en français.
+- Si le client parle français → tu réponds en français (comportement normal).
+- Si le client parle anglais → tu réponds en anglais, exactement avec le même script mais traduit.
+- Si le client parle arabe → tu réponds en arabe, avec la même courtoisie et le même flux.
+- Si le client mélange les langues → adapte-toi à la langue dominante.
+- Ne dis JAMAIS "I will switch to English" ou "Je vais parler en [langue]" — fais-le simplement.
+
+RÉSUMÉS ET SMS TOUJOURS EN FRANÇAIS :
+Quelle que soit la langue de l'appel, les champs structuredData que tu remplis à la fin de chaque appel doivent TOUJOURS être rédigés en français :
+- summary → toujours en français
+- customerName → nom tel que donné
+- phone → numéro tel que donné
+- urgency → "urgent" ou "non_urgent"
+- appointmentDate → date telle que donnée
+- appointmentTime → heure telle que donnée
+- smsBody → toujours en français pour l'artisan
+
+EXEMPLE : Si un client anglophone appelle pour une fuite, tu lui parles en anglais ("I understand, you have a water leak...") mais tu remplis : summary: "Client anglophone, fuite d'eau sous l'évier, RDV demain 10h.", smsBody: "Fuite sous évier · RDV demain 10h · Rappeler au +33..."
+
+SCRIPT EN ANGLAIS (exemple) :
+- Ouverture : "Hello, you've reached [COMPANY_NAME]'s assistant. How can I help you today?"
+- Urgence : "I understand, this sounds urgent. I'm contacting your technician right away and they'll call you back as soon as possible. Can you confirm your phone number?"
+- Non-urgence : "Perfect, I'll pass this on. Can I take your name and phone number?"
+- Fermeture : "Thank you, your message has been noted. You'll receive a confirmation shortly. Have a good day!"`
+}
+
+// ── Injection multilingue dans le prompt (avec marqueurs) ─────────────────────
+function injectMultilingualInPrompt(currentPrompt: string, mlBlock: string): string {
+  const start = currentPrompt.indexOf(ML_MARKER_START)
+  const end = currentPrompt.indexOf(ML_MARKER_END)
+
+  if (start !== -1 && end !== -1) {
+    return (
+      currentPrompt.slice(0, start) +
+      ML_MARKER_START + '\n' + mlBlock + '\n' + ML_MARKER_END +
+      currentPrompt.slice(end + ML_MARKER_END.length)
+    )
+  }
+
+  return currentPrompt + ML_MARKER_START + '\n' + mlBlock + '\n' + ML_MARKER_END
+}
+
 // ── Injection dans le prompt VAPI (avec marqueurs) ───────────────────────────
 function injectUrgencyInPrompt(currentPrompt: string, urgencyBlock: string): string {
   const start = currentPrompt.indexOf(MARKER_START)
@@ -335,7 +389,8 @@ serve(async (req) => {
   let body: {
     transfer_enabled?: boolean
     transfer_phone?: string
-    sync_urgency?: boolean   // true → met à jour le contexte métier dans le prompt
+    sync_urgency?: boolean       // true → met à jour le contexte métier dans le prompt
+    sync_multilingual?: boolean  // true → injecte les règles multilingues + bascule la voix ElevenLabs
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
@@ -438,6 +493,36 @@ serve(async (req) => {
       ]
       patch.model = { ...(patch.model ?? assistant.model), messages: newMessages }
     }
+  }
+
+  // 3. Activation multilingue (prompt + voix ElevenLabs multilingual v2)
+  if (body.sync_multilingual) {
+    const mlBlock = buildMultilingualBlock()
+
+    // Injection dans le message système
+    const messages: any[] = (patch.model?.messages ?? assistant.model?.messages ?? [])
+    const sysIndex = messages.findIndex((m: any) => m.role === 'system')
+
+    let updatedMessages = [...messages]
+    if (sysIndex !== -1) {
+      const currentPrompt: string = messages[sysIndex].content ?? ''
+      const updatedPrompt = injectMultilingualInPrompt(currentPrompt, mlBlock)
+      updatedMessages[sysIndex] = { ...messages[sysIndex], content: updatedPrompt }
+    } else {
+      updatedMessages = [
+        { role: 'system', content: ML_MARKER_START + '\n' + mlBlock + '\n' + ML_MARKER_END },
+        ...messages,
+      ]
+    }
+
+    // Mise à jour du modèle de voix → eleven_multilingual_v2
+    const currentVoice = assistant.voice ?? {}
+    patch.voice = {
+      ...currentVoice,
+      model: 'eleven_multilingual_v2',
+    }
+
+    patch.model = { ...(patch.model ?? assistant.model), messages: updatedMessages }
   }
 
   // ── PATCH VAPI ────────────────────────────────────────────────────────────────

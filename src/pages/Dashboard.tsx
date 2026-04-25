@@ -1837,10 +1837,11 @@ function formatFrPhone(e164: string): string {
 function AssistantPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
   const [saved, setSaved] = useState(false)
-  const [extraLangs, setExtraLangs] = useState<string[]>([])
   const [updating, setUpdating] = useState(false)
   const [updateMsg, setUpdateMsg] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [syncingML, setSyncingML] = useState(false)
+  const [mlDone, setMLDone] = useState(false)
 
   function copyCode(code: string) {
     navigator.clipboard.writeText(code)
@@ -1875,6 +1876,22 @@ function AssistantPage({ accent }: { accent: string }) {
     setTimeout(() => setUpdateMsg(null), 4000)
   }
 
+  const handleSyncMultilingual = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    setSyncingML(true); setMLDone(false)
+    try {
+      await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/update-vapi-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ sync_multilingual: true }),
+      })
+      setMLDone(true)
+      setTimeout(() => setMLDone(false), 4000)
+    } catch { /* silencieux */ }
+    setSyncingML(false)
+  }
+
   const availableLangs = ['Anglais', 'Espagnol', 'Allemand', 'Italien', 'Portugais', 'Arabe']
 
   const inputCls2 = 'w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60'
@@ -1901,7 +1918,21 @@ function AssistantPage({ accent }: { accent: string }) {
       </Card>
 
       <Card>
-        <p className="text-sm font-semibold mb-4">Langue</p>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <p className="text-sm font-semibold">Langue & Multilingue</p>
+            <p className="text-xs text-gray-400 mt-0.5">Mia détecte automatiquement la langue du client et lui répond dans sa langue. Vous recevez toujours votre SMS en français.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+            {mlDone && <span className="text-xs text-emerald-600 font-semibold whitespace-nowrap">🌍 Multilingue activé</span>}
+            <button onClick={handleSyncMultilingual} disabled={syncingML}
+              className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5 disabled:opacity-50 font-medium whitespace-nowrap">
+              {syncingML
+                ? <><div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />Activation…</>
+                : '🌍 Activer le multilingue'}
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Field label="Langue principale">
             <select defaultValue="Français" className={inputCls2}>
@@ -1909,19 +1940,12 @@ function AssistantPage({ accent }: { accent: string }) {
             </select>
           </Field>
         </div>
-        <Field label="Langues supplémentaires">
+        <Field label="Langues auto-détectées (actives après activation)">
           <div className="flex flex-wrap gap-2 mt-1">
-            {extraLangs.map((lang, i) => (
-              <div key={i} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-semibold" style={{ background: accent + '15', color: accent }}>
+            {['Français', 'Anglais', 'Arabe', 'Espagnol', 'Portugais', 'Turc', 'Roumain', 'Polonais', 'Italien', 'Allemand'].map(lang => (
+              <span key={lang} className="text-xs px-3 py-1.5 rounded-full font-medium bg-gray-100 text-gray-500">
                 {lang}
-                <button onClick={() => setExtraLangs(prev => prev.filter((_, idx) => idx !== i))} className="hover:opacity-60 leading-none">×</button>
-              </div>
-            ))}
-            {availableLangs.filter(l => !extraLangs.includes(l)).map(lang => (
-              <button key={lang} onClick={() => setExtraLangs(prev => [...prev, lang])}
-                className="text-xs px-3 py-1.5 rounded-full border border-dashed border-gray-200 text-gray-400 hover:border-gray-400 transition-colors">
-                + {lang}
-              </button>
+              </span>
             ))}
           </div>
         </Field>
