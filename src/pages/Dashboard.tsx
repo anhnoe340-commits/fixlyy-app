@@ -1624,6 +1624,9 @@ function BusinessDetailsPage({ accent, uploadLogo: _uploadLogo }: { accent: stri
     setNewPostal('')
   }
 
+  const [syncingAI, setSyncingAI] = useState(false)
+  const [syncDone, setSyncDone] = useState(false)
+
   const handleSave = async () => {
     await updateProfile({
       company_name: profile.company_name,
@@ -1634,6 +1637,25 @@ function BusinessDetailsPage({ accent, uploadLogo: _uploadLogo }: { accent: stri
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+
+    // Synchroniser automatiquement le contexte urgences dans VAPI si le métier a changé
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setSyncingAI(true)
+        await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/update-vapi-assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ sync_urgency: true }),
+        })
+        setSyncDone(true)
+        setTimeout(() => setSyncDone(false), 3000)
+      }
+    } catch (e) {
+      console.error('Sync urgency error:', e)
+    } finally {
+      setSyncingAI(false)
+    }
   }
 
   const callStatuses = [
@@ -1723,8 +1745,10 @@ function BusinessDetailsPage({ accent, uploadLogo: _uploadLogo }: { accent: stri
         </div>
       </Card>
 
-      <div className="flex justify-end items-center gap-3">
+      <div className="flex justify-end items-center gap-3 flex-wrap">
         {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+        {syncingAI && <span className="text-xs text-blue-500 font-semibold">🔄 Mise à jour de l'IA…</span>}
+        {syncDone && <span className="text-xs text-emerald-600 font-semibold">🤖 Assistante synchronisée</span>}
         <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
           Enregistrer
         </button>
