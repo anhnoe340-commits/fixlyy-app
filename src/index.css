@@ -74,11 +74,10 @@ html, body, #root {
 /* Dashboard wrapper — fond fixe (ne scroll pas) */
 .dashboard-bg {
   background:
-    radial-gradient(ellipse at 10% 35%, rgba(59, 91, 245, 0.30) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 10%, rgba(147, 51, 234, 0.22) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 90%, rgba(59, 130, 246, 0.18) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 50%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
-    #DDE2F5;
+    radial-gradient(ellipse at 10% 35%, rgba(59, 91, 245, 0.14) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 10%, rgba(147, 51, 234, 0.10) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 90%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+    #F0F2FF;
   background-attachment: fixed;
 }
 
