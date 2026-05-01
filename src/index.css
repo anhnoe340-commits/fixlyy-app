@@ -65,18 +65,37 @@ html, body, #root {
 
 /* ─── Liquid Glass System (App) ─────────────────────────────── */
 
-/* Card glass — light mode */
+/*
+ * NOTE TECHNIQUE : backdrop-filter ne fonctionne pas à travers overflow-y-auto.
+ * On utilise donc un gradient direct sur les cartes + box-shadow pour l'effet glass.
+ * Le fond global utilise background-attachment:fixed pour être toujours visible.
+ */
+
+/* Dashboard wrapper — fond fixe (ne scroll pas) */
+.dashboard-bg {
+  background:
+    radial-gradient(ellipse at 15% 40%, rgba(59, 91, 245, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 15%, rgba(147, 51, 234, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 55% 85%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+    #E8EBF5;
+  background-attachment: fixed;
+}
+
+/* Card glass — couleur directe visible sans backdrop-filter */
 .glass-light {
-  background: rgba(255, 255, 255, 0.62) !important;
-  backdrop-filter: blur(20px) saturate(180%) brightness(1.02) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.02) !important;
-  border: 1px solid rgba(255, 255, 255, 0.82) !important;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(240, 243, 255, 0.80) 50%,
+    rgba(235, 240, 255, 0.75) 100%
+  ) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
   border-top-color: rgba(255, 255, 255, 1) !important;
   box-shadow:
-    0 4px 24px rgba(40, 80, 200, 0.06),
-    0 1px 4px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.02) !important;
+    0 2px 16px rgba(59, 91, 245, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(59, 91, 245, 0.04) !important;
   position: relative;
   overflow: hidden;
 }
@@ -87,9 +106,9 @@ html, body, #root {
   border-radius: inherit;
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.55) 0%,
-    rgba(255, 255, 255, 0.08) 35%,
-    transparent 65%
+    rgba(255, 255, 255, 0.70) 0%,
+    rgba(200, 210, 255, 0.10) 40%,
+    transparent 70%
   );
   pointer-events: none;
   z-index: 0;
@@ -98,31 +117,37 @@ html, body, #root {
 
 /* Sidebar glass — dark */
 .glass-sidebar {
-  background: rgba(8, 14, 30, 0.90) !important;
-  backdrop-filter: blur(32px) saturate(160%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(160%) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: rgba(8, 14, 30, 0.96) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
   box-shadow:
-    1px 0 0 rgba(255, 255, 255, 0.03),
-    4px 0 32px rgba(0, 0, 0, 0.30) !important;
+    1px 0 0 rgba(255, 255, 255, 0.04),
+    4px 0 32px rgba(0, 0, 0, 0.35) !important;
 }
 
-/* Topbar glass — light */
+/* Topbar glass — semi-transparent avec tint bleu */
 .glass-topbar {
-  background: rgba(255, 255, 255, 0.70) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.88) !important;
+  background: linear-gradient(
+    to right,
+    rgba(240, 243, 255, 0.92) 0%,
+    rgba(248, 250, 255, 0.95) 100%
+  ) !important;
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+  border-bottom: 1px solid rgba(200, 210, 255, 0.40) !important;
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.9),
-    0 4px 20px rgba(40, 80, 200, 0.05) !important;
+    0 4px 20px rgba(59, 91, 245, 0.06) !important;
 }
 
 /* Bottom nav glass — mobile */
 .glass-bottom-nav {
-  background: rgba(255, 255, 255, 0.78) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.92) !important;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06) !important;
+  background: linear-gradient(
+    to top,
+    rgba(240, 243, 255, 0.96) 0%,
+    rgba(248, 250, 255, 0.92) 100%
+  ) !important;
+  backdrop-filter: blur(20px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+  border-top: 1px solid rgba(200, 210, 255, 0.40) !important;
+  box-shadow: 0 -4px 24px rgba(59, 91, 245, 0.06) !important;
 }

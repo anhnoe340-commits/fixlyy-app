@@ -50,7 +50,7 @@ export default function Dashboard() {
   const accent = BRAND
 
   return (
-    <div className="flex min-h-screen text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif", background: 'radial-gradient(ellipse at 15% 40%, rgba(59,91,245,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 15%, rgba(147,51,234,0.12) 0%, transparent 50%), radial-gradient(ellipse at 60% 85%, rgba(59,130,246,0.10) 0%, transparent 50%), #EEF0F8' }}>
+    <div className="dashboard-bg flex min-h-screen text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
       {/* Overlay mobile sidebar */}
       {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/40 z-10" onClick={() => setSidebarOpen(false)} />}
 
