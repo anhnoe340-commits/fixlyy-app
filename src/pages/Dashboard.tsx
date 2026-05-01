@@ -2385,6 +2385,8 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
   const [portalLoading, setPortalLoading] = useState(false)
+  const [billing, setBilling] = useState<'monthly'|'annual'>('monthly')
+  const [associates, setAssociates] = useState(2)
 
   async function openPortal() {
     setPortalLoading(true)
@@ -2437,10 +2439,32 @@ function SubscriptionPage({ accent }: { accent: string }) {
     })
   }, [user])
 
+  function getVolDiscount(n: number) { return n >= 20 ? 0.15 : n >= 10 ? 0.10 : n >= 5 ? 0.05 : 0 }
+  function calcEquipeUnit(n: number, bill: 'monthly'|'annual') {
+    const vol = getVolDiscount(n)
+    const ann = bill === 'annual' ? 0.20 : 0
+    return Math.round(50 * (1 - vol) * (1 - ann) * 100) / 100
+  }
+
   const plans = [
-    { id: 0, name: 'Solo',   price: 79,  priceId: 'price_1TPhYzBKWw2SqpykiRQX0buQ', desc: '150 appels inclus · 1 artisan',   features: ['Secrétaire IA 24/7', 'Email résumé après appel', 'Prise de RDV', 'Support email'] },
-    { id: 1, name: 'Pro',    price: 149, priceId: 'price_1TPhYzBKWw2SqpykAnnArDEa', desc: 'Appels illimités · 1 artisan',     features: ['Tout Solo inclus', 'Appels illimités', 'Transfert intelligent', 'Statistiques avancées'], popular: true },
-    { id: 2, name: 'Équipe', price: 249, priceId: 'price_1TPhZ3BKWw2SqpykywFTJLNn', desc: 'Appels illimités · 5 artisans',    features: ["Tout Pro inclus", "Jusqu'à 5 artisans", 'Tableau de bord équipe', 'Support prioritaire'] },
+    { id: 0, planId: 'starter', name: 'Solo',
+      monthly: { price: 79,  priceId: 'price_1TSKJzBKWw2SqpykhIdwLhbJ' },
+      annual:  { price: 63,  priceId: 'price_1TSKK0BKWw2SqpykIzfui0ry' },
+      desc: "Idéal pour l'artisan indépendant",
+      features: ["Jusqu'à 150 appels/mois", 'Secrétaire IA 24h/24, 7j/7', 'SMS récap en 30 secondes', '1 utilisateur', 'Support par email', 'Mise en service gratuite'],
+    },
+    { id: 1, planId: 'pro', name: 'Pro', popular: true,
+      monthly: { price: 149, priceId: 'price_1TSKK0BKWw2Sqpyk74ohhi3D' },
+      annual:  { price: 119, priceId: 'price_1TSKK1BKWw2SqpykxJvVWoq0' },
+      desc: 'Pour les artisans avec un bon volume',
+      features: ['Appels illimités', 'Tout Solo inclus', 'Qualification des urgences', 'Planification des RDV', "Rapport d'appels hebdomadaire", 'Intégration Google Calendar', 'Statistiques détaillées', "Jusqu'à 3 utilisateurs", 'Support prioritaire par email', 'Numéro dédié'],
+    },
+    { id: 2, planId: 'expert', name: 'Équipe',
+      monthly: { price: 50,  priceId: 'price_1TSKK1BKWw2Sqpykad4ASHaC' },
+      annual:  { price: 40,  priceId: 'price_1TSKK1BKWw2SqpykBejZA4Un' },
+      desc: 'Pour les TPE et petites équipes',
+      features: ['Tout Pro inclus', 'Appels illimités multi-lignes', 'Utilisateurs illimités', 'Multi-numéros', 'Tableau de bord équipe', 'Reporting hebdomadaire', 'Support prioritaire dédié'],
+    },
   ]
 
   async function handleCheckout() {
@@ -2451,11 +2475,15 @@ function SubscriptionPage({ accent }: { accent: string }) {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Non authentifié')
       const plan = plans[selected]
+      const tier = billing === 'annual' ? plan.annual : plan.monthly
       const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
-          priceId: plan.priceId,
+          priceId: tier.priceId,
+          planId: plan.planId,
+          associates_count: plan.planId === 'expert' ? associates : 1,
+          billing,
           trade: profile?.company_type ?? '',
           company: profile?.company_name ?? '',
           email: user?.email ?? '',
@@ -2571,16 +2599,35 @@ function SubscriptionPage({ accent }: { accent: string }) {
         <p className="text-xs text-gray-400 mt-0.5">Sans engagement · annulation à tout moment</p>
       </div>
 
+      {/* ── Toggle mensuel / annuel ── */}
+      <div className="flex items-center justify-center gap-3">
+        <button onClick={() => setBilling('monthly')}
+          className="text-xs font-semibold px-4 py-1.5 rounded-full transition-all"
+          style={{ background: billing === 'monthly' ? accent : '#F3F4F6', color: billing === 'monthly' ? '#fff' : '#6B7280' }}>
+          Mensuel
+        </button>
+        <button onClick={() => setBilling('annual')}
+          className="text-xs font-semibold px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5"
+          style={{ background: billing === 'annual' ? accent : '#F3F4F6', color: billing === 'annual' ? '#fff' : '#6B7280' }}>
+          Annuel
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: billing === 'annual' ? 'rgba(255,255,255,0.25)' : '#DCFCE7', color: billing === 'annual' ? '#fff' : '#166534' }}>−20%</span>
+        </button>
+      </div>
+
       {/* ── Plans ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {plans.map((p) => {
-          const isActive = selected === p.id
+          const isSelected = selected === p.id
+          const tier = billing === 'annual' ? p.annual : p.monthly
+          const isEquipe = p.planId === 'expert'
+          const unitPrice = isEquipe ? calcEquipeUnit(associates, billing) : tier.price
+          const totalPrice = isEquipe ? Math.round(unitPrice * associates * 100) / 100 : tier.price
           return (
             <div key={p.id} onClick={() => setSelected(p.id)}
               className="bg-white rounded-2xl p-5 cursor-pointer transition-all relative overflow-hidden"
               style={{
-                border: isActive ? `2px solid ${accent}` : '1px solid #F3F4F6',
-                boxShadow: isActive ? `0 0 0 4px ${accent}12` : '0 1px 3px 0 rgb(0 0 0/0.05)',
+                border: isSelected ? `2px solid ${accent}` : '1px solid #F3F4F6',
+                boxShadow: isSelected ? `0 0 0 4px ${accent}12` : '0 1px 3px 0 rgb(0 0 0/0.05)',
               }}>
               {p.popular && (
                 <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
@@ -2589,9 +2636,35 @@ function SubscriptionPage({ accent }: { accent: string }) {
               )}
               <div className={p.popular ? 'pt-5' : ''}>
                 <p className="font-bold text-gray-900 mb-1">{p.name}</p>
-                <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
-                  {p.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
-                </p>
+                {isEquipe ? (
+                  <>
+                    <p className="text-[22px] font-bold tracking-tight leading-none" style={{ color: accent }}>
+                      {unitPrice}€<span className="text-xs font-normal text-gray-400"> /utilisateur/mois</span>
+                    </p>
+                    <p className="text-sm font-semibold text-gray-700 mb-1">
+                      {associates} × {unitPrice}€ = <span style={{ color: accent }}>{totalPrice}€/mois</span>
+                    </p>
+                    {/* Compteur utilisateurs */}
+                    <div className="flex items-center gap-2 mb-3" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setAssociates(n => Math.max(2, n - 1))}
+                        className="w-6 h-6 rounded-full text-sm font-bold flex items-center justify-center transition-opacity hover:opacity-70"
+                        style={{ background: accent + '15', color: accent }}>−</button>
+                      <span className="text-xs font-semibold text-gray-700 w-20 text-center">{associates} utilisateur{associates > 1 ? 's' : ''}</span>
+                      <button onClick={() => setAssociates(n => Math.min(30, n + 1))}
+                        className="w-6 h-6 rounded-full text-sm font-bold flex items-center justify-center transition-opacity hover:opacity-70"
+                        style={{ background: accent + '15', color: accent }}>+</button>
+                    </div>
+                    {getVolDiscount(associates) > 0 && (
+                      <p className="text-[10px] font-semibold mb-3" style={{ color: accent }}>
+                        −{Math.round(getVolDiscount(associates) * 100)}% réduction volume{billing === 'annual' ? ' + −20% annuel' : ''}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
+                    {tier.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 mb-4">{p.desc}</p>
                 <div className="flex flex-col gap-2">
                   {p.features.map((f, j) => (
