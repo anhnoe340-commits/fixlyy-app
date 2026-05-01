@@ -282,12 +282,7 @@ export default function Onboarding({ onDone }: Props) {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-md"
-            style={{ background: `linear-gradient(135deg, ${BRAND}, #4070e8)` }}>
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <path d="M5 5l4 4m0 0a9 9 0 1012.728 12.728M9 9L5 13m4-4l4-4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
+          <img src="/logo-icon.png" alt="Fixlyy" className="w-16 h-16 object-contain" />
         </div>
 
         <div className="w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-4"
