@@ -50,12 +50,12 @@ export default function Dashboard() {
   const accent = BRAND
 
   return (
-    <div className="flex min-h-screen bg-[#F5F5F4] text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
+    <div className="flex min-h-screen text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif", background: 'radial-gradient(ellipse at 20% 50%, rgba(59,91,245,0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(147,51,234,0.04) 0%, transparent 50%), #F2F4F8' }}>
       {/* Overlay mobile sidebar */}
       {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/40 z-10" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar — dark */}
-      <aside className={`w-56 bg-[#0F172A] flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+      <aside className={`glass-sidebar w-56 flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
 
         {/* Logo + entreprise */}
         <div className="px-4 py-4 flex items-center gap-3 border-b border-white/10">
@@ -116,7 +116,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Bottom nav — mobile uniquement */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-20 flex h-14 safe-bottom">
+      <nav className="glass-bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-20 flex h-14 safe-bottom">
         {([
           { p: 'today',    icon: <HomeIcon />,     label: 'Accueil' },
           { p: 'calls',    icon: <PhoneIcon />,    label: 'Appels' },
@@ -135,7 +135,7 @@ export default function Dashboard() {
       {/* Main */}
       <div className="flex-1 flex flex-col md:ml-56">
         {/* Topbar */}
-        <header className="sticky top-0 z-10 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6 h-[52px]">
+        <header className="glass-topbar sticky top-0 z-10 flex items-center justify-between px-4 md:px-6 h-[52px]">
           <div className="flex items-center gap-3">
             <button className="md:hidden p-1.5 -ml-1 text-gray-500 hover:text-gray-700 transition-colors" onClick={() => setSidebarOpen(o => !o)}>
               <MenuIcon />
@@ -2646,7 +2646,7 @@ function PageHeader({ title, sub }: { title: string; sub: string }) {
 }
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-white border border-gray-100 rounded-2xl p-5 shadow-sm ${className}`}>{children}</div>
+  return <div className={`glass-light rounded-2xl p-5 ${className}`}>{children}</div>
 }
 
 function SettingsHeader({ section, title }: { section: string; title: string }) {
