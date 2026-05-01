@@ -61,20 +61,20 @@ const PLANS = [
   {
     id: 'starter', name: 'Solo', calls: '150 appels/mois',
     features: ['Secrétaire IA 24/7', 'SMS résumé en 30 sec', 'Prise de RDV'],
-    monthly: { price: '79€', priceId: 'price_1TJv9uB5dBerNSsDbvCQFO2P' },
-    annual:  { price: '63€', priceId: 'price_1TMyqSB5dBerNSsDWuMjQuNv', yearly: '756€' },
+    monthly: { price: '79€', priceId: 'price_1TSKJzBKWw2SqpykhIdwLhbJ' },
+    annual:  { price: '63€', priceId: 'price_1TSKK0BKWw2SqpykIzfui0ry', yearly: '756€' },
   },
   {
     id: 'pro', name: 'Pro', calls: 'Appels illimités',
     features: ['Tout Solo inclus', 'Transfert d\'appel', 'Statistiques'], popular: true,
-    monthly: { price: '149€', priceId: 'price_1TJv9uB5dBerNSsDpOIyE2UP' },
-    annual:  { price: '119€', priceId: 'price_1TMyqTB5dBerNSsDxdralW4k', yearly: '1 428€' },
+    monthly: { price: '149€', priceId: 'price_1TSKK0BKWw2Sqpyk74ohhi3D' },
+    annual:  { price: '119€', priceId: 'price_1TSKK1BKWw2SqpykxJvVWoq0', yearly: '1 428€' },
   },
   {
     id: 'expert', name: 'Équipe', calls: 'Illimité · jusqu\'à 5 artisans',
     features: ['Tout Pro inclus', 'Multi-artisans', 'Support prioritaire'],
-    monthly: { price: '249€', priceId: 'price_1TJv9vB5dBerNSsDlnsXltWh' },
-    annual:  { price: '199€', priceId: 'price_1TMyqTB5dBerNSsDIhqeOKLX', yearly: '2 388€' },
+    monthly: { price: '249€', priceId: 'price_1TSKK1BKWw2Sqpykad4ASHaC' },
+    annual:  { price: '199€', priceId: 'price_1TSKK1BKWw2SqpykBejZA4Un', yearly: '2 388€' },
   },
 ]
 

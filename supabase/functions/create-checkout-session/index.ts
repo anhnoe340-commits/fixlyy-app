@@ -16,27 +16,35 @@ serve(async (req) => {
 
   const { priceId, trade, company, email } = await req.json();
 
-  // Créer ou récupérer le customer Stripe
-  const existing = await stripe.customers.list({ email: user.email!, limit: 1 });
-  const customer = existing.data[0] ?? await stripe.customers.create({
-    email: user.email!,
-    name: company,
-    metadata: { supabase_uid: user.id, trade },
-  });
+  try {
+    // Créer ou récupérer le customer Stripe
+    const existing = await stripe.customers.list({ email: user.email!, limit: 1 });
+    const customer = existing.data[0] ?? await stripe.customers.create({
+      email: user.email!,
+      name: company,
+      metadata: { supabase_uid: user.id, trade },
+    });
 
-  // Créer la session Stripe Checkout
-  const session = await stripe.checkout.sessions.create({
-    customer: customer.id,
-    mode: 'subscription',
-    line_items: [{ price: priceId, quantity: 1 }],
-    metadata: { supabase_uid: user.id, company, trade },
-    subscription_data: { trial_period_days: 7, metadata: { supabase_uid: user.id } },
-    success_url: `${Deno.env.get('APP_URL') || 'https://app.fixlyy.fr'}/?checkout=success`,
-    cancel_url: `${Deno.env.get('APP_URL') || 'https://app.fixlyy.fr'}/`,
-    allow_promotion_codes: true,
-    billing_address_collection: 'auto',
-    locale: 'fr',
-  });
+    // Créer la session Stripe Checkout
+    const session = await stripe.checkout.sessions.create({
+      customer: customer.id,
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      metadata: { supabase_uid: user.id, company, trade },
+      subscription_data: { trial_period_days: 7, metadata: { supabase_uid: user.id } },
+      success_url: `${Deno.env.get('APP_URL') || 'https://app.fixlyy.fr'}/?checkout=success`,
+      cancel_url: `${Deno.env.get('APP_URL') || 'https://app.fixlyy.fr'}/`,
+      allow_promotion_codes: true,
+      billing_address_collection: 'auto',
+      locale: 'fr',
+    });
 
-  return new Response(JSON.stringify({ url: session.url }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ url: session.url }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+  } catch (e: any) {
+    console.error('Stripe error:', e.message);
+    return new Response(
+      JSON.stringify({ error: e.message }),
+      { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } }
+    );
+  }
 });
