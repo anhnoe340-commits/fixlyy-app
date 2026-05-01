@@ -32,6 +32,7 @@ export default function Dashboard() {
   const { profile, uploadLogo } = useProfile()
   const [page, setPage] = useState<Page>('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // Ferme la sidebar mobile à chaque changement de page
   useEffect(() => { setSidebarOpen(false) }, [page])
@@ -55,17 +56,27 @@ export default function Dashboard() {
       {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/40 z-10" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar — dark */}
-      <aside className={`glass-sidebar w-56 flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+      <aside className={`glass-sidebar w-56 flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${sidebarCollapsed ? 'md:-translate-x-full' : 'md:translate-x-0'}`}>
 
         {/* Logo + entreprise — h-[52px] pour aligner avec la topbar */}
         <div className="px-4 h-[52px] flex items-center gap-3 border-b border-white/10 flex-shrink-0">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: BRAND }}>
             {(profile.company_name || 'A')[0].toUpperCase()}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="font-semibold text-[13px] text-white truncate leading-tight">{profile.company_name || 'Mon entreprise'}</p>
             <p className="text-[11px] text-slate-500 truncate">{profile.twilio_number || 'N° en cours…'}</p>
           </div>
+          {/* Bouton collapse — desktop uniquement */}
+          <button
+            onClick={() => setSidebarCollapsed(true)}
+            className="hidden md:flex w-6 h-6 items-center justify-center rounded-md text-slate-500 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+            title="Réduire la sidebar"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </button>
         </div>
 
         {/* Navigation */}
@@ -133,13 +144,27 @@ export default function Dashboard() {
       </nav>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col md:ml-56">
+      <div className={`flex-1 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:ml-0' : 'md:ml-56'}`}>
         {/* Topbar */}
         <header className="glass-topbar sticky top-0 z-10 flex items-center justify-between px-4 md:px-6 h-[52px]">
           <div className="flex items-center gap-3">
+            {/* Bouton burger mobile */}
             <button className="md:hidden p-1.5 -ml-1 text-gray-500 hover:text-gray-700 transition-colors" onClick={() => setSidebarOpen(o => !o)}>
               <MenuIcon />
             </button>
+            {/* Bouton réouvrir sidebar — desktop, visible uniquement si collapsed */}
+            {sidebarCollapsed && (
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                className="hidden md:flex p-1.5 -ml-1 text-gray-500 hover:text-gray-700 transition-colors"
+                title="Ouvrir la sidebar"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <path d="M9 3v18"/>
+                </svg>
+              </button>
+            )}
             <span className="text-gray-700 font-medium text-sm">{PAGE_LABELS[page]}</span>
           </div>
           <div className="flex items-center gap-3">
