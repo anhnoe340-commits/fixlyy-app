@@ -60,21 +60,51 @@ const VOICE_OPTIONS = [
 const PLANS = [
   {
     id: 'starter', name: 'Solo', calls: '150 appels/mois',
-    features: ['Secrétaire IA 24/7', 'SMS résumé en 30 sec', 'Prise de RDV'],
+    desc: 'Idéal pour l\'artisan indépendant',
+    features: [
+      'Jusqu\'à 150 appels/mois',
+      'Secrétaire IA 24h/24, 7j/7',
+      'SMS récap en 30 secondes',
+      '1 utilisateur',
+      'Support par email',
+      'Mise en service gratuite',
+    ],
     monthly: { price: '79€', priceId: 'price_1TSKJzBKWw2SqpykhIdwLhbJ' },
     annual:  { price: '63€', priceId: 'price_1TSKK0BKWw2SqpykIzfui0ry', yearly: '756€' },
   },
   {
     id: 'pro', name: 'Pro', calls: 'Appels illimités',
-    features: ['Tout Solo inclus', 'Transfert d\'appel', 'Statistiques'], popular: true,
+    desc: 'Pour les artisans avec un bon volume',
+    features: [
+      'Appels illimités',
+      'Tout ce qui est inclus dans Solo',
+      'Qualification des urgences',
+      'Planification des RDV',
+      'Rapport d\'appels hebdomadaire',
+      'Intégration Google Calendar',
+      'Statistiques détaillées',
+      'Jusqu\'à 3 utilisateurs',
+      'Support prioritaire par email',
+      'Numéro de téléphone dédié',
+    ],
+    popular: true,
     monthly: { price: '149€', priceId: 'price_1TSKK0BKWw2Sqpyk74ohhi3D' },
     annual:  { price: '119€', priceId: 'price_1TSKK1BKWw2SqpykxJvVWoq0', yearly: '1 428€' },
   },
   {
-    id: 'expert', name: 'Équipe', calls: 'Illimité · jusqu\'à 5 artisans',
-    features: ['Tout Pro inclus', 'Multi-artisans', 'Support prioritaire'],
-    monthly: { price: '249€', priceId: 'price_1TSKK1BKWw2Sqpykad4ASHaC' },
-    annual:  { price: '199€', priceId: 'price_1TSKK1BKWw2SqpykBejZA4Un', yearly: '2 388€' },
+    id: 'expert', name: 'Équipe', calls: 'Illimité · utilisateurs illimités',
+    desc: 'Pour les TPE et petites équipes',
+    features: [
+      'Tout ce qui est inclus dans Pro',
+      'Appels illimités sur plusieurs lignes',
+      'Utilisateurs illimités',
+      'Multi-numéros',
+      'Tableau de bord équipe',
+      'Reporting hebdomadaire',
+      'Support prioritaire dédié',
+    ],
+    monthly: { price: '50€', priceId: 'price_1TSKK1BKWw2Sqpykad4ASHaC' },
+    annual:  { price: '40€', priceId: 'price_1TSKK1BKWw2SqpykBejZA4Un', yearly: 'Sur devis' },
   },
 ]
 
@@ -671,35 +701,45 @@ export default function OnboardingPage({ userEmail }: Props) {
             </div>
 
             {/* Plans */}
-            <div className="flex flex-col gap-2.5 mb-5">
+            <div className="flex flex-col gap-3 mb-5">
               {PLANS.map(p => {
                 const pricing = billing === 'annual' ? p.annual : p.monthly
+                const isSelected = selectedPlan === p.id
+                const isEquipe = p.id === 'expert'
                 return (
                   <button key={p.id} onClick={() => setSelectedPlan(p.id)}
-                    className={`relative p-4 rounded-xl border-2 text-left transition-all ${selectedPlan === p.id ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                    className={`relative p-4 rounded-xl border-2 text-left transition-all ${isSelected ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300'}`}>
                     {p.popular && (
                       <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: BRAND }}>
-                        Populaire
+                        Recommandé
                       </span>
                     )}
-                    <div className="flex items-baseline gap-1.5 mb-1 flex-wrap">
-                      <span className="text-lg font-bold">{pricing.price}</span>
-                      <span className="text-xs text-gray-400">/mois</span>
-                      <span className="text-sm font-semibold text-gray-700 ml-1">{p.name}</span>
-                      <span className="text-xs text-gray-400">· {p.calls}</span>
+                    {/* Header */}
+                    <div className="flex items-baseline gap-1.5 mb-0.5 flex-wrap pr-16">
+                      <span className="text-xl font-black">{pricing.price}</span>
+                      <span className="text-xs text-gray-400">{isEquipe ? '/utilisateur/mois' : '/mois'}</span>
+                      <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
                     </div>
-                    {billing === 'annual' && (
-                      <p className="text-[10px] text-emerald-600 font-medium mb-1">
-                        Facturé {p.annual.yearly}/an · 2 mois offerts
+                    <p className="text-[11px] text-gray-400 mb-2">{p.desc}</p>
+                    {billing === 'annual' && !isEquipe && (
+                      <p className="text-[10px] text-emerald-600 font-medium mb-2">
+                        −20% · {p.annual.yearly !== 'Sur devis' ? `Économisez avec l'annuel` : 'Tarif sur devis'}
                       </p>
                     )}
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {p.features.map((f, j) => (
-                        <span key={j} className="text-[10px] text-gray-500 flex items-center gap-1">
-                          <span className="text-emerald-500">✓</span> {f}
+                    {/* Features */}
+                    <div className="grid grid-cols-1 gap-1">
+                      {p.features.slice(0, isSelected ? p.features.length : 3).map((f, j) => (
+                        <span key={j} className="text-[11px] text-gray-600 flex items-center gap-1.5">
+                          <span className="text-emerald-500 font-bold">✓</span> {f}
                         </span>
                       ))}
+                      {!isSelected && p.features.length > 3 && (
+                        <span className="text-[11px] text-gray-400 italic">+ {p.features.length - 3} autres inclus…</span>
+                      )}
                     </div>
+                    {isEquipe && isSelected && (
+                      <p className="text-[10px] text-gray-400 mt-2 italic">Prix calculé selon le nombre d'utilisateurs · Contactez-nous pour un devis</p>
+                    )}
                   </button>
                 )
               })}
