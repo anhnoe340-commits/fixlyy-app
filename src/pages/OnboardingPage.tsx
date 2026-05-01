@@ -14,6 +14,7 @@ interface OnboardingData {
   phone: string
   email: string
   address: string
+  associates_count: number
   // Étape 3
   assistant_name: string
   assistant_voice: string
@@ -92,6 +93,7 @@ export default function OnboardingPage({ userEmail }: Props) {
     phone: '',
     email: userEmail,
     address: '',
+    associates_count: 1,
     assistant_name: 'Mia',
     assistant_voice: 'female-warm',
     greeting_open: "Bonjour, vous avez bien joint {NOM_ENTREPRISE}. Je suis {NOM_ASSISTANTE}, l'assistante de votre artisan. Comment puis-je vous aider ?",
@@ -174,6 +176,7 @@ export default function OnboardingPage({ userEmail }: Props) {
         phone: data.phone,
         email: data.email,
         address: data.address,
+        associates_count: data.associates_count,
         assistant_name: data.assistant_name,
         assistant_voice: data.assistant_voice,
         greeting_open: interpolate(data.greeting_open),
@@ -338,6 +341,27 @@ export default function OnboardingPage({ userEmail }: Props) {
                 <input value={data.address} onChange={e => update({ address: e.target.value })}
                   placeholder="12 rue de la Paix, 75001 Paris"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#2850c8] transition-colors" />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1.5">Nombre d'associés dans l'entreprise</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => update({ associates_count: Math.max(1, data.associates_count - 1) })}
+                    className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:border-[#2850c8] hover:text-[#2850c8] transition-colors text-lg font-medium select-none"
+                  >−</button>
+                  <span className="w-10 text-center text-base font-bold text-gray-800">{data.associates_count}</span>
+                  <button
+                    type="button"
+                    onClick={() => update({ associates_count: Math.min(30, data.associates_count + 1) })}
+                    className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:border-[#2850c8] hover:text-[#2850c8] transition-colors text-lg font-medium select-none"
+                  >+</button>
+                  <span className="text-xs text-gray-400">
+                    {data.associates_count === 1 ? 'Artisan solo' : `${data.associates_count} associés`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5">Permet de choisir le plan adapté à votre équipe</p>
               </div>
             </div>
 
