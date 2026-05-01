@@ -1834,9 +1834,9 @@ function HoursPage({ accent }: { accent: string }) {
                 <span className="text-sm font-medium text-gray-300 flex-1">Fermé</span>
               )}
               <button onClick={() => updateDay(i, 'on', !d.on)}
-                className="relative w-9 h-5 rounded-full transition-colors flex-shrink-0"
+                className="relative w-12 h-6 rounded-full transition-colors flex-shrink-0"
                 style={{ background: d.on ? accent : '#D1D5DB' }}>
-                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${d.on ? 'translate-x-6' : 'translate-x-0'}`} />
               </button>
             </div>
           ))}
@@ -2701,9 +2701,9 @@ function Toggle({ defaultOn, accent, onChange, className = '' }: { defaultOn: bo
   const [on, setOn] = useState(defaultOn)
   return (
     <button onClick={() => { setOn(!on); onChange?.(!on) }}
-      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${className}`}
+      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${className}`}
       style={{ background: on ? accent : '#D1D5DB' }}>
-      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0'}`} />
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${on ? 'translate-x-6' : 'translate-x-0'}`} />
     </button>
   )
 }
