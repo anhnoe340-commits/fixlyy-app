@@ -57,8 +57,8 @@ export default function Dashboard() {
       {/* Sidebar — dark */}
       <aside className={`glass-sidebar w-56 flex flex-col flex-shrink-0 fixed top-0 left-0 h-screen z-20 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
 
-        {/* Logo + entreprise */}
-        <div className="px-4 py-4 flex items-center gap-3 border-b border-white/10">
+        {/* Logo + entreprise — h-[52px] pour aligner avec la topbar */}
+        <div className="px-4 h-[52px] flex items-center gap-3 border-b border-white/10 flex-shrink-0">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: BRAND }}>
             {(profile.company_name || 'A')[0].toUpperCase()}
           </div>
