@@ -108,6 +108,24 @@ const PLANS = [
   },
 ]
 
+// ── Calcul prix Équipe ────────────────────────────────────────────────────────
+function getVolumeDiscount(count: number): number {
+  if (count >= 20) return 0.15;
+  if (count >= 10) return 0.10;
+  if (count >= 5)  return 0.05;
+  return 0;
+}
+
+function calcEquipePrice(count: number, annual: boolean): { unitPrice: number; total: number; discount: number } {
+  const baseUnit = 50;
+  const volumeDiscount = getVolumeDiscount(count);
+  const annualDiscount = annual ? 0.20 : 0;
+  const totalDiscount = 1 - (1 - volumeDiscount) * (1 - annualDiscount);
+  const unitPrice = Math.round(baseUnit * (1 - totalDiscount) * 100) / 100;
+  const total = Math.round(unitPrice * count * 100) / 100;
+  return { unitPrice, total, discount: totalDiscount };
+}
+
 interface Props { userEmail: string }
 
 export default function OnboardingPage({ userEmail }: Props) {
@@ -229,7 +247,15 @@ export default function OnboardingPage({ userEmail }: Props) {
       const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-        body: JSON.stringify({ priceId, trade: data.company_type, company: data.company_name, email: data.email }),
+        body: JSON.stringify({
+          priceId,
+          planId: selectedPlan,
+          associates_count: data.associates_count,
+          billing,
+          trade: data.company_type,
+          company: data.company_name,
+          email: data.email,
+        }),
       })
       const result = await res.json()
       if (!res.ok || result.error) throw new Error(result.error || result.message || `Erreur ${res.status}`)
@@ -715,19 +741,48 @@ export default function OnboardingPage({ userEmail }: Props) {
                       </span>
                     )}
                     {/* Header */}
-                    <div className="flex items-baseline gap-1.5 mb-0.5 flex-wrap pr-16">
-                      <span className="text-xl font-black">{pricing.price}</span>
-                      <span className="text-xs text-gray-400">{isEquipe ? '/utilisateur/mois' : '/mois'}</span>
-                      <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
-                    </div>
-                    <p className="text-[11px] text-gray-400 mb-2">{p.desc}</p>
-                    {billing === 'annual' && !isEquipe && (
-                      <p className="text-[10px] text-emerald-600 font-medium mb-2">
-                        −20% · {p.annual.yearly !== 'Sur devis' ? `Économisez avec l'annuel` : 'Tarif sur devis'}
-                      </p>
+                    {isEquipe ? (() => {
+                      const { unitPrice, total, discount } = calcEquipePrice(data.associates_count, billing === 'annual');
+                      const volumeDiscount = getVolumeDiscount(data.associates_count);
+                      return (
+                        <div className="mb-2">
+                          <div className="flex items-baseline gap-1.5 flex-wrap pr-16">
+                            <span className="text-xl font-black">{total}€</span>
+                            <span className="text-xs text-gray-400">/mois</span>
+                            <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-[11px] text-gray-500">
+                              {data.associates_count} utilisateur{data.associates_count > 1 ? 's' : ''} × {unitPrice}€
+                            </span>
+                            {volumeDiscount > 0 && (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                                −{Math.round(volumeDiscount * 100)}% volume
+                              </span>
+                            )}
+                            {billing === 'annual' && (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                                −20% annuel
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })() : (
+                      <>
+                        <div className="flex items-baseline gap-1.5 mb-0.5 flex-wrap pr-16">
+                          <span className="text-xl font-black">{pricing.price}</span>
+                          <span className="text-xs text-gray-400">/mois</span>
+                          <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mb-2">{p.desc}</p>
+                        {billing === 'annual' && (
+                          <p className="text-[10px] text-emerald-600 font-medium mb-2">−20% · 2 mois offerts</p>
+                        )}
+                      </>
                     )}
                     {/* Features */}
-                    <div className="grid grid-cols-1 gap-1">
+                    <div className="grid grid-cols-1 gap-1 mt-1">
                       {p.features.slice(0, isSelected ? p.features.length : 3).map((f, j) => (
                         <span key={j} className="text-[11px] text-gray-600 flex items-center gap-1.5">
                           <span className="text-emerald-500 font-bold">✓</span> {f}
@@ -737,9 +792,6 @@ export default function OnboardingPage({ userEmail }: Props) {
                         <span className="text-[11px] text-gray-400 italic">+ {p.features.length - 3} autres inclus…</span>
                       )}
                     </div>
-                    {isEquipe && isSelected && (
-                      <p className="text-[10px] text-gray-400 mt-2 italic">Prix calculé selon le nombre d'utilisateurs · Contactez-nous pour un devis</p>
-                    )}
                   </button>
                 )
               })}
