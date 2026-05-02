@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
@@ -1867,6 +1867,41 @@ function AssistantPage({ accent }: { accent: string }) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [syncingML, setSyncingML] = useState(false)
   const [mlDone, setMLDone] = useState(false)
+  const [playingVoice, setPlayingVoice] = useState(false)
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  const VOICES = [
+    { value: 'female-warm', label: 'Féminin conviviale' },
+    { value: 'female-pro',  label: 'Féminin professionnelle' },
+    { value: 'male-warm',   label: 'Masculin convivial' },
+    { value: 'male-pro',    label: 'Masculin professionnel' },
+  ]
+
+  async function previewVoice() {
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause()
+      voiceAudioRef.current = null
+      setPlayingVoice(false)
+      return
+    }
+    setPlayingVoice(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/voice-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ voice: profile?.assistant_voice || 'female-warm' }),
+      })
+      if (!res.ok) { setPlayingVoice(false); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      voiceAudioRef.current = audio
+      audio.onended = () => { setPlayingVoice(false); voiceAudioRef.current = null; URL.revokeObjectURL(url) }
+      audio.onerror = () => { setPlayingVoice(false); voiceAudioRef.current = null }
+      await audio.play()
+    } catch { setPlayingVoice(false) }
+  }
 
   function copyCode(code: string) {
     navigator.clipboard.writeText(code)
@@ -1933,9 +1968,9 @@ function AssistantPage({ accent }: { accent: string }) {
               placeholder="Mia" className={inputCls2} />
           </Field>
           <Field label="Type de voix">
-            <select value={profile.assistant_voice || ''} onChange={e => updateProfile({ assistant_voice: e.target.value })} className={inputCls2}>
-              {['Féminin conviviale', 'Féminin professionnelle', 'Féminin énergique', 'Masculin convivial', 'Masculin professionnel'].map(v => (
-                <option key={v} value={v}>{v}</option>
+            <select value={profile.assistant_voice || 'female-warm'} onChange={e => updateProfile({ assistant_voice: e.target.value })} className={inputCls2}>
+              {VOICES.map(v => (
+                <option key={v.value} value={v.value}>{v.label}</option>
               ))}
             </select>
           </Field>
@@ -1982,9 +2017,15 @@ function AssistantPage({ accent }: { accent: string }) {
             <p className="text-sm font-semibold">Prévisualisation de la voix</p>
             <p className="text-xs text-gray-400 mt-0.5">Écoutez un exemple avec les paramètres actuels</p>
           </div>
-          <button className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center gap-2 font-medium">
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><polygon points="3,1 11,6 3,11"/></svg>
-            Écouter
+          <button onClick={previewVoice}
+            className="text-xs px-4 py-2 rounded-xl border flex items-center gap-2 font-medium transition-all disabled:opacity-50"
+            style={playingVoice ? { background: accent, color: '#fff', borderColor: accent } : { borderColor: '#E5E7EB', color: '#6B7280' }}>
+            {playingVoice ? (
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><rect x="2" y="1" width="3" height="10"/><rect x="7" y="1" width="3" height="10"/></svg>
+            ) : (
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><polygon points="3,1 11,6 3,11"/></svg>
+            )}
+            {playingVoice ? 'Arrêter' : 'Écouter'}
           </button>
         </div>
       </Card>
