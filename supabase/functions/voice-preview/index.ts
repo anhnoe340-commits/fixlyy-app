@@ -12,13 +12,14 @@ const VOICE_IDS: Record<string, string> = {
   'male-pro':    'BVBq6HVJVdnwOMJOqvy9',
 }
 
-const PREVIEW_TEXT = "Bonjour, vous êtes bien chez votre artisan. Je suis votre assistante Fixlyy. Comment puis-je vous aider ?"
+const DEFAULT_TEXT = "Bonjour, vous êtes bien chez votre artisan. Je suis votre assistante. Comment puis-je vous aider ?"
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   try {
-    const { voice } = await req.json()
+    const { voice, text } = await req.json()
+    const previewText = (text && text.trim().length > 0) ? text.trim() : DEFAULT_TEXT
     const voiceId = VOICE_IDS[voice]
     if (!voiceId) {
       return new Response(JSON.stringify({ error: 'Voix inconnue' }), {
@@ -40,7 +41,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text: PREVIEW_TEXT,
+        text: previewText,
         model_id: 'eleven_multilingual_v2',
         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),

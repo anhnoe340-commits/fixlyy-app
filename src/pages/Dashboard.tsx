@@ -1869,6 +1869,7 @@ function AssistantPage({ accent }: { accent: string }) {
   const [mlDone, setMLDone] = useState(false)
   const [playingVoice, setPlayingVoice] = useState(false)
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
+  const [previewText, setPreviewText] = useState('')
 
   const VOICES = [
     { value: 'female-warm', label: 'Féminin conviviale' },
@@ -1890,7 +1891,7 @@ function AssistantPage({ accent }: { accent: string }) {
       const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/voice-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ voice: profile?.assistant_voice || 'female-warm' }),
+        body: JSON.stringify({ voice: profile?.assistant_voice || 'female-warm', text: previewText }),
       })
       if (!res.ok) { setPlayingVoice(false); return }
       const blob = await res.blob()
@@ -2012,13 +2013,13 @@ function AssistantPage({ accent }: { accent: string }) {
       </Card>
 
       <Card>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-sm font-semibold">Prévisualisation de la voix</p>
-            <p className="text-xs text-gray-400 mt-0.5">Écoutez un exemple avec les paramètres actuels</p>
+            <p className="text-xs text-gray-400 mt-0.5">Tapez n'importe quel texte et écoutez-le avec la voix sélectionnée</p>
           </div>
           <button onClick={previewVoice}
-            className="text-xs px-4 py-2 rounded-xl border flex items-center gap-2 font-medium transition-all disabled:opacity-50"
+            className="text-xs px-4 py-2 rounded-xl border flex items-center gap-2 font-medium transition-all flex-shrink-0 ml-4"
             style={playingVoice ? { background: accent, color: '#fff', borderColor: accent } : { borderColor: '#E5E7EB', color: '#6B7280' }}>
             {playingVoice ? (
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12"><rect x="2" y="1" width="3" height="10"/><rect x="7" y="1" width="3" height="10"/></svg>
@@ -2028,6 +2029,13 @@ function AssistantPage({ accent }: { accent: string }) {
             {playingVoice ? 'Arrêter' : 'Écouter'}
           </button>
         </div>
+        <textarea
+          value={previewText}
+          onChange={e => setPreviewText(e.target.value)}
+          placeholder={`Bonjour, vous êtes bien chez ${profile.company_name || 'votre artisan'}. Je suis ${profile.assistant_name || 'votre assistante'}. Comment puis-je vous aider ?`}
+          rows={3}
+          className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 resize-none"
+        />
       </Card>
 
         {/* Renvoi d'appel */}
