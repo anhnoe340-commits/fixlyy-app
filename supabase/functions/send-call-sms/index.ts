@@ -5,6 +5,7 @@ const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SERVI
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_AUTH = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
+const VAPI_API_KEY = Deno.env.get('VAPI_API_KEY')
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -40,12 +41,20 @@ serve(async (req) => {
     }
 
     const assistantId = message.assistant?.id
-    const summary = message.analysis?.summary || message.summary || ''
     const durationSec = Math.round((message.durationMs || 0) / 1000)
     const callerNumber = message.customer?.number || 'Inconnu'
     const callId = message.call?.id || ''
 
-    if (!assistantId || !summary) {
+    // structuredData fields are filled by the assistant in French (per prompt instructions)
+    const structuredData = message.analysis?.structuredData || {}
+    const callerName: string | null = structuredData.customerName || null
+    // smsBody is always in French (set in the assistant's multilingualBlock)
+    // fall back to auto-generated summary if smsBody not populated
+    const smsSummary: string = structuredData.smsBody || message.analysis?.summary || message.summary || ''
+    // reason = why the caller contacted (French if structuredData, otherwise summary)
+    const reason: string | null = structuredData.reason || structuredData.smsBody || message.analysis?.summary || null
+
+    if (!assistantId || !smsSummary) {
       return new Response('no summary', { headers: cors })
     }
 
@@ -61,27 +70,59 @@ serve(async (req) => {
       return new Response('no profile', { headers: cors })
     }
 
+    // Ensure Vapi analysisPlan generates summaries in French (one-time silent patch)
+    if (VAPI_API_KEY) {
+      try {
+        const getRes = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+          headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
+        })
+        if (getRes.ok) {
+          const assistant = await getRes.json()
+          const existingPlan = assistant.analysisPlan?.summaryPlan?.prompt || ''
+          if (!existingPlan.includes('français')) {
+            await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${VAPI_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                analysisPlan: {
+                  summaryPlan: {
+                    prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison de l'appel, (2) les informations importantes mentionnées (nom, téléphone, adresse si donné), (3) si c'est urgent ou non, (4) la prochaine action à faire. Maximum 3 phrases. Réponds UNIQUEMENT en français.",
+                  },
+                },
+              }),
+            })
+          }
+        }
+      } catch (e) {
+        console.error('analysisPlan patch failed (non-blocking):', e)
+      }
+    }
+
     // Build SMS
     const mins = Math.floor(durationSec / 60)
     const secs = durationSec % 60
     const duration = mins > 0 ? `${mins}min${secs > 0 ? ` ${secs}s` : ''}` : `${secs}s`
 
+    const callerLabel = callerName ? `${callerName} (${callerNumber})` : callerNumber
     const smsBody = [
-      `📞 Appel reçu (${duration}) — ${callerNumber}`,
+      `📞 Appel reçu (${duration}) — ${callerLabel}`,
       ``,
-      summary,
+      smsSummary,
       ``,
       `— ${profile.assistant_name || 'Votre assistante'} · Fixlyy`,
     ].join('\n')
 
     await sendSms(profile.twilio_number, profile.phone, smsBody)
 
-    // Save call to DB
+    // Save call to DB (columns match CallRow type in Dashboard.tsx)
     await supabase.from('calls').insert({
       artisan_id: profile.id,
-      caller_number: callerNumber,
+      caller_phone: callerNumber,
+      caller_name: callerName,
       duration_seconds: durationSec,
-      summary,
+      summary: smsSummary,
+      reason,
+      status: 'new',
       vapi_call_id: callId,
     }).select()
 
