@@ -389,8 +389,9 @@ serve(async (req) => {
   let body: {
     transfer_enabled?: boolean
     transfer_phone?: string
-    sync_urgency?: boolean       // true → met à jour le contexte métier dans le prompt
-    sync_multilingual?: boolean  // true → injecte les règles multilingues + bascule la voix ElevenLabs
+    sync_urgency?: boolean        // true → met à jour le contexte métier dans le prompt
+    sync_multilingual?: boolean   // true → injecte les règles multilingues + bascule la voix ElevenLabs
+    sync_analysis_plan?: boolean  // true → force le résumé d'appel en français
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
@@ -523,6 +524,19 @@ serve(async (req) => {
     }
 
     patch.model = { ...(patch.model ?? assistant.model), messages: updatedMessages }
+  }
+
+  // 4. Forcer les résumés d'appel en français via analysisPlan
+  if (body.sync_analysis_plan) {
+    const existingPrompt = assistant.analysisPlan?.summaryPlan?.prompt || ''
+    if (!existingPrompt.includes('français')) {
+      patch.analysisPlan = {
+        ...(assistant.analysisPlan || {}),
+        summaryPlan: {
+          prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison de l'appel, (2) les informations importantes (nom, téléphone, adresse si mentionnés), (3) si c'est urgent ou non, (4) la prochaine action à faire. Maximum 3 phrases. Réponds UNIQUEMENT en français, même si le client a parlé dans une autre langue.",
+        },
+      }
+    }
   }
 
   // ── PATCH VAPI ────────────────────────────────────────────────────────────────
