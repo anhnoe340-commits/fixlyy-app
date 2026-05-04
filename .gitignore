@@ -6,3 +6,11 @@ dist
 .DS_Store
 .parcel-cache
 bundle.html
+
+# Claude Code / Ruflo internals — ne pas committer
+.claude/
+.claude-flow/
+.swarm/
+.mcp.json
+ruvector.db
+CLAUDE.md
