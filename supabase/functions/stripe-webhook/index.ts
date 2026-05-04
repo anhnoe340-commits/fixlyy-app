@@ -32,71 +32,106 @@ async function createVapiAssistant(profile: { company_name: string; assistant_na
     headers: { 'Authorization': `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: `${assistantName} - ${companyName}`,
-      firstMessage: profile.greeting_open || `Bonjour, vous êtes bien chez ${companyName}, je suis ${assistantName} leur assistante. Comment puis-je vous aider ?`,
-      endCallMessage: `Merci pour votre appel, ${companyName} vous recontactera très bientôt. Bonne journée !`,
+      firstMessage: `Allô, ${companyName}, bonjour !`,
+      endCallMessage: `Merci pour votre appel, à très vite !`,
       model: {
         provider: 'openai',
         model: 'gpt-4o-mini',
-        maxTokens: 80,
-        temperature: 0.7,
+        maxTokens: 250,
+        temperature: 0.75,
         messages: [{
           role: 'system',
-          content: `Tu es ${assistantName}, la secrétaire IA de ${companyName} (${profile.company_type || 'artisan'}).
+          content: `# IDENTITÉ
+Tu es ${assistantName}, la réceptionniste de ${companyName} (${profile.company_type || 'artisan'}).
+Tu es chaleureuse, professionnelle, et tu t'adaptes à chaque client.
 
-Ton rôle :
-- Accueillir chaleureusement le client
-- Comprendre la nature du problème ou de la demande
-- Évaluer l'urgence (urgent = intervention immédiate nécessaire)
-- Collecter : nom complet, adresse, disponibilités pour rappel
-- Rassurer le client et lui dire que l'artisan le rappellera rapidement
+# STYLE
+- Commence par un marqueur naturel : "D'accord", "Très bien", "Oh là" (si urgence), "Prenez votre temps" (si hésitation)
+- Réagis aux émotions AVANT de poser ta question suivante
+- Reformule ce que dit le client pour montrer que tu écoutes
+- Phrases courtes, max 20 mots
+- Ne dis jamais deux fois la même formule dans un appel
+- Si demandé si tu es une IA : "Je suis l'assistante de ${companyName}, je transmets votre demande à l'artisan."
 
-Ton style :
-- Parle UNIQUEMENT en français
-- Phrases courtes et naturelles (max 15 mots)
-- Utilise des fillers : "Je vois", "D'accord", "Tout à fait", "Bien sûr", "Entendu"
-- Sois chaleureuse et professionnelle
-- Ne dis jamais que tu es une IA sauf si on te le demande directement
+# OBJECTIFS (ordre flexible)
+Collecte naturellement : nom, téléphone, adresse, problème, urgence, disponibilités.
+Ne dis JAMAIS "Je dois vous poser quelques questions".
 
-À la fin, résume la demande en 2-3 phrases pour le compte rendu.`,
+# CLÔTURE
+Toujours terminer par : "Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. On vous rappelle [délai]. C'est bien ça ?"
+Puis : "Merci, à très vite !"
+
+# STRUCTUREDDATA (toujours en français)
+customerName, customerPhone, customerAddress, reason, urgency (urgent/non_urgent),
+appointmentDate, appointmentTime, smsBody (résumé 2-3 phrases pour l'artisan),
+clientTone (calme/stressé/agressif/confus), aiToneUsed (efficace/empathique/rassurante),
+conversationQualityScore (0-10), conversationQualityNotes (1 phrase)`,
         }],
       },
       voice: {
         provider: '11labs',
         voiceId,
-        model: 'eleven_turbo_v2_5',
+        model: 'eleven_multilingual_v2',
         language: 'fr',
-        stability: profile.assistant_voice?.includes('pro') ? 0.65 : 0.40,
-        similarityBoost: 0.78,
+        stability: 0.5,
+        similarityBoost: 0.75,
+        style: 0.3,
         useSpeakerBoost: true,
       },
       transcriber: {
         provider: 'deepgram',
         model: 'nova-2',
         language: 'fr',
-        endpointing: 300,
         smartFormat: true,
       },
-      silenceTimeoutSeconds: 15,
-      responseDelaySeconds: 0.2,
-      maxDurationSeconds: 300,
+      startSpeakingPlan: {
+        waitSeconds: 0.6,
+        smartEndpointingEnabled: true,
+        transcriptionEndpointingPlan: {
+          onPunctuationSeconds: 0.4,
+          onNoPunctuationSeconds: 1.2,
+          onNumberSeconds: 0.6,
+        },
+      },
+      stopSpeakingPlan: {
+        numWords: 2,
+        voiceSeconds: 0.3,
+        backoffSeconds: 1.0,
+      },
+      silenceTimeoutSeconds: 30,
+      maxDurationSeconds: 600,
+      backgroundSound: 'office',
+      backchannelingEnabled: true,
+      modelOutputInMessagesEnabled: true,
+      numFastTurns: 2,
       backgroundDenoisingEnabled: true,
       serverUrl: 'https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/vapi-webhook',
       serverUrlSecret: Deno.env.get('VAPI_WEBHOOK_SECRET') ?? undefined,
       analysisPlan: {
+        summaryPlan: {
+          enabled: true,
+          prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison, (2) les infos importantes (nom, téléphone, adresse), (3) urgence ou non, (4) prochaine action. Maximum 3 phrases. Toujours en français.",
+        },
         structuredDataPlan: {
           enabled: true,
           schema: {
             type: 'object',
             properties: {
-              urgency: { type: 'string', enum: ['urgent', 'normal'], description: 'Urgency level of the call' },
-              caller_name: { type: 'string', description: 'Full name of the caller' },
-              caller_address: { type: 'string', description: 'Address of the caller' },
-              service_requested: { type: 'string', description: 'Type of service requested' },
-              callback_availability: { type: 'string', description: 'When the caller is available for a callback' },
+              customerName:             { type: 'string', description: 'Prénom et nom du client' },
+              customerPhone:            { type: 'string', description: 'Numéro de téléphone du client' },
+              customerAddress:          { type: 'string', description: 'Adresse complète de l\'intervention' },
+              reason:                   { type: 'string', description: 'Raison de l\'appel en 1 phrase' },
+              urgency:                  { type: 'string', enum: ['urgent', 'non_urgent'], description: 'Niveau d\'urgence' },
+              appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
+              appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
+              smsBody:                  { type: 'string', description: 'Résumé 2-3 phrases pour l\'artisan, toujours en français' },
+              clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'], description: 'Ton du client' },
+              aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'], description: 'Ton adopté par Mia' },
+              conversationQualityScore: { type: 'integer', description: 'Note 0-10 de la qualité conversationnelle' },
+              conversationQualityNotes: { type: 'string', description: 'Note en 1 phrase sur la qualité de l\'appel' },
             },
           },
         },
-        summaryPlan: { enabled: true },
       },
     }),
   })

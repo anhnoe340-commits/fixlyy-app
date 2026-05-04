@@ -366,6 +366,84 @@ function injectUrgencyInPrompt(currentPrompt: string, urgencyBlock: string): str
   return currentPrompt + MARKER_START + '\n' + urgencyBlock + '\n' + MARKER_END
 }
 
+// ── Prompt conversationnel ────────────────────────────────────────────────────
+function buildConversationalBasePrompt(assistantName: string, companyName: string, trade: string): string {
+  return `# IDENTITÉ
+Tu es ${assistantName}, la réceptionniste de ${companyName} (${trade}).
+Tu n'es pas un script. Tu es une vraie réceptionniste — chaleureuse, efficace, qui s'adapte à chaque client.
+
+# TON STYLE
+- Commence presque toujours par un marqueur naturel adapté au contexte
+- Urgence stressante : "Oh là", "Mince alors", "D'accord, on va gérer ça", "Bon, restez calme"
+- Demande standard : "Très bien", "D'accord", "Pas de souci", "Je vois"
+- Hésitation du client : "Prenez votre temps", "Pas de problème"
+- Confirmation : "Parfait", "Super", "C'est noté", "Impeccable"
+- Réagis aux émotions du client AVANT de poser ta question suivante
+- Reformule ce que dit le client pour montrer que tu écoutes ("14 rue de Vouillé dans le 15ème, c'est noté.")
+- Adapte ton débit : plus lent avec un client âgé, plus direct avec un professionnel pressé
+- Ne dis JAMAIS deux fois la même formule dans un même appel
+- Phrases courtes, max 20 mots par phrase
+
+# INFORMATIONS À COLLECTER (ordre flexible — suis la conversation)
+Tu as une liste mentale à cocher, pas un formulaire à remplir dans l'ordre :
+1. Nom du client
+2. Numéro de téléphone (à confirmer si nécessaire)
+3. Adresse précise de l'intervention
+4. Description du problème
+5. Niveau d'urgence
+6. Disponibilités pour le rappel ou le RDV
+
+⚠️ Ne dis JAMAIS "Je dois vous poser quelques questions". Collecte les infos naturellement.
+⚠️ Si le client donne plusieurs infos en une fois, coche-les toutes et passe aux suivantes.
+
+# GESTION DES CAS PARTICULIERS
+- Client veut parler à l'artisan : "Je peux essayer de vous le passer si c'est vraiment urgent — sinon je note votre demande et il vous rappelle très vite. Qu'est-ce qui vous arrange ?"
+- Client en colère : reste calme, ne te justifie pas. "Je comprends que ce soit énervant. On va régler ça ensemble, dites-moi ce qui se passe."
+- Client hésite à donner une info : explique pourquoi. "Je vous demande votre adresse pour planifier l'intervention au plus vite."
+- Client demande si tu es une IA : réponds honnêtement sans insister. "Je suis l'assistante de ${companyName}, je transmets votre demande directement à l'artisan. Qu'est-ce qui se passe ?"
+- Client digresse : suis brièvement puis reviens. "Je comprends. Du coup, pour [problème], vous m'avez dit que..."
+
+# CLÔTURE D'APPEL
+Toujours terminer par un récap avant de raccrocher :
+"Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème] — on vous rappelle [délai]. C'est bien ça ?"
+Puis une formule chaleureuse : "Merci de votre appel, à très vite !" ou "Bonne journée à vous !"
+
+# STRUCTUREDDATA À REMPLIR APRÈS L'APPEL (toujours en français)
+customerName, customerPhone, customerAddress, reason (1 phrase), urgency (urgent/non_urgent),
+appointmentDate, appointmentTime, smsBody (résumé 2-3 phrases pour l'artisan),
+clientTone (calme/stressé/agressif/confus), aiToneUsed (efficace/empathique/rassurante),
+conversationQualityScore (0-10 : 10 = client satisfait + infos complètes + appel naturel),
+conversationQualityNotes (1 phrase sur ce qui a bien ou mal fonctionné)`
+}
+
+// Remplace la base du prompt en préservant les blocs injectés (urgences, multilingual)
+function injectBaseInPrompt(currentPrompt: string, newBase: string): string {
+  const firstMarker = currentPrompt.indexOf('\n\n<!-- FIXLYY_')
+  if (firstMarker !== -1) {
+    return newBase + currentPrompt.slice(firstMarker)
+  }
+  return newBase
+}
+
+// Schema structuredData complet (qualité conversationnelle incluse)
+const FULL_STRUCTURED_DATA_SCHEMA = {
+  type: 'object',
+  properties: {
+    customerName:              { type: 'string', description: 'Prénom et nom du client' },
+    customerPhone:             { type: 'string', description: 'Numéro de téléphone du client' },
+    customerAddress:           { type: 'string', description: 'Adresse complète de l\'intervention' },
+    reason:                    { type: 'string', description: 'Raison de l\'appel en 1 phrase' },
+    urgency:                   { type: 'string', enum: ['urgent', 'non_urgent'], description: 'Niveau d\'urgence' },
+    appointmentDate:           { type: 'string', description: 'Date souhaitée si mentionnée' },
+    appointmentTime:           { type: 'string', description: 'Heure souhaitée si mentionnée' },
+    smsBody:                   { type: 'string', description: 'Résumé 2-3 phrases pour l\'artisan, toujours en français' },
+    clientTone:                { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'], description: 'Ton du client' },
+    aiToneUsed:                { type: 'string', enum: ['efficace', 'empathique', 'rassurante'], description: 'Ton adopté par Mia' },
+    conversationQualityScore:  { type: 'integer', description: 'Note 0-10 de la qualité conversationnelle' },
+    conversationQualityNotes:  { type: 'string', description: 'Note en 1 phrase sur la qualité de l\'appel' },
+  },
+}
+
 function normalizePhone(p: string): string {
   const digits = p.replace(/[\s\-\.]/g, '')
   if (digits.startsWith('+')) return digits
@@ -389,9 +467,10 @@ serve(async (req) => {
   let body: {
     transfer_enabled?: boolean
     transfer_phone?: string
-    sync_urgency?: boolean        // true → met à jour le contexte métier dans le prompt
-    sync_multilingual?: boolean   // true → injecte les règles multilingues + bascule la voix ElevenLabs
-    sync_analysis_plan?: boolean  // true → force le résumé d'appel en français
+    sync_urgency?: boolean           // true → met à jour le contexte métier dans le prompt
+    sync_multilingual?: boolean      // true → injecte les règles multilingues + bascule la voix ElevenLabs
+    sync_analysis_plan?: boolean     // true → force le résumé d'appel en français
+    sync_conversational?: boolean    // true → prompt conversationnel + paramètres Vapi naturels
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
@@ -400,7 +479,7 @@ serve(async (req) => {
   // Récupérer le profil
   const { data: profile } = await supabase
     .from('profiles')
-    .select('vapi_assistant_id, phone, assistant_name, company_type, transfer_phone')
+    .select('vapi_assistant_id, phone, assistant_name, company_name, company_type, transfer_phone')
     .eq('id', user.id)
     .single()
 
@@ -536,6 +615,80 @@ serve(async (req) => {
           prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison de l'appel, (2) les informations importantes (nom, téléphone, adresse si mentionnés), (3) si c'est urgent ou non, (4) la prochaine action à faire. Maximum 3 phrases. Réponds UNIQUEMENT en français, même si le client a parlé dans une autre langue.",
         },
       }
+    }
+  }
+
+  // 5. Prompt conversationnel + paramètres Vapi naturels
+  if (body.sync_conversational) {
+    const assistantName = profile.assistant_name || 'Mia'
+    const companyName   = profile.company_name   || 'votre artisan'
+    const trade         = profile.company_type    || 'artisan'
+
+    const newBase = buildConversationalBasePrompt(assistantName, companyName, trade)
+
+    const messages: any[] = (patch.model?.messages ?? assistant.model?.messages ?? [])
+    const sysIndex = messages.findIndex((m: any) => m.role === 'system')
+    const updatedMessages = [...messages]
+    if (sysIndex !== -1) {
+      const cur: string = messages[sysIndex].content ?? ''
+      updatedMessages[sysIndex] = { ...messages[sysIndex], content: injectBaseInPrompt(cur, newBase) }
+    } else {
+      updatedMessages.unshift({ role: 'system', content: newBase })
+    }
+
+    patch.model = {
+      ...(patch.model ?? assistant.model),
+      messages: updatedMessages,
+      temperature: 0.75,
+      maxTokens: 250,
+    }
+
+    // Voix plus naturelle (expressivité légère, variations autorisées)
+    patch.voice = {
+      ...(patch.voice ?? assistant.voice ?? {}),
+      stability: 0.5,
+      similarityBoost: 0.75,
+      style: 0.3,
+      useSpeakerBoost: true,
+    }
+
+    // Timing conversationnel : laisse le client finir, Mia s'arrête vite si interrompue
+    patch.startSpeakingPlan = {
+      waitSeconds: 0.6,
+      smartEndpointingEnabled: true,
+      transcriptionEndpointingPlan: {
+        onPunctuationSeconds: 0.4,
+        onNoPunctuationSeconds: 1.2,
+        onNumberSeconds: 0.6,
+      },
+    }
+    patch.stopSpeakingPlan = {
+      numWords: 2,
+      voiceSeconds: 0.3,
+      backoffSeconds: 1.0,
+    }
+
+    patch.silenceTimeoutSeconds      = 30
+    patch.maxDurationSeconds         = 600
+    patch.backgroundSound            = 'office'
+    patch.backchannelingEnabled      = true
+    patch.modelOutputInMessagesEnabled = true
+    patch.numFastTurns               = 2
+
+    // Premier message plus naturel
+    patch.firstMessage = `Allô, ${companyName}, bonjour !`
+
+    // Schema structuredData complet avec qualité conversationnelle
+    patch.analysisPlan = {
+      ...(assistant.analysisPlan ?? {}),
+      summaryPlan: {
+        enabled: true,
+        prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison, (2) les infos importantes (nom, téléphone, adresse), (3) urgence ou non, (4) prochaine action. Maximum 3 phrases. Toujours en français.",
+      },
+      structuredDataPlan: {
+        enabled: true,
+        schema: FULL_STRUCTURED_DATA_SCHEMA,
+      },
     }
   }
 

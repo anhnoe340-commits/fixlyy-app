@@ -13,7 +13,7 @@ const BRAND = '#2850c8'
 
 // ── Mise à jour automatique de l'assistant Vapi à chaque session ─────────────
 async function syncAssistant() {
-  const sessionKey = 'mia_synced_v3'
+  const sessionKey = 'mia_synced_v4'
   if (sessionStorage.getItem(sessionKey)) return // déjà fait cette session
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -21,7 +21,12 @@ async function syncAssistant() {
     await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-vapi-assistant`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sync_multilingual: true, sync_urgency: true, sync_analysis_plan: true }),
+      body: JSON.stringify({
+        sync_conversational: true,
+        sync_multilingual: true,
+        sync_urgency: true,
+        sync_analysis_plan: true,
+      }),
     })
     sessionStorage.setItem(sessionKey, '1')
   } catch { /* silencieux — ne bloque pas l'app */ }

@@ -48,11 +48,16 @@ serve(async (req) => {
     // structuredData fields are filled by the assistant in French (per prompt instructions)
     const structuredData = message.analysis?.structuredData || {}
     const callerName: string | null = structuredData.customerName || null
-    // smsBody is always in French (set in the assistant's multilingualBlock)
+    // smsBody is always in French (set in the assistant's prompt)
     // fall back to auto-generated summary if smsBody not populated
     const smsSummary: string = structuredData.smsBody || message.analysis?.summary || message.summary || ''
     // reason = why the caller contacted (French if structuredData, otherwise summary)
     const reason: string | null = structuredData.reason || structuredData.smsBody || message.analysis?.summary || null
+    // Qualité conversationnelle (nouveaux champs — null si ancien assistant non mis à jour)
+    const clientTone: string | null              = structuredData.clientTone || null
+    const aiToneUsed: string | null              = structuredData.aiToneUsed || null
+    const qualityScore: number | null            = structuredData.conversationQualityScore ?? null
+    const qualityNotes: string | null            = structuredData.conversationQualityNotes || null
 
     if (!assistantId || !smsSummary) {
       return new Response('no summary', { headers: cors })
@@ -124,6 +129,10 @@ serve(async (req) => {
       reason,
       status: 'new',
       vapi_call_id: callId,
+      client_tone: clientTone,
+      ai_tone_used: aiToneUsed,
+      conversation_quality_score: qualityScore,
+      conversation_quality_notes: qualityNotes,
     }).select()
 
     return new Response(JSON.stringify({ ok: true }), {
