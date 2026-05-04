@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
+import AddMemberModal from '@/components/team/AddMemberModal'
 
 type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats'
@@ -1543,87 +1544,151 @@ function PostProcessingPage({ accent }: { accent: string }) {
 }
 
 // ── Employees Page ────────────────────────────────────────────────────────────
-type Employee = { id: number; name: string; email: string; phone: string; role: string }
+type Invitation = {
+  id: string; first_name: string; last_name: string | null; phone: string
+  status: string; is_active: boolean; suggested_skills: string[]; created_at: string
+}
 
 function EmployeesPage({ accent }: { accent: string }) {
-  const [employees, setEmployees] = useState<Employee[]>([])
-  const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', phone: '', role: '' })
+  const { profile } = useProfile()
+  const { user } = useAuth()
+  const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [toast, setToast] = useState('')
 
-  const add = () => {
-    if (!form.name.trim()) return
-    setEmployees(prev => [...prev, { id: Date.now(), ...form }])
-    setForm({ name: '', email: '', phone: '', role: '' })
-    setShowAdd(false)
+  const load = async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('team_invitations')
+      .select('*')
+      .eq('owner_id', user?.id)
+      .order('created_at', { ascending: false })
+    setInvitations((data as Invitation[]) ?? [])
+    setLoading(false)
   }
 
-  const remove = (id: number) => setEmployees(prev => prev.filter(e => e.id !== id))
-  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+  useEffect(() => {
+    if (!user?.id) return
+    load()
+    // Realtime — mise à jour auto quand un artisan accepte
+    const channel = supabase.channel('team_invitations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_invitations', filter: `owner_id=eq.${user.id}` }, () => load())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id])
+
+  const revoke = async (id: string) => {
+    await supabase.from('team_invitations').update({ status: 'revoked' }).eq('id', id)
+    setInvitations(prev => prev.map(i => i.id === id ? { ...i, status: 'revoked' } : i))
+  }
+
+  const resend = async (inv: Invitation) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    await supabase.from('team_invitations').update({ status: 'pending', expires_at: new Date(Date.now() + 7 * 86400000).toISOString() }).eq('id', inv.id)
+    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-team-member`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ first_name: inv.first_name, phone: inv.phone, suggested_skills: inv.suggested_skills }),
+    })
+    showToast(`SMS renvoyé à ${inv.first_name}`)
+    load()
+  }
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
+
+  const initials = (inv: Invitation) =>
+    `${inv.first_name[0]}${inv.last_name?.[0] ?? ''}`.toUpperCase()
+
+  const active   = invitations.filter(i => i.is_active)
+  const pending  = invitations.filter(i => !i.is_active && i.status === 'pending')
+  const inactive = invitations.filter(i => !i.is_active && i.status !== 'pending')
 
   return (
     <div className="flex flex-col gap-4">
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg z-50 transition-all">
+          {toast}
+        </div>
+      )}
+
+      {showModal && profile && (
+        <AddMemberModal
+          companyType={profile.company_type}
+          onClose={() => setShowModal(false)}
+          onSuccess={(firstName, phone) => {
+            setShowModal(false)
+            showToast(`Invitation envoyée à ${firstName} au ${phone}`)
+            setTimeout(load, 800)
+          }}
+        />
+      )}
+
       <div className="flex items-end justify-between">
-        <SettingsHeader section="Répondre" title="Employés" />
-        <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
-          + Ajouter
+        <SettingsHeader section="Répondre" title="Équipe" />
+        <button onClick={() => setShowModal(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
+          + Inviter un artisan
         </button>
       </div>
 
       <Card>
-        {employees.length === 0 && !showAdd ? (
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${accent}40`, borderTopColor: accent }} />
+          </div>
+        ) : invitations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
               <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
-            <p className="text-sm font-medium text-gray-400">Aucun employé</p>
-            <p className="text-xs text-gray-300 mt-1">Ajoutez vos collaborateurs pour activer le transfert d'appels</p>
+            <p className="text-sm font-medium text-gray-400">Aucun membre d'équipe</p>
+            <p className="text-xs text-gray-300 mt-1">Invitez vos collaborateurs — ils s'activent en 90 secondes sur leur mobile.</p>
           </div>
         ) : (
           <div className="flex flex-col divide-y divide-gray-50">
-            {employees.map(emp => (
-              <div key={emp.id} className="group flex items-center gap-3 py-3.5">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0"
-                  style={{ background: accent + '15', color: accent }}>
-                  {initials(emp.name)}
+            {/* Membres actifs */}
+            {active.map(inv => (
+              <div key={inv.id} className="flex items-center gap-3 py-3.5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0" style={{ background: accent + '15', color: accent }}>
+                  {initials(inv)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{emp.name}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{[emp.role, emp.phone].filter(Boolean).join(' · ')}</p>
+                  <p className="text-sm font-semibold text-gray-900">{inv.first_name} {inv.last_name ?? ''}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{inv.phone}</p>
                 </div>
-                <button onClick={() => remove(emp.id)} className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none">×</button>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-600">Actif</span>
               </div>
             ))}
-          </div>
-        )}
 
-        {showAdd && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Nom complet *">
-                <input autoFocus value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Marie Dupont"
-                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
-              </Field>
-              <Field label="Rôle / Poste">
-                <input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                  placeholder="Plombier, Commercial…"
-                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
-              </Field>
-              <Field label="Email">
-                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  placeholder="marie@entreprise.fr"
-                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
-              </Field>
-              <Field label="Téléphone">
-                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                  placeholder="+33 6 00 00 00 00"
-                  className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
-              </Field>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Ajouter</button>
-            </div>
+            {/* Invitations en attente */}
+            {pending.map(inv => (
+              <div key={inv.id} className="flex items-center gap-3 py-3.5">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0 bg-orange-50 text-orange-400">
+                  {inv.first_name[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-400">{inv.first_name}</p>
+                  <p className="text-xs text-gray-300 mt-0.5">{inv.phone}</p>
+                </div>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-50 text-orange-500 mr-1">En attente</span>
+                <button onClick={() => resend(inv)} className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 mr-1">Renvoyer</button>
+                <button onClick={() => revoke(inv.id)} className="text-xs text-red-300 hover:text-red-500">×</button>
+              </div>
+            ))}
+
+            {/* Invitations expirées/révoquées */}
+            {inactive.map(inv => (
+              <div key={inv.id} className="flex items-center gap-3 py-3 opacity-40">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold bg-gray-100 text-gray-400">
+                  {inv.first_name[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-400">{inv.first_name}</p>
+                </div>
+                <span className="text-xs text-gray-400">{inv.status === 'revoked' ? 'Annulée' : 'Expirée'}</span>
+              </div>
+            ))}
           </div>
         )}
       </Card>
