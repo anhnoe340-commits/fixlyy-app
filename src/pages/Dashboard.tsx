@@ -51,7 +51,7 @@ export default function Dashboard() {
   const accent = BRAND
 
   return (
-    <div className="dashboard-bg flex min-h-screen text-[#1A1A1A]" style={{ fontFamily: "'system-ui', sans-serif" }}>
+    <div className="dashboard-bg flex min-h-screen text-[#1A1A1A] overflow-x-hidden" style={{ fontFamily: "'system-ui', sans-serif" }}>
       {/* Overlay mobile sidebar */}
       {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/40 z-10" onClick={() => setSidebarOpen(false)} />}
 
@@ -144,7 +144,7 @@ export default function Dashboard() {
       </nav>
 
       {/* Main */}
-      <div className={`flex-1 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:ml-0' : 'md:ml-56'}`}>
+      <div className={`flex-1 min-w-0 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:ml-0' : 'md:ml-56'}`}>
         {/* Topbar */}
         <header className="glass-topbar sticky top-0 z-10 flex items-center justify-between px-4 md:px-6 h-[52px]">
           <div className="flex items-center gap-3">
@@ -288,12 +288,12 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
   return (
     <div className="flex flex-col gap-5">
       {/* ── Greeting ── */}
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">
             {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight truncate">
             {greeting}, {profile?.company_name?.split(' ')[0] || 'artisan'} 👋
           </h1>
         </div>
