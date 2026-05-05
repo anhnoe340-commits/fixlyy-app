@@ -1557,6 +1557,13 @@ function EmployeesPage({ accent }: { accent: string }) {
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState('')
 
+  // Limite selon le plan
+  const planStr = (profile?.subscription_plan ?? '').toLowerCase()
+  const memberLimit =
+    planStr.includes('équipe') || planStr.includes('equipe') || planStr.includes('expert') || planStr.includes('team') ? 999
+    : planStr.includes('pro') ? 2
+    : 0 // Solo / essai = patron seul
+
   const load = async () => {
     setLoading(true)
     const { data } = await supabase
@@ -1583,6 +1590,13 @@ function EmployeesPage({ accent }: { accent: string }) {
     setInvitations(prev => prev.map(i => i.id === id ? { ...i, status: 'revoked' } : i))
   }
 
+  const remove = async (id: string, name: string) => {
+    if (!confirm(`Supprimer ${name} de l'équipe ? Cette action est irréversible.`)) return
+    await supabase.from('team_invitations').delete().eq('id', id)
+    setInvitations(prev => prev.filter(i => i.id !== id))
+    showToast(`${name} supprimé de l'équipe`)
+  }
+
   const resend = async (inv: Invitation) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return
@@ -1605,6 +1619,8 @@ function EmployeesPage({ accent }: { accent: string }) {
   const active   = invitations.filter(i => i.is_active)
   const pending  = invitations.filter(i => !i.is_active && i.status === 'pending')
   const inactive = invitations.filter(i => !i.is_active && i.status !== 'pending')
+  const usedSlots = active.length + pending.length
+  const atLimit = memberLimit !== 999 && usedSlots >= memberLimit
 
   return (
     <div className="flex flex-col gap-4">
@@ -1627,10 +1643,29 @@ function EmployeesPage({ accent }: { accent: string }) {
       )}
 
       <div className="flex items-end justify-between">
-        <SettingsHeader section="Répondre" title="Équipe" />
-        <button onClick={() => setShowModal(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
-          + Inviter un artisan
-        </button>
+        <div>
+          <SettingsHeader section="Répondre" title="Équipe" />
+          {memberLimit !== 999 && (
+            <p className="text-xs text-gray-400 -mt-4 mb-5">
+              {usedSlots}/{memberLimit} artisan{memberLimit > 1 ? 's' : ''} · forfait {planStr.includes('pro') ? 'Pro' : 'Solo'}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1 mb-5">
+          <button
+            onClick={() => !atLimit && setShowModal(true)}
+            disabled={atLimit}
+            className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm transition-opacity flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: accent }}
+          >
+            + Inviter un artisan
+          </button>
+          {atLimit && (
+            <p className="text-xs text-orange-500">
+              Limite atteinte · <button onClick={() => {}} className="underline">Passer au plan supérieur</button>
+            </p>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -1659,6 +1694,13 @@ function EmployeesPage({ accent }: { accent: string }) {
                   <p className="text-xs text-gray-400 mt-0.5">{inv.phone}</p>
                 </div>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-600">Actif</span>
+                <button
+                  onClick={() => remove(inv.id, inv.first_name)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors ml-1"
+                  title="Supprimer"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
               </div>
             ))}
 
@@ -1680,7 +1722,7 @@ function EmployeesPage({ accent }: { accent: string }) {
 
             {/* Invitations expirées/révoquées */}
             {inactive.map(inv => (
-              <div key={inv.id} className="flex items-center gap-3 py-3 opacity-40">
+              <div key={inv.id} className="flex items-center gap-3 py-3 opacity-40 hover:opacity-60 transition-opacity">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold bg-gray-100 text-gray-400">
                   {inv.first_name[0].toUpperCase()}
                 </div>
@@ -1688,6 +1730,13 @@ function EmployeesPage({ accent }: { accent: string }) {
                   <p className="text-sm font-semibold text-gray-400">{inv.first_name}</p>
                 </div>
                 <span className="text-xs text-gray-400">{inv.status === 'revoked' ? 'Annulée' : 'Expirée'}</span>
+                <button
+                  onClick={() => remove(inv.id, inv.first_name)}
+                  className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-red-400 transition-colors"
+                  title="Supprimer"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
               </div>
             ))}
           </div>
