@@ -1586,12 +1586,13 @@ function EmployeesPage({ accent }: { accent: string }) {
   const resend = async (inv: Invitation) => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session?.access_token) return
-    await supabase.from('team_invitations').update({ status: 'pending', expires_at: new Date(Date.now() + 7 * 86400000).toISOString() }).eq('id', inv.id)
-    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-team-member`, {
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-team-member`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ first_name: inv.first_name, phone: inv.phone, suggested_skills: inv.suggested_skills }),
+      body: JSON.stringify({ resend_id: inv.id, first_name: inv.first_name, phone: inv.phone, suggested_skills: inv.suggested_skills }),
     })
+    const d = await res.json()
+    if (!res.ok) { showToast(`Erreur : ${d.error || 'SMS non envoyé'}`); return }
     showToast(`SMS renvoyé à ${inv.first_name}`)
     load()
   }

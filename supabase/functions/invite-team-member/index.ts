@@ -58,12 +58,12 @@ serve(async (req) => {
     })
   }
 
-  let body: { first_name: string; phone: string; suggested_skills?: string[] }
+  let body: { first_name: string; phone: string; suggested_skills?: string[]; resend_id?: string }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
   }
 
-  const { first_name, phone, suggested_skills = [] } = body
+  const { first_name, phone, suggested_skills = [], resend_id } = body
   if (!first_name?.trim() || !phone?.trim()) {
     return new Response(JSON.stringify({ error: 'Prénom et téléphone requis.' }), {
       status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
@@ -72,38 +72,59 @@ serve(async (req) => {
 
   const normalizedPhone = normalizePhone(phone)
 
-  // Vérifier qu'il n'y a pas déjà une invitation pending pour ce numéro
-  const { data: existing } = await supabase
-    .from('team_invitations')
-    .select('id')
-    .eq('owner_id', user.id)
-    .eq('phone', normalizedPhone)
-    .eq('status', 'pending')
-    .maybeSingle()
+  let invitation: { id: string; token: string; first_name: string; phone: string; expires_at: string } | null = null
 
-  if (existing) {
-    return new Response(JSON.stringify({ error: 'Une invitation est déjà en attente pour ce numéro.' }), {
-      status: 409, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
+  if (resend_id) {
+    // Mode renvoi — on remet à zéro le token et l'expiry de l'invitation existante
+    const newExpiry = new Date(Date.now() + 7 * 86400000).toISOString()
+    const { data, error } = await supabase
+      .from('team_invitations')
+      .update({ status: 'pending', expires_at: newExpiry, is_active: false, accepted_at: null })
+      .eq('id', resend_id)
+      .eq('owner_id', user.id)
+      .select('id, token, first_name, phone, expires_at')
+      .single()
+    if (error || !data) {
+      return new Response(JSON.stringify({ error: 'Invitation introuvable.' }), {
+        status: 404, headers: { ...CORS, 'Content-Type': 'application/json' },
+      })
+    }
+    invitation = data
+  } else {
+    // Vérifier qu'il n'y a pas déjà une invitation pending pour ce numéro
+    const { data: existing } = await supabase
+      .from('team_invitations')
+      .select('id')
+      .eq('owner_id', user.id)
+      .eq('phone', normalizedPhone)
+      .eq('status', 'pending')
+      .maybeSingle()
 
-  // Créer l'invitation (token auto-généré par la DB)
-  const { data: invitation, error: insertError } = await supabase
-    .from('team_invitations')
-    .insert({
-      owner_id: user.id,
-      first_name: first_name.trim(),
-      phone: normalizedPhone,
-      suggested_skills,
-    })
-    .select('id, token, first_name, phone, expires_at')
-    .single()
+    if (existing) {
+      return new Response(JSON.stringify({ error: 'Une invitation est déjà en attente pour ce numéro.' }), {
+        status: 409, headers: { ...CORS, 'Content-Type': 'application/json' },
+      })
+    }
 
-  if (insertError || !invitation) {
-    console.error('Insert error:', insertError)
-    return new Response(JSON.stringify({ error: 'Erreur lors de la création de l\'invitation.' }), {
-      status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
+    // Créer l'invitation (token auto-généré par la DB)
+    const { data, error: insertError } = await supabase
+      .from('team_invitations')
+      .insert({
+        owner_id: user.id,
+        first_name: first_name.trim(),
+        phone: normalizedPhone,
+        suggested_skills,
+      })
+      .select('id, token, first_name, phone, expires_at')
+      .single()
+
+    if (insertError || !data) {
+      console.error('Insert error:', insertError)
+      return new Response(JSON.stringify({ error: "Erreur lors de la création de l'invitation." }), {
+        status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
+      })
+    }
+    invitation = data
   }
 
   // Envoyer le SMS
