@@ -2252,6 +2252,14 @@ function WebhooksPage({ accent }: { accent: string }) {
     }))
   }
 
+  const smsWebhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sms-inbound`
+  const [copied, setCopied] = useState(false)
+  const copyUrl = () => {
+    navigator.clipboard.writeText(smsWebhookUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-end justify-between">
@@ -2260,6 +2268,39 @@ function WebhooksPage({ accent }: { accent: string }) {
           + Créer
         </button>
       </div>
+
+      {/* Bot SMS RDV */}
+      <Card>
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg" style={{ background: accent + '15' }}>💬</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-900">Bot SMS — Prise de RDV</p>
+            <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+              Vos clients envoient un SMS à votre numéro Twilio → Mia vérifie vos disponibilités et crée le RDV automatiquement.
+            </p>
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">URL à coller dans Twilio → numéro → "A message comes in"</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono text-gray-600 truncate">
+                  {smsWebhookUrl}
+                </code>
+                <button
+                  onClick={copyUrl}
+                  className="flex-shrink-0 text-xs px-3 py-2 rounded-lg font-medium border transition-colors"
+                  style={copied ? { background: accent, color: 'white', borderColor: accent } : { borderColor: '#e5e7eb', color: '#6b7280' }}
+                >
+                  {copied ? '✓ Copié' : 'Copier'}
+                </button>
+              </div>
+            </div>
+            <div className="mt-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+              <p className="text-xs text-amber-700 leading-relaxed">
+                <strong>Prérequis :</strong> Ajouter <code className="bg-amber-100 px-1 rounded">ANTHROPIC_API_KEY</code> dans les secrets Supabase (Dashboard → Edge Functions → Secrets).
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <Card>
         {webhooks.length === 0 && !showAdd ? (
