@@ -98,7 +98,7 @@ export default function Dashboard() {
 
           {/* Mia */}
           <div className="px-2 mt-5 space-y-0.5">
-            <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">Mia</p>
+            <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">{profile.assistant_name || 'Mia'}</p>
             <NavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
             <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} />
             <NavItem icon={<PhoneInIcon />} label="Raisons d'appel" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} />
