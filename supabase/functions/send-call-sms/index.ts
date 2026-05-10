@@ -255,6 +255,7 @@ serve(async (req) => {
     const qualityNotes: string | null            = structuredData.conversationQualityNotes || null
     const appointmentDate: string | null         = structuredData.appointmentDate || null
     const appointmentTime: string | null         = structuredData.appointmentTime || null
+    const customerAddress: string | null         = structuredData.customerAddress || null
 
     // Transcription depuis artifact.messages
     const transcript: string | null = formatTranscript(message.artifact?.messages) || message.artifact?.transcript || null
@@ -334,21 +335,23 @@ serve(async (req) => {
       }
     }
 
-    // ── SMS — Option A : 2 segments UCS-2 avec emoji (~130 chars utiles) ──────
-    const BUDGET = 130
+    // ── SMS — 2 segments UCS-2 sans adresse, 3 avec adresse (~195 chars max) ──
+    const BUDGET = customerAddress ? 195 : 130
     const phoneStr = callerNumber !== 'Inconnu' ? ` (${callerNumber})` : ''
     const callerLabel = callerName ? `${callerName}${phoneStr}` : callerNumber
     const headerLine = `📞 ${callerLabel}`
     const footerLine = `— ${profile.assistant_name || 'Mia'}`
     const urgentLine = structuredData.urgency === 'urgent' ? '⚡ URGENT' : null
+    const addressLine = customerAddress ? `📍 ${customerAddress}` : null
     const rdvLine = appointmentDate
       ? `📅 ${appointmentDate}${appointmentTime ? ` ${appointmentTime}` : ''}`
       : null
     const usedChars = headerLine.length + 1
       + (urgentLine ? urgentLine.length + 1 : 0)
+      + (addressLine ? addressLine.length + 1 : 0)
+      + (rdvLine ? rdvLine.length + 1 : 0)
       + 1 // newline avant footer
       + footerLine.length
-      + (rdvLine ? rdvLine.length + 1 : 0)
     const bodyBudget = BUDGET - usedChars
     const bodyText = smsSummary.length > bodyBudget
       ? smsSummary.slice(0, bodyBudget - 3) + '...'
@@ -356,6 +359,7 @@ serve(async (req) => {
     const smsParts = [headerLine]
     if (urgentLine) smsParts.push(urgentLine)
     smsParts.push(bodyText)
+    if (addressLine) smsParts.push(addressLine)
     if (rdvLine) smsParts.push(rdvLine)
     smsParts.push(footerLine)
     const smsBody = smsParts.join('\n')
