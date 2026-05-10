@@ -336,19 +336,19 @@ serve(async (req) => {
     }
 
     // ── SMS — 2 segments UCS-2 sans adresse, 3 avec adresse (~195 chars max) ──
-    const BUDGET = customerAddress ? 195 : 130
+    const BUDGET = 195
     const phoneStr = callerNumber !== 'Inconnu' ? ` (${callerNumber})` : ''
     const callerLabel = callerName ? `${callerName}${phoneStr}` : callerNumber
     const headerLine = `📞 ${callerLabel}`
     const footerLine = `— ${profile.assistant_name || 'Mia'}`
     const urgentLine = structuredData.urgency === 'urgent' ? '⚡ URGENT' : null
-    const addressLine = customerAddress ? `📍 ${customerAddress}` : null
+    const addressLine = customerAddress ? `📍 ${customerAddress}` : `📍 Adresse non communiquee`
     const rdvLine = appointmentDate
       ? `📅 ${appointmentDate}${appointmentTime ? ` ${appointmentTime}` : ''}`
       : null
     const usedChars = headerLine.length + 1
       + (urgentLine ? urgentLine.length + 1 : 0)
-      + (addressLine ? addressLine.length + 1 : 0)
+      + addressLine.length + 1
       + (rdvLine ? rdvLine.length + 1 : 0)
       + 1 // newline avant footer
       + footerLine.length
@@ -359,7 +359,7 @@ serve(async (req) => {
     const smsParts = [headerLine]
     if (urgentLine) smsParts.push(urgentLine)
     smsParts.push(bodyText)
-    if (addressLine) smsParts.push(addressLine)
+    smsParts.push(addressLine)
     if (rdvLine) smsParts.push(rdvLine)
     smsParts.push(footerLine)
     const smsBody = smsParts.join('\n')
