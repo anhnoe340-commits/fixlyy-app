@@ -87,34 +87,43 @@ export default function Dashboard() {
 
         {/* Navigation */}
         <nav className="flex-1 py-3 overflow-y-auto">
-          {/* Section principale — toujours visible */}
-          <p className="px-4 mb-1 text-[10px] font-semibold text-slate-600 uppercase tracking-widest">Activité</p>
-          <DarkNavItem icon={<HomeIcon />} label="Aujourd'hui" active={page === 'today'} onClick={() => setPage('today')} accent={accent} />
-          <DarkNavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} accent={accent} />
-          <DarkNavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} accent={accent} />
-          <DarkNavItem icon={<CalendarIcon />} label="Agenda" active={page === 'agenda'} onClick={() => setPage('agenda')} accent={accent} />
-          <DarkNavItem icon={<ChartIcon />} label="Statistiques" active={page === 'stats'} onClick={() => setPage('stats')} accent={accent} />
+          {/* Quotidien */}
+          <div className="px-2 space-y-0.5">
+            <NavItem icon={<HomeIcon />} label="Aujourd'hui" active={page === 'today'} onClick={() => setPage('today')} accent={accent} />
+            <NavItem icon={<PhoneIcon />} label="Appels" active={page === 'calls'} onClick={() => setPage('calls')} accent={accent} />
+            <NavItem icon={<CalendarIcon />} label="Agenda" active={page === 'agenda'} onClick={() => setPage('agenda')} accent={accent} />
+            <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} accent={accent} />
+            <NavItem icon={<ChartIcon />} label="Statistiques" active={page === 'stats'} onClick={() => setPage('stats')} accent={accent} />
+          </div>
 
-          {/* Répondre — section repliable */}
-          <SidebarGroup label="Répondre" defaultOpen={['greeting','inbound-reasons','outbound-reasons','call-transfer','post-processing','employees'].includes(page)}>
-            <DarkNavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} indent />
-            <DarkNavItem icon={<PhoneInIcon />} label="Raisons entrantes" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} indent />
-            <DarkNavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} accent={accent} indent />
-            <DarkNavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} accent={accent} indent />
-            <DarkNavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} accent={accent} indent />
-            <DarkNavItem icon={<TeamIcon />} label="Employés" active={page === 'employees'} onClick={() => setPage('employees')} accent={accent} indent />
-          </SidebarGroup>
+          {/* Mia */}
+          <div className="px-2 mt-5 space-y-0.5">
+            <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">Mia</p>
+            <NavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
+            <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} />
+            <NavItem icon={<PhoneInIcon />} label="Raisons d'appel" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} />
+            <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} />
+          </div>
 
-          {/* Plateforme — section repliable */}
-          <SidebarGroup label="Plateforme" defaultOpen={['business-details','hours','assistant','webhooks','integrations','timezone','subscription'].includes(page)}>
-            <DarkNavItem icon={<BuildingIcon />} label="Détails entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} accent={accent} indent />
-            <DarkNavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} indent />
-            <DarkNavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} indent />
-            <DarkNavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} accent={accent} indent />
-            <DarkNavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} indent />
-            <DarkNavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} accent={accent} indent />
-            <DarkNavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} indent />
-          </SidebarGroup>
+          {/* Compte */}
+          <div className="px-2 mt-5 space-y-0.5">
+            <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">Compte</p>
+            <NavItem icon={<BuildingIcon />} label="Entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} accent={accent} />
+            <NavItem icon={<TeamIcon />} label="Employés" active={page === 'employees'} onClick={() => setPage('employees')} accent={accent} />
+            <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} />
+            <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} />
+          </div>
+
+          {/* Avancé — replié par défaut */}
+          <div className="px-2 mt-5">
+            <SidebarGroup label="Avancé" defaultOpen={['outbound-reasons','call-transfer','post-processing','webhooks','timezone'].includes(page)}>
+              <NavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} accent={accent} />
+              <NavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} accent={accent} />
+              <NavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} accent={accent} />
+              <NavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} accent={accent} />
+              <NavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} accent={accent} />
+            </SidebarGroup>
+          </div>
         </nav>
 
         {/* Pied de page — utilisateur */}
@@ -228,17 +237,16 @@ const PAGE_LABELS: Record<Page, string> = {
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
-function DarkNavItem({ icon, label, active, onClick, accent, indent = false }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; accent: string; indent?: boolean }) {
+function NavItem({ icon, label, active, onClick, accent }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void; accent: string }) {
   return (
     <button onClick={onClick}
-      className={`w-full flex items-center gap-2.5 py-2 text-[13px] transition-colors border-l-2 ${indent ? 'pl-7 pr-4' : 'px-4'} ${
-        active
-          ? 'text-white font-medium bg-white/10'
-          : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border-transparent'
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 ${
+        active ? 'text-white font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.05]'
       }`}
-      style={active ? { borderLeftColor: accent } : {}}>
-      <span className="w-3.5 h-3.5 flex-shrink-0 opacity-80">{icon}</span>
-      <span className="truncate">{label}</span>
+      style={active ? { background: accent + '28' } : {}}>
+      <span className={`w-4 h-4 flex-shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}>{icon}</span>
+      <span className="flex-1 text-left truncate">{label}</span>
+      {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: accent }} />}
     </button>
   )
 }
@@ -246,15 +254,15 @@ function DarkNavItem({ icon, label, active, onClick, accent, indent = false }: {
 function SidebarGroup({ label, children, defaultOpen = false }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="mt-1">
+    <div>
       <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-semibold text-slate-600 uppercase tracking-widest hover:text-slate-400 transition-colors">
-        <span>{label}</span>
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em] hover:text-slate-400 transition-colors rounded-lg hover:bg-white/[0.03]">
         <span className={`transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M2 1.5l3 2.5-3 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </span>
+        <span>{label}</span>
       </button>
-      {open && <div>{children}</div>}
+      {open && <div className="mt-0.5 space-y-0.5">{children}</div>}
     </div>
   )
 }
