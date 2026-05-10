@@ -245,8 +245,10 @@ serve(async (req) => {
 
     const structuredData = message.analysis?.structuredData || {}
     const callerName: string | null = structuredData.customerName || null
-    const smsSummary: string = structuredData.smsBody || message.analysis?.summary || message.summary || ''
-    const reason: string | null = structuredData.reason || structuredData.smsBody || message.analysis?.summary || null
+    // Priorité absolue au smsBody FR de Mia — jamais le summary Vapi qui peut être en anglais
+    const rawSummary: string = structuredData.smsBody || ''
+    const smsSummary: string = rawSummary || '[Résumé indisponible]'
+    const reason: string | null = structuredData.reason || rawSummary || null
     const clientTone: string | null              = structuredData.clientTone || null
     const aiToneUsed: string | null              = structuredData.aiToneUsed || null
     const qualityScore: number | null            = structuredData.conversationQualityScore ?? null
@@ -308,40 +310,42 @@ serve(async (req) => {
       }
     }
 
-    // ── Auto-création de contact si nom connu ────────────────────────────────
-    if (callerName && callerNumber && callerNumber !== 'Inconnu') {
+    // ── Auto-création/mise à jour de contact si nom connu ───────────────────
+    if (callerName) {
       try {
-        const { data: existing } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('user_id', profile.id)
-          .eq('phone', callerNumber)
-          .maybeSingle()
+        const phoneKnown = callerNumber && callerNumber !== 'Inconnu'
+        if (phoneKnown) {
+          const { data: existing } = await supabase
+            .from('contacts')
+            .select('id, name')
+            .eq('user_id', profile.id)
+            .eq('phone', callerNumber)
+            .maybeSingle()
 
-        if (!existing) {
-          await supabase.from('contacts').insert({
-            user_id: profile.id,
-            name: callerName,
-            phone: callerNumber,
-          })
+          if (!existing) {
+            await supabase.from('contacts').insert({ user_id: profile.id, name: callerName, phone: callerNumber })
+          } else if (!existing.name && callerName) {
+            await supabase.from('contacts').update({ name: callerName }).eq('id', existing.id)
+          }
         }
+        // Si numéro inconnu mais nom connu : on met à jour le call record uniquement (pas de contact sans téléphone)
       } catch (e: any) {
         console.error('auto-contact failed (non-blocking):', e.message)
       }
     }
 
-    // ── SMS ──────────────────────────────────────────────────────────────────
+    // ── SMS — rester sous 160 chars GSM-7 (pas d'emoji = pas d'UCS-2) ────────
     const mins = Math.floor(durationSec / 60)
     const secs = durationSec % 60
     const duration = mins > 0 ? `${mins}min${secs > 0 ? ` ${secs}s` : ''}` : `${secs}s`
-    const callerLabel = callerName ? `${callerName} (${callerNumber})` : callerNumber
-    const smsBody = [
-      `📞 Appel reçu (${duration}) — ${callerLabel}`,
-      ``,
-      smsSummary,
-      ``,
-      `— ${profile.assistant_name || 'Votre assistante'} · Fixlyy`,
-    ].join('\n')
+    const phoneStr = callerNumber !== 'Inconnu' ? ` (${callerNumber})` : ''
+    const callerLabel = callerName ? `${callerName}${phoneStr}` : callerNumber
+    const header = `[Appel ${duration}] ${callerLabel}`
+    const footer = `- ${profile.assistant_name || 'Mia'} / Fixlyy`
+    // Budget: 160 - header - footer - 2 newlines = espace résumé
+    const budget = 158 - header.length - footer.length
+    const summary = smsSummary.length > budget ? smsSummary.slice(0, budget - 3) + '...' : smsSummary
+    const smsBody = `${header}\n${summary}\n${footer}`
 
     await sendSms(profile.twilio_number, profile.phone, smsBody)
 
