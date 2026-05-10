@@ -43,7 +43,7 @@ function buildDateContext(): string {
   const tomorrow = new Date(paris); tomorrow.setDate(paris.getDate() + 1)
   const hh = String(paris.getHours()).padStart(2, '0')
   const mm = String(paris.getMinutes()).padStart(2, '0')
-  return `\n\n[CONTEXTE TEMPOREL — NE JAMAIS INVENTER DE DATE]\nAujourd'hui : ${DAYS[paris.getDay()]} ${paris.getDate()} ${MONTHS[paris.getMonth()]} ${paris.getFullYear()}, il est ${hh}h${mm} (heure de Paris).\nDemain : ${DAYS[tomorrow.getDay()]} ${tomorrow.getDate()} ${MONTHS[tomorrow.getMonth()]} ${tomorrow.getFullYear()}.\nRègle absolue : si le client dit "demain", utilise UNIQUEMENT la date ci-dessus. Ne propose JAMAIS une date déjà passée.`
+  return `\n\n[CONTEXTE TEMPOREL — NE JAMAIS INVENTER DE DATE]\nAujourd'hui : ${DAYS[paris.getDay()]} ${paris.getDate()} ${MONTHS[paris.getMonth()]} ${paris.getFullYear()}, il est ${hh}h${mm} (heure de Paris).\nDemain : ${DAYS[tomorrow.getDay()]} ${tomorrow.getDate()} ${MONTHS[tomorrow.getMonth()]} ${tomorrow.getFullYear()}.\nRègle absolue : si le client dit "demain", utilise UNIQUEMENT la date ci-dessus. Ne propose JAMAIS une date déjà passée.\n\n[RÈGLE ADRESSE — OBLIGATOIRE]\nTu dois TOUJOURS demander l'adresse complète de l'intervention avant de raccrocher. Si le client ne l'a pas donnée spontanément, pose la question directement : "Pouvez-vous me donner l'adresse de l'intervention ?" Sans adresse, l'artisan ne peut pas se déplacer.`
 }
 
 // Formate les messages Vapi en texte lisible pour la transcription
