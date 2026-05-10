@@ -25,7 +25,7 @@ const FULL_STRUCTURED_DATA_SCHEMA = {
     urgency:                  { type: 'string', enum: ['urgent', 'non_urgent'] },
     appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
     appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
-    smsBody:                  { type: 'string', description: 'Résumé 2-3 phrases pour l\'artisan, toujours en français' },
+    smsBody:                  { type: 'string', description: 'Résumé 1-2 phrases COURTES pour l\'artisan : nature exacte du problème et action à faire. Max 80 caractères. Ne pas répéter l\'urgence ni la date de RDV. Toujours en français.' },
     clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'] },
     aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'] },
     conversationQualityScore: { type: 'integer', description: 'Note 0-10' },
@@ -334,18 +334,31 @@ serve(async (req) => {
       }
     }
 
-    // ── SMS — rester sous 160 chars GSM-7 (pas d'emoji = pas d'UCS-2) ────────
-    const mins = Math.floor(durationSec / 60)
-    const secs = durationSec % 60
-    const duration = mins > 0 ? `${mins}min${secs > 0 ? ` ${secs}s` : ''}` : `${secs}s`
+    // ── SMS — Option A : 2 segments UCS-2 avec emoji (~130 chars utiles) ──────
+    const BUDGET = 130
     const phoneStr = callerNumber !== 'Inconnu' ? ` (${callerNumber})` : ''
     const callerLabel = callerName ? `${callerName}${phoneStr}` : callerNumber
-    const header = `[Appel ${duration}] ${callerLabel}`
-    const footer = `- ${profile.assistant_name || 'Mia'} / Fixlyy`
-    // Budget: 160 - header - footer - 2 newlines = espace résumé
-    const budget = 158 - header.length - footer.length
-    const summary = smsSummary.length > budget ? smsSummary.slice(0, budget - 3) + '...' : smsSummary
-    const smsBody = `${header}\n${summary}\n${footer}`
+    const headerLine = `📞 ${callerLabel}`
+    const footerLine = `— ${profile.assistant_name || 'Mia'}`
+    const urgentLine = structuredData.urgency === 'urgent' ? '⚡ URGENT' : null
+    const rdvLine = appointmentDate
+      ? `📅 ${appointmentDate}${appointmentTime ? ` ${appointmentTime}` : ''}`
+      : null
+    const usedChars = headerLine.length + 1
+      + (urgentLine ? urgentLine.length + 1 : 0)
+      + 1 // newline avant footer
+      + footerLine.length
+      + (rdvLine ? rdvLine.length + 1 : 0)
+    const bodyBudget = BUDGET - usedChars
+    const bodyText = smsSummary.length > bodyBudget
+      ? smsSummary.slice(0, bodyBudget - 3) + '...'
+      : smsSummary
+    const smsParts = [headerLine]
+    if (urgentLine) smsParts.push(urgentLine)
+    smsParts.push(bodyText)
+    if (rdvLine) smsParts.push(rdvLine)
+    smsParts.push(footerLine)
+    const smsBody = smsParts.join('\n')
 
     await sendSms(profile.twilio_number, profile.phone, smsBody)
 
