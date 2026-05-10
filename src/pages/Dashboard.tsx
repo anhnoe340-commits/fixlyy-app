@@ -2363,8 +2363,12 @@ function WebhooksPage({ accent }: { accent: string }) {
 }
 
 // ── Integrations Page ─────────────────────────────────────────────────────────
+const SUPABASE_FUNCTIONS_URL = 'https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1'
+const GOOGLE_OAUTH_REDIRECT = `${SUPABASE_FUNCTIONS_URL}/google-calendar-callback`
+
 function IntegrationsPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
+  const { user } = useAuth()
   const [apiKey] = useState<string | null>(null)
   const [apiKeyGenerated, setApiKeyGenerated] = useState(false)
   const [generatedKey, setGeneratedKey] = useState('')
@@ -2373,9 +2377,64 @@ function IntegrationsPage({ accent }: { accent: string }) {
   const [authorizedDomains, setAuthorizedDomains] = useState<string[]>([])
   const [newDomain, setNewDomain] = useState('')
   const [copied, setCopied] = useState(false)
+  const [gcalConnected, setGcalConnected] = useState(false)
+  const [gcalLoading, setGcalLoading] = useState(true)
+  const [gcalNotice, setGcalNotice] = useState<'success' | 'error' | null>(null)
+
+  // Vérifier la connexion Google Calendar au chargement
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('google_access_token')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        setGcalConnected(!!(data as any)?.google_access_token)
+        setGcalLoading(false)
+      })
+
+    // Détecter le retour OAuth
+    const params = new URLSearchParams(window.location.search)
+    const gcal = params.get('gcal')
+    if (gcal) {
+      setGcalNotice(gcal === 'success' ? 'success' : 'error')
+      if (gcal === 'success') setGcalConnected(true)
+      window.history.replaceState({}, '', window.location.pathname)
+      setTimeout(() => setGcalNotice(null), 5000)
+    }
+  }, [user])
+
+  const connectGoogleCalendar = () => {
+    if (!user) return
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) {
+      alert('VITE_GOOGLE_CLIENT_ID non configuré. Contactez le support.')
+      return
+    }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: GOOGLE_OAUTH_REDIRECT,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      access_type: 'offline',
+      prompt: 'consent',
+      state: user.id,
+    })
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+  }
+
+  const disconnectGoogleCalendar = async () => {
+    if (!user) return
+    await supabase.from('profiles').update({
+      google_access_token: null,
+      google_refresh_token: null,
+      google_token_expiry: null,
+    } as any).eq('id', user.id)
+    setGcalConnected(false)
+  }
 
   const saveCalUrl = async () => {
-    // Normaliser l'URL : s'assurer qu'elle commence par https://
     let normalized = calUrl.trim()
     if (normalized && !/^https?:\/\//i.test(normalized)) {
       normalized = 'https://' + normalized.replace(/^https?:\/*/i, '')
@@ -2407,6 +2466,13 @@ function IntegrationsPage({ accent }: { accent: string }) {
   return (
     <div className="flex flex-col gap-4">
       <SettingsHeader section="Plateforme" title="Intégrations" />
+
+      {/* Notification retour OAuth */}
+      {gcalNotice && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${gcalNotice === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          <span>{gcalNotice === 'success' ? '✓ Google Calendar connecté avec succès' : '✗ Erreur lors de la connexion Google Calendar. Réessayez.'}</span>
+        </div>
+      )}
 
       <Card>
         <div className="flex items-center gap-4">
@@ -2507,6 +2573,58 @@ function IntegrationsPage({ accent }: { accent: string }) {
               Enregistrer
             </button>
           </div>
+        </div>
+      </Card>
+
+      {/* Google Calendar */}
+      <Card>
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-2xl border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <rect x="3" y="4" width="18" height="17" rx="2" stroke="#4285F4" strokeWidth="1.5"/>
+              <path d="M3 9h18" stroke="#4285F4" strokeWidth="1.5"/>
+              <path d="M8 2v4M16 2v4" stroke="#4285F4" strokeWidth="1.5" strokeLinecap="round"/>
+              <rect x="7" y="13" width="4" height="4" rx="0.5" fill="#34A853"/>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Google Calendar</p>
+            <p className="text-xs text-gray-400 mt-0.5">Mia crée automatiquement les RDV dans votre agenda</p>
+          </div>
+          {!gcalLoading && (
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${gcalConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              {gcalConnected ? '✓ Connecté' : 'Non connecté'}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-50">
+          {gcalLoading ? (
+            <div className="w-4 h-4 border-2 border-gray-200 border-t-transparent rounded-full animate-spin" />
+          ) : gcalConnected ? (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400">Les nouveaux RDV sont synchronisés automatiquement</p>
+              <button onClick={disconnectGoogleCalendar}
+                className="text-xs px-3 py-2 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium transition-colors">
+                Déconnecter
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-xs text-gray-500 mb-3">
+                Quand Mia prend un RDV pendant un appel, il apparaît automatiquement dans votre Google Calendar.
+              </p>
+              <button onClick={connectGoogleCalendar}
+                className="flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 font-semibold text-gray-700 transition-colors">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                  <rect x="3" y="4" width="18" height="17" rx="2" stroke="#4285F4" strokeWidth="1.5"/>
+                  <path d="M3 9h18" stroke="#4285F4" strokeWidth="1.5"/>
+                  <path d="M8 2v4M16 2v4" stroke="#4285F4" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Connecter Google Calendar
+              </button>
+            </div>
+          )}
         </div>
       </Card>
     </div>

@@ -7,6 +7,8 @@ const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_AUTH = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
 const VAPI_API_KEY = Deno.env.get('VAPI_API_KEY')
 const VAPI_WEBHOOK_SECRET = Deno.env.get('VAPI_WEBHOOK_SECRET')
+const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')
+const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -55,6 +57,132 @@ function formatTranscript(messages: Array<{ role: string; message?: string; cont
       return `${label}: ${m.message || m.content}`
     })
     .join('\n') || null
+}
+
+async function refreshGoogleToken(refreshToken: string): Promise<{ access_token: string; expiry: number } | null> {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return null
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return { access_token: data.access_token, expiry: Date.now() + (data.expires_in || 3600) * 1000 }
+  } catch { return null }
+}
+
+async function syncGoogleCalendar(artisanId: string, rdv: {
+  clientName: string | null
+  clientPhone: string | null
+  reason: string | null
+  appointmentDate: string
+  appointmentTime: string | null
+  companyName: string
+}) {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return
+
+  const { data: p } = await supabase
+    .from('profiles')
+    .select('google_access_token, google_refresh_token, google_token_expiry')
+    .eq('id', artisanId)
+    .single()
+
+  if (!p?.google_access_token) return
+
+  let accessToken = p.google_access_token
+
+  // Renouveler le token si expiré
+  if (p.google_token_expiry && Date.now() > p.google_token_expiry - 60_000) {
+    if (!p.google_refresh_token) return
+    const refreshed = await refreshGoogleToken(p.google_refresh_token)
+    if (!refreshed) return
+    accessToken = refreshed.access_token
+    await supabase.from('profiles').update({
+      google_access_token: refreshed.access_token,
+      google_token_expiry: refreshed.expiry,
+    }).eq('id', artisanId)
+  }
+
+  // Construire l'événement — on parse la date/heure brute de Mia
+  const summary = rdv.clientName
+    ? `RDV ${rdv.clientName}${rdv.reason ? ` — ${rdv.reason}` : ''}`
+    : `RDV client${rdv.reason ? ` — ${rdv.reason}` : ''}`
+
+  const description = [
+    rdv.clientName ? `Client : ${rdv.clientName}` : null,
+    rdv.clientPhone ? `Tél : ${rdv.clientPhone}` : null,
+    rdv.reason ? `Motif : ${rdv.reason}` : null,
+    `Pris par Mia (Fixlyy)`,
+  ].filter(Boolean).join('\n')
+
+  // Fallback : événement toute la journée si pas d'heure précise
+  let eventBody: Record<string, unknown>
+  const dateStr = rdv.appointmentDate // ex: "12 mai 2026" ou "2026-05-12"
+  const timeStr = rdv.appointmentTime // ex: "10h30" ou "10:30" ou null
+
+  // Tenter de construire une date ISO
+  let startIso: string | null = null
+  try {
+    const frMonths: Record<string, string> = {
+      janvier:'01',février:'02',mars:'03',avril:'04',mai:'05',juin:'06',
+      juillet:'07',août:'08',septembre:'09',octobre:'10',novembre:'11',décembre:'12'
+    }
+    let normalized = dateStr.toLowerCase()
+    for (const [fr, num] of Object.entries(frMonths)) normalized = normalized.replace(fr, num)
+    const isoDate = normalized.match(/(\d{4})-(\d{2})-(\d{2})/)
+      ? normalized.slice(0, 10)
+      : (() => {
+          const parts = normalized.match(/(\d{1,2})[\/\s-](\d{2})[\/\s-](\d{4})/)
+          return parts ? `${parts[3]}-${parts[2].padStart(2,'0')}-${parts[1].padStart(2,'0')}` : null
+        })()
+    if (isoDate && timeStr) {
+      const timeParts = timeStr.match(/(\d{1,2})[h:](\d{0,2})/)
+      const hh = timeParts ? timeParts[1].padStart(2, '0') : '09'
+      const mm = timeParts ? (timeParts[2] || '00').padStart(2, '0') : '00'
+      startIso = `${isoDate}T${hh}:${mm}:00`
+    } else if (isoDate) {
+      startIso = isoDate
+    }
+  } catch { /* silent */ }
+
+  if (startIso && startIso.includes('T')) {
+    const endIso = new Date(new Date(startIso).getTime() + 60 * 60 * 1000).toISOString().slice(0, 19)
+    eventBody = {
+      summary,
+      description,
+      start: { dateTime: startIso, timeZone: 'Europe/Paris' },
+      end:   { dateTime: endIso,   timeZone: 'Europe/Paris' },
+    }
+  } else if (startIso) {
+    const nextDay = new Date(startIso)
+    nextDay.setDate(nextDay.getDate() + 1)
+    eventBody = {
+      summary,
+      description,
+      start: { date: startIso },
+      end:   { date: nextDay.toISOString().slice(0, 10) },
+    }
+  } else {
+    return // Date non parseable, on abandonne silencieusement
+  }
+
+  try {
+    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventBody),
+    })
+    if (!res.ok) console.error('Google Calendar event failed:', await res.text())
+  } catch (e: any) {
+    console.error('Google Calendar sync error (non-blocking):', e.message)
+  }
 }
 
 async function sendSms(from: string, to: string, body: string) {
@@ -246,6 +374,16 @@ serve(async (req) => {
           appointment_time: appointmentTime || 'À confirmer',
           status: 'pending',
           vapi_call_id: callId,
+        })
+
+        // ── Sync Google Calendar si l'artisan a connecté son compte ──────────
+        await syncGoogleCalendar(profile.id, {
+          clientName: callerName,
+          clientPhone: callerNumber !== 'Inconnu' ? callerNumber : null,
+          reason,
+          appointmentDate,
+          appointmentTime: appointmentTime || null,
+          companyName: profile.company_name,
         })
       } catch (e: any) {
         console.error('appointment insert failed (non-blocking):', e.message)
