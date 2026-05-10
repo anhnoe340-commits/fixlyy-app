@@ -123,6 +123,8 @@ serve(async (req) => {
     const aiToneUsed: string | null              = structuredData.aiToneUsed || null
     const qualityScore: number | null            = structuredData.conversationQualityScore ?? null
     const qualityNotes: string | null            = structuredData.conversationQualityNotes || null
+    const appointmentDate: string | null         = structuredData.appointmentDate || null
+    const appointmentTime: string | null         = structuredData.appointmentTime || null
 
     // Transcription depuis artifact.messages
     const transcript: string | null = formatTranscript(message.artifact?.messages) || message.artifact?.transcript || null
@@ -231,6 +233,24 @@ serve(async (req) => {
       conversation_quality_score: qualityScore,
       conversation_quality_notes: qualityNotes,
     })
+
+    // ── Création automatique du RDV si Mia a collecté une date ──────────────
+    if (appointmentDate) {
+      try {
+        await supabase.from('appointments').insert({
+          artisan_id: profile.id,
+          client_name: callerName,
+          client_phone: callerNumber !== 'Inconnu' ? callerNumber : null,
+          reason,
+          appointment_date: appointmentDate,
+          appointment_time: appointmentTime || 'À confirmer',
+          status: 'pending',
+          vapi_call_id: callId,
+        })
+      } catch (e: any) {
+        console.error('appointment insert failed (non-blocking):', e.message)
+      }
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' },

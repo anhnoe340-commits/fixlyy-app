@@ -3242,18 +3242,32 @@ function AgendaPage({ accent, onGoToIntegrations: _onGoToIntegrations }: { accen
 // ── Stats Page ────────────────────────────────────────────────────────────────
 function StatsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
-  const [calls, setCalls] = useState<{ created_at: string; status: string; duration_seconds: number | null }[]>([])
+  const [calls, setCalls] = useState<{
+    created_at: string
+    status: string
+    duration_seconds: number | null
+    conversation_quality_score: number | null
+    client_tone: string | null
+    urgency: string | null
+  }[]>([])
   const [contacts, setContacts] = useState(0)
+  const [appointments, setAppointments] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState<'7d' | '30d' | 'all'>('30d')
 
   useEffect(() => {
     if (!user) return
     Promise.all([
-      supabase.from('calls').select('created_at, status, duration_seconds').eq('artisan_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('calls')
+        .select('created_at, status, duration_seconds, conversation_quality_score, client_tone, urgency')
+        .eq('artisan_id', user.id)
+        .order('created_at', { ascending: false }),
       supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-    ]).then(([{ data: callsData }, { count }]) => {
+      supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('artisan_id', user.id),
+    ]).then(([{ data: callsData }, { count: cCount }, { count: aCount }]) => {
       setCalls(callsData || [])
-      setContacts(count || 0)
+      setContacts(cCount || 0)
+      setAppointments(aCount || 0)
       setLoading(false)
     })
   }, [user])
@@ -3264,49 +3278,84 @@ function StatsPage({ accent }: { accent: string }) {
     </div>
   )
 
-  const today = new Date().toDateString()
+  const now = new Date()
+  const periodDays = period === '7d' ? 7 : period === '30d' ? 30 : 9999
+  const filteredCalls = calls.filter(c => {
+    if (period === 'all') return true
+    const diff = (now.getTime() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24)
+    return diff <= periodDays
+  })
+
+  const today = now.toDateString()
   const todayCount = calls.filter(c => new Date(c.created_at).toDateString() === today).length
-  const urgentCount = calls.filter(c => c.status === 'urgent').length
-  const doneCount = calls.filter(c => c.status === 'done').length
-  const durations = calls.filter(c => c.duration_seconds != null).map(c => c.duration_seconds!)
+  const doneCount = filteredCalls.filter(c => c.status === 'done').length
+  const durations = filteredCalls.filter(c => c.duration_seconds != null).map(c => c.duration_seconds!)
   const avgDuration = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0
   const avgMinStr = avgDuration > 0 ? `${Math.floor(avgDuration / 60)}min ${avgDuration % 60}s` : '—'
+  const totalCalls = filteredCalls.length
 
-  // Graphique 7 derniers jours
-  const days7: { label: string; count: number; date: string }[] = []
-  for (let i = 6; i >= 0; i--) {
+  const qualityScores = filteredCalls.filter(c => c.conversation_quality_score != null).map(c => c.conversation_quality_score!)
+  const avgQuality = qualityScores.length ? (qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length).toFixed(1) : null
+  const qualityColor = avgQuality == null ? '#9CA3AF' : Number(avgQuality) >= 7 ? '#10B981' : Number(avgQuality) >= 5 ? '#F59E0B' : '#EF4444'
+
+  const urgentCount = filteredCalls.filter(c => c.status === 'urgent' || c.urgency === 'urgent').length
+  const urgencyRate = totalCalls > 0 ? Math.round((urgentCount / totalCalls) * 100) : 0
+
+  // Graphique sur la période choisie (max 30 jours)
+  const chartDays = Math.min(periodDays, 30)
+  const daysN: { label: string; count: number; date: string }[] = []
+  for (let i = chartDays - 1; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i)
     const ds = d.toDateString()
-    const label = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })
+    const label = chartDays <= 7
+      ? d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })
+      : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
     const count = calls.filter(c => new Date(c.created_at).toDateString() === ds).length
-    days7.push({ label, count, date: ds })
+    daysN.push({ label, count, date: ds })
   }
-  const maxDay = Math.max(...days7.map(d => d.count), 1)
+  const maxDay = Math.max(...daysN.map(d => d.count), 1)
 
-  // Répartition des statuts
   const statuses = [
     { label: 'Nouveaux', key: 'new', color: '#3B82F6' },
     { label: 'Urgents', key: 'urgent', color: '#EF4444' },
     { label: 'En attente', key: 'pending', color: '#F59E0B' },
     { label: 'Traités', key: 'done', color: '#10B981' },
   ]
-  const totalCalls = calls.length
+
+  const tones = [
+    { label: 'Calme', key: 'calme', color: '#10B981', emoji: '😌' },
+    { label: 'Stressé', key: 'stressé', color: '#F59E0B', emoji: '😰' },
+    { label: 'Agressif', key: 'agressif', color: '#EF4444', emoji: '😠' },
+    { label: 'Confus', key: 'confus', color: '#8B5CF6', emoji: '😕' },
+  ]
+  const tonesWithData = filteredCalls.filter(c => c.client_tone != null)
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Header ── */}
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Activité</p>
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Statistiques</h1>
+      {/* ── Header + période ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Activité</p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Statistiques</h1>
+        </div>
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {(['7d', '30d', 'all'] as const).map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              className="text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all"
+              style={period === p ? { background: '#fff', color: accent, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' } : { color: '#9CA3AF' }}>
+              {p === '7d' ? '7 j' : p === '30d' ? '30 j' : 'Tout'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total appels', value: String(totalCalls), sub: 'depuis le début', color: accent },
+          { label: 'Total appels', value: String(totalCalls), sub: period === 'all' ? 'depuis le début' : `sur ${periodDays} jours`, color: accent },
           { label: "Aujourd'hui", value: String(todayCount), sub: 'appels reçus', color: todayCount > 0 ? accent : '#9CA3AF' },
           { label: 'Durée moy.', value: avgMinStr, sub: 'par appel', color: '#374151' },
-          { label: 'Contacts', value: String(contacts), sub: 'dans la base', color: contacts > 0 ? '#10B981' : '#9CA3AF' },
+          { label: 'RDV pris', value: String(appointments), sub: 'par Mia', color: appointments > 0 ? '#10B981' : '#9CA3AF' },
         ].map(s => (
           <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3.5 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
@@ -3316,30 +3365,111 @@ function StatsPage({ accent }: { accent: string }) {
         ))}
       </div>
 
+      {/* ── Qualité Mia + Urgences ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Graphique 7 jours */}
         <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
-          <p className="text-sm font-semibold mb-4">7 derniers jours</p>
-          <div className="flex items-end justify-around h-28 gap-1.5">
-            {days7.map((d, i) => {
+          <p className="text-sm font-semibold mb-1">Score qualité Mia</p>
+          <p className="text-[11px] text-gray-400 mb-4">Note moyenne sur {qualityScores.length} appels analysés</p>
+          {avgQuality == null ? (
+            <p className="text-sm text-gray-300 text-center py-4">Pas encore de données</p>
+          ) : (
+            <div className="flex items-center gap-4">
+              <p className="text-5xl font-bold leading-none" style={{ color: qualityColor }}>{avgQuality}</p>
+              <div className="flex-1">
+                <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                  <span>0</span><span>10</span>
+                </div>
+                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${(Number(avgQuality) / 10) * 100}%`, background: qualityColor }} />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  {Number(avgQuality) >= 8 ? 'Excellent' : Number(avgQuality) >= 6 ? 'Bien' : Number(avgQuality) >= 4 ? 'Moyen' : 'À améliorer'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <p className="text-sm font-semibold mb-1">Taux d'urgence</p>
+          <p className="text-[11px] text-gray-400 mb-4">Appels qualifiés urgents par Mia</p>
+          <div className="flex items-center gap-4">
+            <p className="text-5xl font-bold leading-none" style={{ color: urgencyRate > 30 ? '#EF4444' : urgencyRate > 15 ? '#F59E0B' : '#10B981' }}>
+              {totalCalls > 0 ? `${urgencyRate}%` : '—'}
+            </p>
+            <div className="flex-1">
+              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{
+                  width: `${urgencyRate}%`,
+                  background: urgencyRate > 30 ? '#EF4444' : urgencyRate > 15 ? '#F59E0B' : '#10B981'
+                }} />
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1.5">{urgentCount} appels urgents sur {totalCalls}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Graphique N jours */}
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">{period === 'all' ? '30 derniers jours' : `${chartDays} derniers jours`}</p>
+          <div className="flex items-end justify-around h-28 gap-0.5 overflow-hidden">
+            {daysN.map((d, i) => {
               const pct = d.count / maxDay
               const isToday = d.date === today
+              const showLabel = chartDays <= 7 || i % 5 === 0 || isToday
               return (
-                <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                  {d.count > 0 && <span className="text-[10px] text-gray-500 font-semibold">{d.count}</span>}
-                  <div className="w-full rounded-t-lg transition-all" style={{
-                    height: `${Math.max(pct * 96, d.count > 0 ? 8 : 3)}px`,
+                <div key={i} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+                  {d.count > 0 && <span className="text-[9px] text-gray-500 font-semibold">{d.count}</span>}
+                  <div className="w-full rounded-t transition-all" style={{
+                    height: `${Math.max(pct * 88, d.count > 0 ? 6 : 2)}px`,
                     background: isToday ? accent : accent + '40',
                   }} />
-                  <span className={`text-[9px] text-center leading-tight ${isToday ? 'font-semibold' : 'text-gray-400'}`}
-                    style={isToday ? { color: accent } : {}}>{d.label}</span>
+                  {showLabel && (
+                    <span className={`text-[8px] text-center leading-tight truncate w-full ${isToday ? 'font-semibold' : 'text-gray-400'}`}
+                      style={isToday ? { color: accent } : {}}>{d.label}</span>
+                  )}
                 </div>
               )
             })}
           </div>
         </div>
 
-        {/* Répartition statuts */}
+        {/* Tonalités clients */}
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">Humeur des clients</p>
+          {tonesWithData.length === 0 ? (
+            <div className="flex items-center justify-center h-28">
+              <p className="text-sm text-gray-300">Pas encore de données</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tones.map(t => {
+                const cnt = tonesWithData.filter(c => c.client_tone === t.key).length
+                const pct = tonesWithData.length > 0 ? Math.round((cnt / tonesWithData.length) * 100) : 0
+                return (
+                  <div key={t.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">{t.emoji}</span>
+                        <span className="text-xs font-medium text-gray-600">{t.label}</span>
+                      </div>
+                      <span className="text-xs font-bold text-gray-700">{cnt} <span className="font-normal text-gray-400">({pct}%)</span></span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: t.color }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Répartition statuts + Taux traitement */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
           <p className="text-sm font-semibold mb-4">Répartition des statuts</p>
           {totalCalls === 0 ? (
@@ -3347,13 +3477,13 @@ function StatsPage({ accent }: { accent: string }) {
               <p className="text-sm text-gray-300">Aucun appel pour l'instant</p>
             </div>
           ) : (
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {statuses.map(s => {
-                const cnt = calls.filter(c => c.status === s.key).length
+                const cnt = filteredCalls.filter(c => c.status === s.key).length
                 const pct = totalCalls > 0 ? Math.round((cnt / totalCalls) * 100) : 0
                 return (
                   <div key={s.key}>
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
                         <span className="text-xs font-medium text-gray-600">{s.label}</span>
@@ -3369,23 +3499,26 @@ function StatsPage({ accent }: { accent: string }) {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Taux de traitement */}
-      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-sm font-semibold">Taux de traitement</p>
-            <p className="text-xs text-gray-400 mt-0.5">Appels marqués comme "Traité"</p>
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-semibold">Taux de traitement</p>
+              <p className="text-xs text-gray-400 mt-0.5">Appels marqués comme "Traité"</p>
+            </div>
+            <p className="text-[32px] font-bold tracking-tight leading-none" style={{ color: accent }}>
+              {totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '—'}
+            </p>
           </div>
-          <p className="text-[32px] font-bold tracking-tight leading-none" style={{ color: accent }}>
-            {totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '—'}
-          </p>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '0%', background: accent }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-2">{doneCount} sur {totalCalls} appels traités</p>
+          <div className="mt-4 pt-4 border-t border-gray-50">
+            <p className="text-xs text-gray-500 font-medium">Contacts enregistrés</p>
+            <p className="text-lg font-bold mt-0.5" style={{ color: contacts > 0 ? accent : '#9CA3AF' }}>{contacts}</p>
+          </div>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all" style={{ width: totalCalls > 0 ? `${Math.round((doneCount / totalCalls) * 100)}%` : '0%', background: accent }} />
-        </div>
-        <p className="text-xs text-gray-400 mt-2">{doneCount} sur {totalCalls} appels traités</p>
       </div>
     </div>
   )
