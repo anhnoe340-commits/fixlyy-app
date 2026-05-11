@@ -3,7 +3,7 @@
  * Idempotent : skip les numéros déjà en base.
  *
  * Usage: npx tsx scripts/seed-phone-pool.ts
- * Requires env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ * Requires env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, SUPABASE_URL, FIXLYY_SERVICE_ROLE_KEY
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -13,7 +13,7 @@ const EXCLUDED_NUMBERS = ['+33939245471'] // numéro réservé onboarding dev
 const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID!
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN!
 const SB_URL       = process.env.SUPABASE_URL!
-const SB_KEY       = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const SB_KEY       = process.env.FIXLYY_SERVICE_ROLE_KEY!
 
 if (!TWILIO_SID || !TWILIO_TOKEN || !SB_URL || !SB_KEY) {
   console.error('Missing required env vars')

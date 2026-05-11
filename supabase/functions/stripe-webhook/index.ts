@@ -5,7 +5,7 @@ import Stripe from 'https://esm.sh/stripe@13?target=deno';
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 );
 
 const VAPI_KEY = Deno.env.get('VAPI_API_KEY')!

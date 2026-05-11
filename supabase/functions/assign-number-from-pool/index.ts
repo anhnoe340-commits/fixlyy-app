@@ -5,7 +5,7 @@ const TWILIO_TOKEN      = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const VAPI_KEY          = Deno.env.get('VAPI_API_KEY')!
 const VAPI_ASSISTANT_ID = Deno.env.get('VAPI_DEFAULT_ASSISTANT_ID')!
 const SB_URL            = Deno.env.get('SUPABASE_URL')!
-const SB_SERVICE        = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SB_SERVICE        = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

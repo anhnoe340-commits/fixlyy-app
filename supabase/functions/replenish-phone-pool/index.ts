@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const TWILIO_SID    = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN  = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const SB_URL        = Deno.env.get('SUPABASE_URL')!
-const SB_SERVICE    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SB_SERVICE    = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 const CRON_SECRET   = Deno.env.get('CRON_SECRET')!
 const THRESHOLD     = parseInt(Deno.env.get('REPLENISH_THRESHOLD') || '5')
 const TARGET        = parseInt(Deno.env.get('REPLENISH_TARGET') || '10')

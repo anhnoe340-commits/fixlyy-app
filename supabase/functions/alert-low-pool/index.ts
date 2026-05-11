@@ -6,7 +6,7 @@ const TWILIO_TOKEN  = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_FROM   = Deno.env.get('TWILIO_PHONE_NUMBER')!
 const ALERT_PHONE   = Deno.env.get('ALERT_PHONE')!
 const SB_URL        = Deno.env.get('SUPABASE_URL')!
-const SB_SERVICE    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const SB_SERVICE    = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 const CRON_SECRET   = Deno.env.get('CRON_SECRET')!
 
 const sb = createClient(SB_URL, SB_SERVICE)
