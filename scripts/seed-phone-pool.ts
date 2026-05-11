@@ -6,6 +6,24 @@
  * Requires env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, SUPABASE_URL, FIXLYY_SERVICE_ROLE_KEY
  */
 
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+// Charge .env.local si présent
+try {
+  const envPath = resolve(process.cwd(), '.env.local')
+  const lines = readFileSync(envPath, 'utf-8').split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const idx = trimmed.indexOf('=')
+    if (idx === -1) continue
+    const key = trimmed.slice(0, idx).trim()
+    const val = trimmed.slice(idx + 1).trim()
+    if (!process.env[key]) process.env[key] = val
+  }
+} catch { /* .env.local absent, env vars doivent être passées manuellement */ }
+
 import { createClient } from '@supabase/supabase-js'
 
 const EXCLUDED_NUMBERS = ['+33939245471'] // numéro réservé onboarding dev

@@ -75,7 +75,9 @@ function AppContent() {
   }, [user, loading])
 
   if (loading || status === 'loading') return <Spinner />
-  if (!user || status === 'auth') return <AuthPage />
+  if (!user || status === 'auth') return USE_NEW_ONBOARDING
+    ? <OnboardingV2 onDone={() => setStatus('dashboard')} />
+    : <AuthPage />
   if (status === 'onboarding') return USE_NEW_ONBOARDING
     ? <OnboardingV2 onDone={() => setStatus('dashboard')} />
     : <OnboardingPage userEmail={user.email!} />
