@@ -27,7 +27,7 @@ function isValidFrMobile(e164: string): boolean {
 }
 
 function generateResumeToken(): string {
-  return Math.random().toString(36).slice(2, 10).toUpperCase()
+  return crypto.randomUUID()
 }
 
 interface Props {
@@ -39,6 +39,8 @@ export default function Step1Account({ onDone }: Props) {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [trade, setTrade] = useState(TRADES[0])
+  const [companyName, setCompanyName] = useState('')
+  const [companyNameTouched, setCompanyNameTouched] = useState(false)
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -54,6 +56,15 @@ export default function Step1Account({ onDone }: Props) {
   }, [phase])
 
   useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }, [])
+
+  // Pré-remplit company_name si l'utilisateur n'a pas encore touché au champ
+  useEffect(() => {
+    if (!companyNameTouched && fullName.trim()) {
+      const firstName = fullName.trim().split(' ')[0]
+      const tradeShort = trade.split('/')[0].trim()
+      setCompanyName(`${tradeShort} ${firstName}`)
+    }
+  }, [fullName, trade, companyNameTouched])
 
   function startCooldown() {
     setResendCooldown(30)
@@ -106,6 +117,7 @@ export default function Step1Account({ onDone }: Props) {
         id: userId,
         phone: e164,
         full_name: fullName.trim(),
+        company_name: companyName.trim() || `${trade.split('/')[0].trim()} ${firstName}`,
         company_type: trade,
         assistant_name: 'Mia',
         assistant_voice: 'female-warm',
@@ -242,6 +254,17 @@ export default function Step1Account({ onDone }: Props) {
           >
             {TRADES.map(t => <option key={t}>{t}</option>)}
           </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1.5">Nom de votre activité</label>
+          <input
+            value={companyName}
+            onChange={e => { setCompanyName(e.target.value); setCompanyNameTouched(true) }}
+            placeholder="Ex : Plomberie Dupont"
+            className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm outline-none focus:border-[#2850c8] transition-colors"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">Mia se présentera avec ce nom</p>
         </div>
 
         <div>

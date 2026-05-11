@@ -9,6 +9,7 @@ import Dashboard from '@/pages/Dashboard'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
+import ResumePage from '@/pages/ResumePage'
 import { supabase } from '@/lib/supabase'
 
 const USE_NEW_ONBOARDING = import.meta.env.VITE_USE_NEW_ONBOARDING === 'true'
@@ -86,5 +87,6 @@ export default function App() {
   if (window.location.pathname === '/accept') return <AcceptQuotePage />
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
+  if (window.location.pathname.startsWith('/r/')) return <ResumePage />
   return <AuthProvider><AppContent /></AuthProvider>
 }

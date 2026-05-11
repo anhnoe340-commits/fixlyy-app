@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SERVICE_ROLE_KEY')!)
+const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_FROM = Deno.env.get('TWILIO_PHONE_NUMBER') || '+33939245471'
@@ -40,9 +40,16 @@ serve(async (req) => {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, phone, company_type')
+      .select('full_name, phone, company_type, human_help_requested_at')
       .eq('id', user.id)
       .single()
+
+    // Anti-spam : une seule demande par utilisateur
+    if (profile?.human_help_requested_at) {
+      return new Response(JSON.stringify({ ok: true, already_sent: true }), {
+        status: 200, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
 
     const inHours = isBusinessHours()
     const hoursTag = inHours ? '' : '[HORS HEURES OUVRÉES] '

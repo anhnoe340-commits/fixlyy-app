@@ -5,7 +5,7 @@ import Stripe from 'https://esm.sh/stripe@13?target=deno';
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SERVICE_ROLE_KEY')!
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 
 const VAPI_KEY = Deno.env.get('VAPI_API_KEY')!
@@ -320,6 +320,97 @@ serve(async (req) => {
       await supabase.from('profiles')
         .update({ vapi_enabled: true })
         .eq('stripe_customer_id', invoice.customer as string);
+      break;
+    }
+
+    // Complément K : l'artisan ajoute sa carte pendant ou après le trial (setup_intent)
+    case 'setup_intent.succeeded': {
+      const si = event.data.object as Stripe.SetupIntent;
+      const stripeCustomerId = si.customer as string | null;
+      if (!stripeCustomerId) break;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, trial_status, twilio_number')
+        .eq('stripe_customer_id', stripeCustomerId)
+        .maybeSingle();
+
+      if (!profile) break;
+
+      await supabase.from('profiles').update({
+        payment_method_added: true,
+        trial_status: 'converted',
+      }).eq('id', profile.id);
+
+      if (profile.trial_status === 'expired') {
+        // Cherche le numéro en statut 'expired' (J+7 passé, J+14 pas encore)
+        const { data: expiredRow } = await supabase
+          .from('phone_numbers_pool')
+          .select('id, phone_number, twilio_sid')
+          .eq('assigned_to_user_id', profile.id)
+          .eq('status', 'expired')
+          .maybeSingle();
+
+        if (expiredRow) {
+          // Re-créer le mapping Vapi pour ce numéro existant
+          const vapiRes = await fetch('https://api.vapi.ai/phone-number', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              provider: 'twilio',
+              number: expiredRow.phone_number,
+              twilioAccountSid: TWILIO_SID,
+              twilioAuthToken: TWILIO_TOKEN,
+              assistantId: Deno.env.get('VAPI_DEFAULT_ASSISTANT_ID'),
+              name: `fixlyy-${profile.id.slice(0, 8)}`,
+            }),
+          });
+
+          if (vapiRes.ok) {
+            const vapiData = await vapiRes.json();
+            await supabase.from('phone_numbers_pool').update({
+              status: 'assigned',
+              assigned_at: new Date().toISOString(),
+              vapi_phone_number_id: vapiData.id,
+            }).eq('id', expiredRow.id);
+
+            await supabase.from('profiles').update({
+              twilio_number: expiredRow.phone_number,
+              vapi_assistant_id: Deno.env.get('VAPI_DEFAULT_ASSISTANT_ID'),
+            }).eq('id', profile.id);
+          }
+        } else {
+          // J+14 passé : le numéro a été libéré dans le pool → on en assigne un nouveau
+          const { data: newRows, error: rpcErr } = await supabase.rpc('assign_phone_number_to_user', { p_user_id: profile.id });
+          if (!rpcErr && newRows?.[0]) {
+            const nr = newRows[0];
+            const vapiRes = await fetch('https://api.vapi.ai/phone-number', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                provider: 'twilio',
+                number: nr.phone_number,
+                twilioAccountSid: TWILIO_SID,
+                twilioAuthToken: TWILIO_TOKEN,
+                assistantId: Deno.env.get('VAPI_DEFAULT_ASSISTANT_ID'),
+                name: `fixlyy-${profile.id.slice(0, 8)}`,
+              }),
+            });
+            if (vapiRes.ok) {
+              const vapiData = await vapiRes.json();
+              await supabase.from('phone_numbers_pool').update({
+                status: 'assigned',
+                assigned_at: new Date().toISOString(),
+                vapi_phone_number_id: vapiData.id,
+              }).eq('id', nr.phone_number_id);
+              await supabase.from('profiles').update({
+                twilio_number: nr.phone_number,
+                vapi_assistant_id: Deno.env.get('VAPI_DEFAULT_ASSISTANT_ID'),
+              }).eq('id', profile.id);
+            }
+          }
+        }
+      }
       break;
     }
   }
