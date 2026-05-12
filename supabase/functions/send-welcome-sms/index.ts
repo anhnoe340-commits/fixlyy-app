@@ -37,10 +37,11 @@ serve(async (req) => {
     }
 
     const prenom = profile.full_name?.split(' ')[0] || 'Artisan'
-    const numeroMia = profile.twilio_number ? formatFrPhone(profile.twilio_number) : 'En cours d\'attribution'
-    const resumeUrl = profile.resume_token ? `${APP_URL}/r/${profile.resume_token}` : APP_URL
+    const numeroFixlyy = profile.twilio_number ? formatFrPhone(profile.twilio_number) : null
 
-    const smsBody = `Bienvenue chez Fixlyy, ${prenom} !\nVotre numero Fixlyy : ${numeroMia}\nReprenez ici : ${resumeUrl}\nEssai gratuit 7 jours, sans CB.`
+    const smsBody = numeroFixlyy
+      ? `Bravo ${prenom}, Mia est prete !\nVotre numero Fixlyy : ${numeroFixlyy}\nDashboard : ${APP_URL}`
+      : `Bravo ${prenom}, Mia est prete !\nDashboard : ${APP_URL}`
 
     const auth2 = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
     const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
