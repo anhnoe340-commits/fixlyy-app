@@ -36,6 +36,7 @@ interface Props {
 
 export default function Step1Account({ onDone }: Props) {
   const [phase, setPhase] = useState<'form' | 'otp'>('form')
+  const [isLogin, setIsLogin] = useState(false)
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [trade, setTrade] = useState(TRADES[0])
@@ -80,7 +81,8 @@ export default function Step1Account({ onDone }: Props) {
   const phoneValid = isValidFrMobile(e164)
 
   async function handleSendOtp() {
-    if (!phoneValid || !fullName.trim()) return
+    if (!phoneValid) return
+    if (!isLogin && !fullName.trim()) return
     setLoading(true); setError('')
     try {
       const { error: otpError } = await supabase.auth.signInWithOtp({
@@ -109,6 +111,13 @@ export default function Step1Account({ onDone }: Props) {
       if (!data.user) throw new Error('Authentification échouée')
 
       const userId = data.user.id
+
+      if (isLogin) {
+        // Reconnexion : pas d'upsert, on laisse App.tsx router selon le profil existant
+        onDone(userId)
+        return
+      }
+
       const resumeToken = generateResumeToken()
       const firstName = fullName.trim().split(' ')[0]
 
@@ -226,6 +235,58 @@ export default function Step1Account({ onDone }: Props) {
   }
 
   // ── Phase formulaire ─────────────────────────────────────────────────────────
+  if (isLogin) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-1">Bon retour !</h2>
+          <p className="text-sm text-gray-500">Entrez votre numéro pour recevoir un code SMS.</p>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-gray-500 block mb-1.5">Votre mobile pro</label>
+          <input
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="06 12 34 56 78"
+            type="tel"
+            inputMode="tel"
+            autoFocus
+            className={`w-full border rounded-xl px-4 py-3.5 text-sm outline-none transition-colors ${
+              phone && !phoneValid
+                ? 'border-red-300 focus:border-red-400'
+                : 'border-gray-200 focus:border-[#2850c8]'
+            }`}
+          />
+          {phone && !phoneValid && (
+            <p className="text-xs text-red-500 mt-1">Format attendu : 06 ou 07.</p>
+          )}
+        </div>
+
+        {error && (
+          <div className="px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-sm text-red-600">{error}</div>
+        )}
+
+        <button
+          onClick={handleSendOtp}
+          disabled={!phoneValid || loading}
+          className="w-full py-4 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+          style={{ background: `linear-gradient(135deg, ${BRAND}, #4070e8)` }}
+        >
+          {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+          Envoyer le code →
+        </button>
+
+        <p className="text-[11px] text-gray-400 text-center">
+          Pas encore inscrit ?{' '}
+          <button onClick={() => { setIsLogin(false); setPhone(''); setError('') }} className="underline">
+            Créer un compte
+          </button>
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -307,7 +368,11 @@ export default function Step1Account({ onDone }: Props) {
       </button>
 
       <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-        En continuant, vous acceptez nos CGU. Essai gratuit 7 jours,<br />sans engagement, sans carte bancaire.
+        Déjà inscrit ?{' '}
+        <button onClick={() => { setIsLogin(true); setPhone(''); setError('') }} className="underline">
+          Se reconnecter
+        </button>
+        {' '}· Essai gratuit 7 jours, sans CB.
       </p>
     </div>
   )
