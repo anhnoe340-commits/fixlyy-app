@@ -54,14 +54,6 @@ export default function OnboardingV2({ onDone }: Props) {
 
   function handleStep3Done() {
     supabase.from('profiles').update({ onboarding_step: 4, onboarding_completed: true }).eq('id', state.userId!).then(() => {})
-    // SMS trophée — envoyé uniquement quand l'onboarding est réellement terminé
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) return
-      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-welcome-sms`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      }).catch(() => {})
-    })
     onDone()
   }
 

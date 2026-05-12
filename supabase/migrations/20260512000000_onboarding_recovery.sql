@@ -13,6 +13,10 @@ WHERE forwarding_activated = true
   AND first_test_call_at IS NOT NULL
   AND onboarding_completed = false;
 
+-- Colonne filet de secours SMS trophée
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS trophy_sms_sent_at timestamptz DEFAULT NULL;
+
 -- Index pour le cron recovery (filtre sur completed + dates)
 CREATE INDEX IF NOT EXISTS idx_profiles_recovery
   ON profiles(onboarding_completed, created_at)

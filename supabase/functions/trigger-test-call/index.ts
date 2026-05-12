@@ -1,8 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
+const SB_URL      = Deno.env.get('SUPABASE_URL')!
+const supabase    = createClient(SB_URL, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const VAPI_API_KEY = Deno.env.get('VAPI_API_KEY')!
+const CRON_SECRET = Deno.env.get('CRON_SECRET')!
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' }
 
 serve(async (req) => {
@@ -66,15 +68,41 @@ serve(async (req) => {
       await supabase.from('onboarding_test_calls').update({ vapi_call_id: vapiCallId }).eq('id', testCall.id)
     }
 
-    // Simuler un succès après 30s si Vapi a bien répondu (le webhook mettra à jour completed_at en vrai)
-    // Pour l'instant on marque un succès minimal si l'appel a été créé
+    // Marque le succès après 30s + déclenche le SMS trophée serveur-to-serveur
     if (vapiRes.ok && testCall?.id) {
+      const userId = user.id
       setTimeout(async () => {
         await supabase.from('onboarding_test_calls').update({
           completed_at: new Date().toISOString(),
           success: true,
           sms_received: true,
         }).eq('id', testCall.id)
+
+        // Marquer l'onboarding comme terminé
+        await supabase.from('profiles')
+          .update({ onboarding_completed: true })
+          .eq('id', userId)
+
+        // SMS trophée — server-to-server, garanti même si le browser est fermé
+        let smsSent = false
+        try {
+          const smsRes = await fetch(`${SB_URL}/functions/v1/send-welcome-sms`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+            body: JSON.stringify({ user_id: userId }),
+          })
+          smsSent = smsRes.ok
+          if (!smsRes.ok) console.error('trophy SMS failed:', await smsRes.text())
+        } catch (e: any) {
+          console.error('trophy SMS fetch error:', e.message)
+        }
+
+        await supabase.from('edge_function_logs').insert({
+          function_name: 'trigger-test-call',
+          status: 'success',
+          input_meta: { user_id: userId, test_call_id: testCall.id },
+          output_meta: { trophy_sms_sent: smsSent },
+        })
       }, 30000)
     }
 
