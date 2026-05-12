@@ -20,7 +20,7 @@ serve(async (req) => {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('phone, twilio_number, vapi_assistant_id, full_name, company_type')
+      .select('phone, twilio_number, vapi_assistant_id, full_name, company_type, assistant_name')
       .eq('id', user.id)
       .single()
 
@@ -29,6 +29,23 @@ serve(async (req) => {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
+
+    // Récupérer le numéro Vapi assigné à cet artisan
+    const { data: phoneEntry } = await supabase
+      .from('phone_numbers_pool')
+      .select('vapi_phone_number_id')
+      .eq('assigned_to_user_id', user.id)
+      .eq('status', 'assigned')
+      .single()
+
+    if (!phoneEntry?.vapi_phone_number_id) {
+      return new Response(
+        JSON.stringify({ error: 'no_number_assigned' }),
+        { status: 422, headers: { ...cors, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const assistantName = profile.assistant_name?.trim() || 'Mia'
 
     // Insérer la tentative d'appel test
     const { data: testCall } = await supabase
@@ -46,13 +63,13 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         assistantId: profile.vapi_assistant_id,
-        phoneNumberId: null, // utiliser le numéro Twilio configuré dans Vapi
+        phoneNumberId: phoneEntry.vapi_phone_number_id,
         customer: {
           number: profile.phone,
           name: profile.full_name || 'Artisan',
         },
         assistantOverrides: {
-          firstMessage: `Bonjour ! Je suis Mia, votre assistante Fixlyy. Je suis en train de tester que tout fonctionne bien. Dites-moi bonjour et posez-moi une question, par exemple : j'ai une fuite d'eau, qu'est-ce que vous faites ?`,
+          firstMessage: `Bonjour ! Je suis ${assistantName}, votre assistante Fixlyy. Je suis en train de tester que tout fonctionne bien. Dites-moi bonjour et posez-moi une question, par exemple : j'ai une fuite d'eau, qu'est-ce que vous faites ?`,
         },
       }),
     })

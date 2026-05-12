@@ -7,7 +7,7 @@ const COUNTDOWN_START = 5
 const POLL_INTERVAL = 2000
 const POLL_TIMEOUT = 45000
 
-type Status = 'countdown' | 'calling' | 'success' | 'no-answer' | 'unreachable'
+type Status = 'countdown' | 'calling' | 'success' | 'no-answer' | 'unreachable' | 'no-number'
 
 interface Props {
   userId: string
@@ -44,13 +44,18 @@ export default function Step3TestCall({ userId, artisanPhone, onDone }: Props) {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trigger-test-call`, {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trigger-test-call`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
       })
+
+      if (res.status === 422) {
+        setStatus('no-number')
+        return
+      }
     } catch { /* non-bloquant */ }
 
     startPolling()
@@ -163,6 +168,37 @@ export default function Step3TestCall({ userId, artisanPhone, onDone }: Props) {
           style={{ background: `linear-gradient(135deg, ${BRAND}, #4070e8)` }}
         >
           Accéder à mon dashboard →
+        </button>
+      </div>
+    )
+  }
+
+  // ── Numéro pas encore assigné (422) ─────────────────────────────────────────
+  if (status === 'no-number') {
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col items-center text-center gap-3 py-2">
+          <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center">
+            <span className="text-2xl">⏳</span>
+          </div>
+          <div>
+            <p className="text-lg font-semibold text-gray-800 mb-1">Numéro pas encore activé</p>
+            <p className="text-sm text-gray-500">
+              Votre numéro Fixlyy est en cours d'activation. Cela prend généralement moins d'une minute après l'inscription.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={retryCall}
+          className="w-full py-3.5 rounded-xl text-white text-sm font-semibold transition-all hover:opacity-90"
+          style={{ background: BRAND }}
+        >
+          Réessayer dans quelques secondes
+        </button>
+
+        <button onClick={onDone} className="text-sm text-center text-gray-400 hover:text-gray-600">
+          Accéder au dashboard quand même →
         </button>
       </div>
     )
