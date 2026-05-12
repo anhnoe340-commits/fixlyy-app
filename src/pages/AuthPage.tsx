@@ -52,7 +52,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex w-screen min-h-screen overflow-x-hidden">
+    <div className="flex w-screen min-h-screen overflow-x-hidden dashboard-bg">
       {/* ── Left panel ── */}
       <div
         className="hidden md:flex w-[420px] flex-shrink-0 flex-col justify-between p-10"
@@ -93,7 +93,7 @@ export default function AuthPage() {
       </div>
 
       {/* ── Right panel ── */}
-      <div className="flex-1 flex items-center justify-center dashboard-bg p-8">
+      <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="md:hidden mb-8">

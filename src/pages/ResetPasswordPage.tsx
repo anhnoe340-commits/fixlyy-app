@@ -39,7 +39,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex w-screen min-h-screen overflow-x-hidden">
+    <div className="flex w-screen min-h-screen overflow-x-hidden dashboard-bg">
       {/* Left panel */}
       <div className="hidden md:flex w-[420px] flex-shrink-0 flex-col justify-between p-10" style={{ background: NAVY }}>
         <div className="flex items-center gap-3">
@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center dashboard-bg p-8">
+      <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <div className="md:hidden mb-8">
             <img src="/logo-full.jpg" alt="Fixlyy" className="h-9 object-contain" />
