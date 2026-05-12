@@ -60,7 +60,7 @@ export default function OnboardingV2({ onDone }: Props) {
   const progress = ((state.step - 1) / (STEPS.length - 1)) * 100
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] flex flex-col items-center justify-center p-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div className="min-h-screen dashboard-bg flex flex-col items-center justify-center p-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div className="w-full max-w-sm">
 
         {/* Logo */}
@@ -89,7 +89,7 @@ export default function OnboardingV2({ onDone }: Props) {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="glass-light rounded-2xl p-6">
           {state.step === 1 && <Step1Account onDone={handleStep1Done} />}
           {state.step === 2 && (
             <Step2Forwarding

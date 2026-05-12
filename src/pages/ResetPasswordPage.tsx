@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center bg-white p-8">
+      <div className="flex-1 flex items-center justify-center dashboard-bg p-8">
         <div className="w-full max-w-sm">
           <div className="md:hidden mb-8">
             <img src="/logo-full.jpg" alt="Fixlyy" className="h-9 object-contain" />

@@ -83,7 +83,7 @@ export default function AddMemberModal({ companyType, onClose, onSuccess }: Prop
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-[480px] overflow-hidden"
+        className="glass-light rounded-2xl w-full max-w-[480px] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

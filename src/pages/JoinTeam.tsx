@@ -33,7 +33,7 @@ type InvitationData = {
 
 function Spinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center dashboard-bg">
       <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${BRAND}40`, borderTopColor: BRAND }} />
     </div>
   )
@@ -41,7 +41,7 @@ function Spinner() {
 
 function ErrorScreen({ message }: { message: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+    <div className="min-h-screen flex items-center justify-center dashboard-bg p-6">
       <div className="text-center max-w-sm">
         <div className="text-4xl mb-4">🔗</div>
         <h1 className="text-xl font-bold text-gray-900 mb-2">Lien invalide</h1>
@@ -137,7 +137,7 @@ export default function JoinTeam() {
 
   if (status === 'done') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+      <div className="min-h-screen flex items-center justify-center dashboard-bg p-6">
         <div className="text-center max-w-sm">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl" style={{ background: `${BRAND}15` }}>
             ✅
@@ -156,7 +156,7 @@ export default function JoinTeam() {
   const firstName = invitation.first_name
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen dashboard-bg flex flex-col">
       {/* Header */}
       <div className="px-5 pt-8 pb-2">
         <div className="flex items-center gap-2 mb-1">
@@ -227,7 +227,7 @@ export default function JoinTeam() {
 
             <div className="flex flex-col gap-2">
               {DAYS.map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-gray-100">
+                <div key={key} className="flex items-center gap-3 glass-light rounded-xl px-4 py-3">
                   <button
                     onClick={() => toggleDay(key)}
                     className={`w-10 text-xs font-bold rounded-lg py-1 transition-all ${
@@ -284,7 +284,7 @@ export default function JoinTeam() {
               <p className="text-sm text-gray-500 mt-1">Vérifiez vos informations avant d'activer votre profil.</p>
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+            <div className="glass-light rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-50">
                 <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Votre profil</p>
                 <p className="text-sm font-bold text-gray-900">{firstName} {lastName}</p>

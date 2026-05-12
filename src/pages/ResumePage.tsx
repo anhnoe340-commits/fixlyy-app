@@ -55,7 +55,7 @@ export default function ResumePage() {
 
   if (phase === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2]">
+      <div className="min-h-screen flex items-center justify-center dashboard-bg">
         <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BRAND }} />
       </div>
     )
@@ -63,8 +63,8 @@ export default function ResumePage() {
 
   if (phase === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] p-4">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 max-w-sm w-full text-center">
+      <div className="min-h-screen flex items-center justify-center dashboard-bg p-4">
+        <div className="glass-light rounded-2xl p-6 max-w-sm w-full text-center">
           <p className="text-gray-500 text-sm">{errorMsg}</p>
           <a href="/" className="mt-4 inline-block text-sm font-medium" style={{ color: BRAND }}>
             Retour à l'accueil
@@ -75,14 +75,14 @@ export default function ResumePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] p-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div className="min-h-screen flex items-center justify-center dashboard-bg p-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: BRAND }}>F</div>
           <span className="text-base font-semibold text-gray-800">Fixlyy</span>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <div className="glass-light rounded-2xl p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-1">
             {firstName ? `Bonjour ${firstName} !` : 'Reprenez votre inscription'}
           </h2>

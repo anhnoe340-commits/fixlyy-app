@@ -36,9 +36,9 @@ export default function AcceptQuotePage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[#F5F5F4] flex items-center justify-center p-4"
+    <div className="min-h-screen dashboard-bg flex items-center justify-center p-4"
          style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 w-full max-w-md p-8 text-center">
+      <div className="glass-light rounded-2xl w-full max-w-md p-8 text-center">
 
         {state === 'loading' && (
           <>
