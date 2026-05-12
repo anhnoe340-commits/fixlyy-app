@@ -12,7 +12,7 @@ import JoinTeam from '@/pages/JoinTeam'
 import ResumePage from '@/pages/ResumePage'
 import { supabase } from '@/lib/supabase'
 
-const USE_NEW_ONBOARDING = import.meta.env.VITE_USE_NEW_ONBOARDING === 'true'
+const USE_NEW_ONBOARDING = true
 
 function Spinner() {
   return (
