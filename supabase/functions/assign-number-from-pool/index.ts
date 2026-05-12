@@ -132,6 +132,32 @@ Deno.serve(async (req) => {
       vapi_assistant_id: VAPI_ASSISTANT_ID,
     }).eq('id', userId)
 
+    // 6. Patch la voix ElevenLabs selon le profil (female-warm par défaut)
+    const VOICE_IDS: Record<string, string> = {
+      'female-warm': 'FFXYdAYPzn8Tw8KiHZqg',
+      'male-pro':    'BVBq6HVJVdnwOMJOqvy9',
+    }
+    try {
+      const { data: profileData } = await sb.from('profiles').select('assistant_voice').eq('id', userId).single()
+      const voiceKey = profileData?.assistant_voice || 'female-warm'
+      const voiceId  = VOICE_IDS[voiceKey] ?? VOICE_IDS['female-warm']
+      await fetchWithTimeout(`https://api.vapi.ai/assistant/${VAPI_ASSISTANT_ID}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          voice: {
+            provider: 'elevenlabs',
+            voiceId,
+            model: 'eleven_multilingual_v2',
+            stability: 0.5,
+            similarityBoost: 0.75,
+          },
+        }),
+      })
+    } catch (e: any) {
+      console.error('voice patch failed (non-blocking):', e.message)
+    }
+
     await log('success', Date.now() - startMs, { userId }, { phone_number, vapi_phone_number_id: vapiPhoneNumberId })
     return new Response(JSON.stringify({ phone_number }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
