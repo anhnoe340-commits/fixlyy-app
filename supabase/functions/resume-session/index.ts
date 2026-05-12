@@ -9,7 +9,7 @@ const sb = createClient(SB_URL, SB_SERVICE)
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'content-type',
+  'Access-Control-Allow-Headers': 'authorization, content-type, apikey',
 }
 
 Deno.serve(async (req) => {
