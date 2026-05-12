@@ -459,32 +459,43 @@ function normalizePhone(p: string): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return new Response('Unauthorized', { status: 401, headers: CORS })
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser(
-    authHeader.replace('Bearer ', '')
-  )
-  if (authError || !user) return new Response('Unauthorized', { status: 401, headers: CORS })
-
+  // Parse body once (needed for user_id in cron-secret path)
   let body: {
+    user_id?: string
     transfer_enabled?: boolean
     transfer_phone?: string
-    sync_urgency?: boolean           // true → met à jour le contexte métier dans le prompt
-    sync_multilingual?: boolean      // true → injecte les règles multilingues + bascule la voix ElevenLabs
-    sync_analysis_plan?: boolean     // true → force le résumé d'appel en français
-    sync_conversational?: boolean    // true → prompt conversationnel + paramètres Vapi naturels
-    sync_voice?: boolean             // true → met à jour la voix ElevenLabs selon assistant_voice du profil
+    sync_urgency?: boolean
+    sync_multilingual?: boolean
+    sync_analysis_plan?: boolean
+    sync_conversational?: boolean
+    sync_voice?: boolean
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
+  }
+
+  // Auth : x-cron-secret (admin/cron) OU JWT utilisateur
+  let userId: string
+  const cronSecret = req.headers.get('x-cron-secret')
+  const CRON_SECRET = Deno.env.get('CRON_SECRET')
+  if (cronSecret && CRON_SECRET && cronSecret === CRON_SECRET) {
+    if (!body.user_id) return new Response('user_id required', { status: 400, headers: CORS })
+    userId = body.user_id
+  } else {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return new Response('Unauthorized', { status: 401, headers: CORS })
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    )
+    if (authError || !user) return new Response('Unauthorized', { status: 401, headers: CORS })
+    userId = user.id
   }
 
   // Récupérer le profil
   const { data: profile } = await supabase
     .from('profiles')
     .select('vapi_assistant_id, phone, assistant_name, assistant_voice, company_name, company_type, transfer_phone')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
   if (!profile?.vapi_assistant_id) {
@@ -707,7 +718,7 @@ serve(async (req) => {
     const voiceId  = VOICE_IDS[voiceKey] ?? VOICE_IDS['female-warm']
     patch.voice = {
       ...(patch.voice ?? assistant.voice ?? {}),
-      provider: 'elevenlabs',
+      provider: '11labs',
       voiceId,
       model: 'eleven_multilingual_v2',
       stability: 0.5,
@@ -741,7 +752,7 @@ serve(async (req) => {
       : null
   }
   if (Object.keys(profileUpdate).length > 0) {
-    await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
+    await supabase.from('profiles').update(profileUpdate).eq('id', userId)
   }
 
   return new Response(

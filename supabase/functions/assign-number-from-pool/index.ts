@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
         headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           voice: {
-            provider: 'elevenlabs',
+            provider: '11labs',
             voiceId,
             model: 'eleven_multilingual_v2',
             stability: 0.5,
