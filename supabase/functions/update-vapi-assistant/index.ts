@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SERVICE_ROLE_KEY')!
+  Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 )
 
 const CORS = {
@@ -367,10 +367,13 @@ function injectUrgencyInPrompt(currentPrompt: string, urgencyBlock: string): str
 }
 
 // ── Prompt conversationnel ────────────────────────────────────────────────────
-function buildConversationalBasePrompt(assistantName: string, companyName: string, trade: string): string {
+function buildConversationalBasePrompt(assistantName: string, companyName: string, trade: string, gender: 'male' | 'female' = 'female'): string {
+  const role = gender === 'male' ? "l'assistant" : "l'assistante"
+  const adj  = gender === 'male' ? 'chaleureux'  : 'chaleureuse'
+  const un   = gender === 'male' ? 'un vrai'     : 'une vraie'
   return `# IDENTITÉ
-Tu es ${assistantName}, la réceptionniste de ${companyName} (${trade}).
-Tu n'es pas un script. Tu es une vraie réceptionniste — chaleureuse, efficace, qui s'adapte à chaque client.
+Tu es ${assistantName}, ${role} de ${companyName} (${trade}).
+Tu n'es pas un script. Tu es ${un} réceptionniste — ${adj}, efficace, qui s'adapte à chaque client.
 
 # TON STYLE
 - Commence presque toujours par un marqueur naturel adapté au contexte
@@ -400,7 +403,7 @@ Tu as une liste mentale à cocher, pas un formulaire à remplir dans l'ordre :
 - Client veut parler à l'artisan : "Je peux essayer de vous le passer si c'est vraiment urgent — sinon je note votre demande et il vous rappelle très vite. Qu'est-ce qui vous arrange ?"
 - Client en colère : reste calme, ne te justifie pas. "Je comprends que ce soit énervant. On va régler ça ensemble, dites-moi ce qui se passe."
 - Client hésite à donner une info : explique pourquoi. "Je vous demande votre adresse pour planifier l'intervention au plus vite."
-- Client demande si tu es une IA : réponds honnêtement sans insister. "Je suis l'assistante de ${companyName}, je transmets votre demande directement à l'artisan. Qu'est-ce qui se passe ?"
+- Client demande si tu es une IA : réponds honnêtement sans insister. "Je suis ${role} de ${companyName}, je transmets votre demande directement à l'artisan. Qu'est-ce qui se passe ?"
 - Client digresse : suis brièvement puis reviens. "Je comprends. Du coup, pour [problème], vous m'avez dit que..."
 
 # CLÔTURE D'APPEL
@@ -471,6 +474,7 @@ serve(async (req) => {
     sync_multilingual?: boolean      // true → injecte les règles multilingues + bascule la voix ElevenLabs
     sync_analysis_plan?: boolean     // true → force le résumé d'appel en français
     sync_conversational?: boolean    // true → prompt conversationnel + paramètres Vapi naturels
+    sync_voice?: boolean             // true → met à jour la voix ElevenLabs selon assistant_voice du profil
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
@@ -479,7 +483,7 @@ serve(async (req) => {
   // Récupérer le profil
   const { data: profile } = await supabase
     .from('profiles')
-    .select('vapi_assistant_id, phone, assistant_name, company_name, company_type, transfer_phone')
+    .select('vapi_assistant_id, phone, assistant_name, assistant_voice, company_name, company_type, transfer_phone')
     .eq('id', user.id)
     .single()
 
@@ -623,8 +627,9 @@ serve(async (req) => {
     const assistantName = profile.assistant_name || 'Mia'
     const companyName   = profile.company_name   || 'votre artisan'
     const trade         = profile.company_type    || 'artisan'
+    const gender        = (profile.assistant_voice || '').startsWith('male') ? 'male' : 'female'
 
-    const newBase = buildConversationalBasePrompt(assistantName, companyName, trade)
+    const newBase = buildConversationalBasePrompt(assistantName, companyName, trade, gender)
 
     const messages: any[] = (patch.model?.messages ?? assistant.model?.messages ?? [])
     const sysIndex = messages.findIndex((m: any) => m.role === 'system')
@@ -689,6 +694,24 @@ serve(async (req) => {
         enabled: true,
         schema: FULL_STRUCTURED_DATA_SCHEMA,
       },
+    }
+  }
+
+  // 6. Sync voix ElevenLabs selon assistant_voice du profil
+  if (body.sync_voice) {
+    const VOICE_IDS: Record<string, string> = {
+      'female-warm': 'FFXYdAYPzn8Tw8KiHZqg',
+      'male-pro':    'BVBq6HVJVdnwOMJOqvy9',
+    }
+    const voiceKey = profile.assistant_voice || 'female-warm'
+    const voiceId  = VOICE_IDS[voiceKey] ?? VOICE_IDS['female-warm']
+    patch.voice = {
+      ...(patch.voice ?? assistant.voice ?? {}),
+      provider: 'elevenlabs',
+      voiceId,
+      model: 'eleven_multilingual_v2',
+      stability: 0.5,
+      similarityBoost: 0.75,
     }
   }
 

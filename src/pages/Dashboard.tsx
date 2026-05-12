@@ -2003,9 +2003,7 @@ function AssistantPage({ accent }: { accent: string }) {
   const [previewText, setPreviewText] = useState('')
 
   const VOICES = [
-    { value: 'female-warm', label: 'Féminin conviviale' },
-    { value: 'female-pro',  label: 'Féminin professionnelle' },
-    { value: 'male-warm',   label: 'Masculin convivial' },
+    { value: 'female-warm', label: 'Féminin chaleureuse' },
     { value: 'male-pro',    label: 'Masculin professionnel' },
   ]
 
@@ -2047,6 +2045,14 @@ function AssistantPage({ accent }: { accent: string }) {
     await updateProfile({ assistant_name: profile.assistant_name, assistant_voice: profile.assistant_voice })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-vapi-assistant`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sync_voice: true, sync_conversational: true }),
+      }).catch(() => {})
+    }
   }
 
   const handleUpdateAssistant = async () => {

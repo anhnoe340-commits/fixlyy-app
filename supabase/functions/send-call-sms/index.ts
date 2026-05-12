@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SERVICE_ROLE_KEY')!)
+const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_AUTH = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
