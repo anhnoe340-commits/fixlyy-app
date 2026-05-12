@@ -40,7 +40,7 @@ serve(async (req) => {
     const numeroMia = profile.twilio_number ? formatFrPhone(profile.twilio_number) : 'En cours d\'attribution'
     const resumeUrl = profile.resume_token ? `${APP_URL}/r/${profile.resume_token}` : APP_URL
 
-    const smsBody = `Bienvenue chez Fixlyy, ${prenom} !\nVotre numero Mia : ${numeroMia}\nReprenez ici : ${resumeUrl}\nEssai gratuit 7 jours, sans CB.`
+    const smsBody = `Bienvenue chez Fixlyy, ${prenom} !\nVotre numero Fixlyy : ${numeroMia}\nReprenez ici : ${resumeUrl}\nEssai gratuit 7 jours, sans CB.`
 
     const auth2 = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
     const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
