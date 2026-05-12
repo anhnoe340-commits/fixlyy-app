@@ -37,12 +37,15 @@ export default function OnboardingV2({ onDone }: Props) {
         fixlyyNumber: data?.twilio_number || null,
       }))
     })
-    // Envoyer le SMS de bienvenue en background
+    // Déclenche l'assignation du numéro + SMS de bienvenue en background
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
+      const headers = { Authorization: `Bearer ${session.access_token}` }
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/assign-number-from-pool`, {
+        method: 'POST', headers,
+      }).catch(() => {})
       fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-welcome-sms`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        method: 'POST', headers,
       }).catch(() => {})
     })
   }
