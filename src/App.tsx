@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ProfileProvider } from '@/contexts/ProfileContext'
-import AuthPage from '@/pages/AuthPage'
-import OnboardingPage from '@/pages/OnboardingPage' // @deprecated — supprimer après validation new onboarding
-import Onboarding from '@/pages/Onboarding'         // @deprecated — supprimer après validation new onboarding
 import OnboardingV2 from '@/pages/onboarding-v2/OnboardingV2'
 import Dashboard from '@/pages/Dashboard'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
@@ -11,8 +8,6 @@ import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
 import ResumePage from '@/pages/ResumePage'
 import { supabase } from '@/lib/supabase'
-
-const USE_NEW_ONBOARDING = true
 
 function Spinner() {
   return (
@@ -75,13 +70,8 @@ function AppContent() {
   }, [user, loading])
 
   if (loading || status === 'loading') return <Spinner />
-  if (!user || status === 'auth') return USE_NEW_ONBOARDING
-    ? <OnboardingV2 onDone={() => setStatus('dashboard')} />
-    : <AuthPage />
-  if (status === 'onboarding') return USE_NEW_ONBOARDING
-    ? <OnboardingV2 onDone={() => setStatus('dashboard')} />
-    : <OnboardingPage userEmail={user.email!} />
-  if (status === 'provisioning') return <Onboarding onDone={() => setStatus('dashboard')} />
+  if (!user || status === 'auth' || status === 'onboarding') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
+  if (status === 'provisioning') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
   return <ProfileProvider><Dashboard /></ProfileProvider>
 }
 
