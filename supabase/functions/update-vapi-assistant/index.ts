@@ -340,6 +340,7 @@ serve(async (req) => {
     sync_analysis_plan?: boolean
     sync_conversational?: boolean
     sync_voice?: boolean
+    sync_server?: boolean
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
@@ -558,9 +559,27 @@ serve(async (req) => {
         schema: FULL_STRUCTURED_DATA_SCHEMA,
       },
     }
+
+    // Webhook Vapi → send-call-sms (end-of-call-report + assistant-request)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const webhookSecret = Deno.env.get('VAPI_WEBHOOK_SECRET')
+    patch.server = {
+      url: `${supabaseUrl}/functions/v1/send-call-sms`,
+      ...(webhookSecret ? { secret: webhookSecret } : {}),
+    }
   }
 
-  // 6. Sync voix ElevenLabs selon assistant_voice du profil
+  // 6. Sync webhook server URL uniquement
+  if (body.sync_server) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const webhookSecret = Deno.env.get('VAPI_WEBHOOK_SECRET')
+    patch.server = {
+      url: `${supabaseUrl}/functions/v1/send-call-sms`,
+      ...(webhookSecret ? { secret: webhookSecret } : {}),
+    }
+  }
+
+  // 7. Sync voix ElevenLabs selon assistant_voice du profil
   if (body.sync_voice) {
     const VOICE_IDS: Record<string, string> = {
       'female-warm': 'FFXYdAYPzn8Tw8KiHZqg',
