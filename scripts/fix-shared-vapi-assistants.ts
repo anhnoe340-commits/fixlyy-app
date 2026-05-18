@@ -1,0 +1,322 @@
+/**
+ * fix-shared-vapi-assistants.ts
+ *
+ * Migration : crée un assistant Vapi dédié pour chaque artisan
+ * qui partage actuellement le même vapi_assistant_id que d'autres.
+ *
+ * Usage :
+ *   npx tsx scripts/fix-shared-vapi-assistants.ts --dry-run   ← preview sans rien changer
+ *   npx tsx scripts/fix-shared-vapi-assistants.ts              ← migration réelle
+ */
+
+import { createClient } from '@supabase/supabase-js'
+import * as dotenv from 'dotenv'
+
+dotenv.config({ path: '.env.local' })
+
+const DRY_RUN = process.argv.includes('--dry-run')
+
+const sb = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.FIXLYY_SERVICE_ROLE_KEY!
+)
+const VAPI_KEY     = process.env.VAPI_API_KEY!
+const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID!
+const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN!
+const SB_URL       = process.env.SUPABASE_URL!
+const WEBHOOK_URL  = `${SB_URL}/functions/v1/send-call-sms`
+const WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET
+
+const VOICE_IDS: Record<string, string> = {
+  'female-warm': 'FFXYdAYPzn8Tw8KiHZqg',
+  'female-pro':  'b0Ev8lcOOXx2o9ZcF46H',
+  'male-warm':   'FRY6vOtGqwamgAf39SwP',
+  'male-pro':    'HuLbOdhRlvQQN8oPP0AJ',
+}
+
+function log(msg: string) {
+  console.log(`[${new Date().toISOString()}] ${msg}`)
+}
+
+async function vapiGet(path: string) {
+  const res = await fetch(`https://api.vapi.ai${path}`, {
+    headers: { Authorization: `Bearer ${VAPI_KEY}` },
+  })
+  if (!res.ok) throw new Error(`Vapi GET ${path} failed: ${res.status} ${await res.text()}`)
+  return res.json()
+}
+
+async function vapiPost(path: string, body: unknown) {
+  const res = await fetch(`https://api.vapi.ai${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`Vapi POST ${path} failed: ${res.status} ${await res.text()}`)
+  return res.json()
+}
+
+async function vapiPatch(path: string, body: unknown) {
+  const res = await fetch(`https://api.vapi.ai${path}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`Vapi PATCH ${path} failed: ${res.status} ${await res.text()}`)
+  return res.json()
+}
+
+async function vapiDelete(path: string) {
+  const res = await fetch(`https://api.vapi.ai${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${VAPI_KEY}` },
+  })
+  if (!res.ok) throw new Error(`Vapi DELETE ${path} failed: ${res.status} ${await res.text()}`)
+}
+
+function buildAssistantBody(profile: {
+  company_name: string | null
+  company_type: string | null
+  assistant_name: string | null
+  assistant_voice: string | null
+}) {
+  const assistantName = profile.assistant_name || 'Mia'
+  const companyName   = profile.company_name   || 'votre artisan'
+  const companyType   = profile.company_type   || 'artisan'
+  const voiceKey      = profile.assistant_voice || 'female-warm'
+  const voiceId       = VOICE_IDS[voiceKey] ?? VOICE_IDS['female-warm']
+
+  return {
+    name: `${assistantName} — ${companyName}`,
+    firstMessage: `Allô, ${companyName}, bonjour !`,
+    endCallMessage: 'Merci pour votre appel, à très vite !',
+    model: {
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      maxTokens: 250,
+      temperature: 0.75,
+      messages: [{
+        role: 'system',
+        content: `# IDENTITÉ
+Tu es ${assistantName}, la réceptionniste de ${companyName} (${companyType}).
+Tu es chaleureuse, professionnelle, et tu t'adaptes à chaque client.
+
+# STYLE
+- Commence par un marqueur naturel : "D'accord", "Très bien", "Oh là" (si urgence), "Prenez votre temps" (si hésitation)
+- Réagis aux émotions AVANT de poser ta question suivante
+- Reformule ce que dit le client pour montrer que tu écoutes
+- Phrases courtes, max 20 mots
+- Ne dis jamais deux fois la même formule dans un appel
+- Si demandé si tu es une IA : "Je suis l'assistante de ${companyName}, je transmets votre demande à l'artisan."
+
+# OBJECTIFS (ordre flexible)
+Collecte naturellement : nom, téléphone, adresse, problème, urgence, disponibilités.
+Ne dis JAMAIS "Je dois vous poser quelques questions".
+
+# CLÔTURE
+Toujours terminer par : "Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. On vous rappelle [délai]. C'est bien ça ?"
+Puis : "Merci, à très vite !"`,
+      }],
+    },
+    voice: {
+      provider: '11labs',
+      voiceId,
+      model: 'eleven_multilingual_v2',
+      language: 'fr',
+      stability: 0.5,
+      similarityBoost: 0.75,
+      style: 0.3,
+      useSpeakerBoost: true,
+    },
+    transcriber: {
+      provider: 'deepgram',
+      model: 'nova-2',
+      language: 'fr',
+      smartFormat: true,
+    },
+    startSpeakingPlan: {
+      waitSeconds: 0.6,
+      smartEndpointingEnabled: true,
+      transcriptionEndpointingPlan: {
+        onPunctuationSeconds: 0.4,
+        onNoPunctuationSeconds: 1.2,
+        onNumberSeconds: 0.6,
+      },
+    },
+    stopSpeakingPlan: { numWords: 2, voiceSeconds: 0.3, backoffSeconds: 1.0 },
+    silenceTimeoutSeconds: 30,
+    maxDurationSeconds: 600,
+    backgroundSound: 'office',
+    backchannelingEnabled: true,
+    modelOutputInMessagesEnabled: true,
+    numFastTurns: 2,
+    backgroundDenoisingEnabled: true,
+    serverUrl: WEBHOOK_URL,
+    ...(WEBHOOK_SECRET ? { serverUrlSecret: WEBHOOK_SECRET } : {}),
+    analysisPlan: {
+      summaryPlan: {
+        enabled: true,
+        prompt: 'Rédige un résumé concis en français de cet appel. Indique : (1) la raison, (2) les infos importantes (nom, téléphone, adresse), (3) urgence ou non, (4) prochaine action. Maximum 3 phrases. Toujours en français.',
+      },
+      structuredDataPlan: {
+        enabled: true,
+        schema: {
+          type: 'object',
+          properties: {
+            customerName:             { type: 'string', description: 'Prénom et nom du client' },
+            customerPhone:            { type: 'string', description: 'Numéro de téléphone du client' },
+            customerAddress:          { type: 'string', description: "Adresse complète de l'intervention" },
+            reason:                   { type: 'string', description: "Raison de l'appel en 1 phrase" },
+            urgency:                  { type: 'string', enum: ['urgent', 'non_urgent'] },
+            appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
+            appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
+            smsBody:                  { type: 'string', description: "Résumé 1-2 phrases courtes max 80 chars pour l'artisan, toujours en français" },
+            clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'] },
+            aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'] },
+            conversationQualityScore: { type: 'integer', description: 'Note 0-10' },
+            conversationQualityNotes: { type: 'string', description: 'Note en 1 phrase sur la qualité' },
+          },
+        },
+      },
+    },
+  }
+}
+
+async function main() {
+  log(`Mode : ${DRY_RUN ? 'DRY-RUN (aucune modification)' : 'RÉEL'}`)
+  log('Vérification clé Vapi...')
+
+  // Test de la clé Vapi
+  try {
+    await vapiGet('/assistant?limit=1')
+    log('✓ Clé Vapi valide')
+  } catch (e: any) {
+    log(`✗ Clé Vapi invalide : ${e.message}`)
+    log('  → Régénère la clé sur dashboard.vapi.ai et mets à jour VAPI_API_KEY dans .env.local')
+    process.exit(1)
+  }
+
+  // 1. Charger tous les profils provisionnés
+  const { data: profiles, error } = await sb
+    .from('profiles')
+    .select('id, company_name, company_type, assistant_name, assistant_voice, twilio_number, vapi_assistant_id')
+    .not('vapi_assistant_id', 'is', null)
+
+  if (error) throw new Error(`Supabase profiles query failed: ${error.message}`)
+  if (!profiles?.length) { log('Aucun profil provisionné trouvé.'); return }
+
+  log(`${profiles.length} profil(s) provisionné(s) trouvé(s)`)
+
+  // 2. Trouver les assistant_id partagés
+  const countByAssistant = new Map<string, number>()
+  for (const p of profiles) {
+    if (p.vapi_assistant_id) {
+      countByAssistant.set(p.vapi_assistant_id, (countByAssistant.get(p.vapi_assistant_id) ?? 0) + 1)
+    }
+  }
+
+  const sharedAssistantIds = [...countByAssistant.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([id]) => id)
+
+  if (sharedAssistantIds.length === 0) {
+    log('✓ Aucun assistant partagé — tous les profils ont déjà un assistant dédié.')
+    return
+  }
+
+  log(`\n${sharedAssistantIds.length} assistant(s) partagé(s) détecté(s) :`)
+  for (const aid of sharedAssistantIds) {
+    const users = profiles.filter(p => p.vapi_assistant_id === aid)
+    log(`  ${aid} → ${users.length} artisans :`)
+    for (const u of users) {
+      log(`    - ${u.company_name || '(sans nom)'} [${u.id.slice(0, 8)}...] twilio=${u.twilio_number ?? 'AUCUN'}`)
+    }
+  }
+
+  // 3. Pour chaque assistant partagé, traiter les profils concernés
+  for (const sharedId of sharedAssistantIds) {
+    const affected = profiles.filter(p => p.vapi_assistant_id === sharedId)
+
+    // Le premier garde l'assistant original, les autres reçoivent un nouveau
+    const [keeper, ...others] = affected
+    log(`\n  Assistant ${sharedId} :`)
+    log(`    → GARDE l'original : ${keeper.company_name} [${keeper.id.slice(0, 8)}...]`)
+
+    for (const profile of others) {
+      log(`\n    → TRAITE : ${profile.company_name} [${profile.id.slice(0, 8)}...]`)
+
+      if (DRY_RUN) {
+        log(`      [DRY-RUN] Créerait un assistant Vapi dédié pour ${profile.company_name}`)
+        if (profile.twilio_number) {
+          // Trouver le vapi_phone_number_id dans le pool
+          const { data: poolRow } = await sb
+            .from('phone_numbers_pool')
+            .select('vapi_phone_number_id')
+            .eq('phone_number', profile.twilio_number)
+            .maybeSingle()
+          log(`      [DRY-RUN] PATCHerait le phone-number Vapi ${poolRow?.vapi_phone_number_id ?? '(non trouvé dans le pool)'}`)
+        } else {
+          log(`      [DRY-RUN] Pas de twilio_number → updaterait seulement profiles.vapi_assistant_id`)
+        }
+        continue
+      }
+
+      // ── MODE RÉEL ──
+      let newAssistantId: string | null = null
+      try {
+        // a. Créer l'assistant dédié
+        const body = buildAssistantBody(profile)
+        const created = await vapiPost('/assistant', body)
+        newAssistantId = created.id
+        log(`      ✓ Assistant créé : ${newAssistantId}`)
+
+        // b. Si le profil a un numéro, PATCH le mapping Vapi phone-number
+        if (profile.twilio_number) {
+          const { data: poolRow } = await sb
+            .from('phone_numbers_pool')
+            .select('id, vapi_phone_number_id')
+            .eq('phone_number', profile.twilio_number)
+            .maybeSingle()
+
+          if (poolRow?.vapi_phone_number_id) {
+            await vapiPatch(`/phone-number/${poolRow.vapi_phone_number_id}`, { assistantId: newAssistantId })
+            log(`      ✓ Phone-number Vapi ${poolRow.vapi_phone_number_id} → assistant ${newAssistantId}`)
+          } else {
+            // Le numéro n'est pas dans le pool (acheté à l'ancienne via stripe-webhook)
+            // Créer un mapping Vapi phone-number from scratch
+            await vapiPost('/phone-number', {
+              provider: 'twilio',
+              number: profile.twilio_number,
+              twilioAccountSid: TWILIO_SID,
+              twilioAuthToken: TWILIO_TOKEN,
+              assistantId: newAssistantId,
+              name: `fixlyy-${profile.id.slice(0, 8)}`,
+            })
+            log(`      ✓ Nouveau mapping Vapi créé pour ${profile.twilio_number}`)
+          }
+        }
+
+        // c. Mettre à jour le profil en base
+        await sb.from('profiles').update({ vapi_assistant_id: newAssistantId }).eq('id', profile.id)
+        log(`      ✓ profiles.vapi_assistant_id mis à jour`)
+
+      } catch (e: any) {
+        log(`      ✗ ERREUR pour ${profile.company_name} : ${e.message}`)
+        if (newAssistantId) {
+          log(`      → Rollback : suppression de l'assistant ${newAssistantId}`)
+          try { await vapiDelete(`/assistant/${newAssistantId}`) } catch { /* silent */ }
+        }
+        log(`      → Profil NON modifié en base — à corriger manuellement`)
+      }
+    }
+  }
+
+  log('\n─── Migration terminée ───')
+  log('Résumé final :')
+  for (const aid of sharedAssistantIds) {
+    const remaining = profiles.filter(p => p.vapi_assistant_id === aid)
+    log(`  ${aid} → ${remaining.length} profil(s) (devrait être 1 après migration)`)
+  }
+}
+
+main().catch(e => { console.error('Fatal:', e); process.exit(1) })

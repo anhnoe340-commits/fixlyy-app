@@ -279,8 +279,24 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
 
   useEffect(() => {
     if (!user) return
-    supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(100)
-      .then(({ data }) => { setCalls(data || []); setLoading(false) })
+
+    const loadCalls = () =>
+      supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(100)
+        .then(({ data }) => { setCalls(data || []); setLoading(false) })
+
+    loadCalls()
+
+    const channel = supabase
+      .channel('today-calls')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
+        (payload) => { setCalls(prev => [payload.new as CallRow, ...prev]) }
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
+        (payload) => { setCalls(prev => prev.map(c => c.id === (payload.new as CallRow).id ? payload.new as CallRow : c)) }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [user])
 
   const hour = new Date().getHours()

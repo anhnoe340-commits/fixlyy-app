@@ -264,12 +264,43 @@ serve(async (req) => {
       return new Response('no summary', { headers: cors })
     }
 
-    // Trouver l'artisan par vapi_assistant_id
-    const { data: profile } = await supabase
+    // Trouver l'artisan par vapi_assistant_id (maybeSingle pour éviter un crash si doublon résiduel)
+    const { data: profiles, error: profileErr } = await supabase
       .from('profiles')
       .select('id, phone, twilio_number, assistant_name, company_name')
       .eq('vapi_assistant_id', assistantId)
-      .single()
+      .limit(2)
+
+    if (profileErr) {
+      console.error('profiles query error:', profileErr.message)
+      return new Response('db error', { status: 500, headers: cors })
+    }
+
+    if (!profiles || profiles.length === 0) {
+      console.error('No profile for assistant:', assistantId)
+      // Alerte critique : assistant sans artisan — configuration invalide
+      await supabase.from('critical_alerts').insert({
+        alert_type: 'orphan_assistant',
+        severity: 'high',
+        message: `Webhook reçu pour assistant ${assistantId} sans profil artisan correspondant`,
+        meta: { assistant_id: assistantId, call_id: callId },
+      })
+      return new Response('no profile', { status: 404, headers: cors })
+    }
+
+    if (profiles.length > 1) {
+      console.error('Multiple profiles share assistant:', assistantId, '— IDs:', profiles.map(p => p.id))
+      // Alerte critique : assistant partagé — exécuter fix-shared-vapi-assistants.ts
+      await supabase.from('critical_alerts').insert({
+        alert_type: 'shared_assistant',
+        severity: 'critical',
+        message: `${profiles.length} artisans partagent l'assistant ${assistantId} — SMS non envoyé, migration requise`,
+        meta: { assistant_id: assistantId, user_ids: profiles.map(p => p.id) },
+      })
+      return new Response('ambiguous profile', { status: 409, headers: cors })
+    }
+
+    const profile = profiles[0]
 
     if (!profile?.phone || !profile?.twilio_number) {
       console.error('No phone or twilio_number for assistant:', assistantId)
