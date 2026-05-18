@@ -10,9 +10,9 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import * as dotenv from 'dotenv'
 
-dotenv.config({ path: '.env.local' })
+// Node.js v20.12+ natif — pas besoin de dotenv
+try { (process as any).loadEnvFile('.env.local') } catch { /* fichier absent, on continue */ }
 
 const DRY_RUN = process.argv.includes('--dry-run')
 
@@ -149,14 +149,12 @@ Puis : "Merci, à très vite !"`,
     backgroundSound: 'office',
     backchannelingEnabled: true,
     modelOutputInMessagesEnabled: true,
-    numFastTurns: 2,
     backgroundDenoisingEnabled: true,
     serverUrl: WEBHOOK_URL,
     ...(WEBHOOK_SECRET ? { serverUrlSecret: WEBHOOK_SECRET } : {}),
     analysisPlan: {
       summaryPlan: {
         enabled: true,
-        prompt: 'Rédige un résumé concis en français de cet appel. Indique : (1) la raison, (2) les infos importantes (nom, téléphone, adresse), (3) urgence ou non, (4) prochaine action. Maximum 3 phrases. Toujours en français.',
       },
       structuredDataPlan: {
         enabled: true,

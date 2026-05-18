@@ -152,14 +152,12 @@ conversationQualityScore (0-10), conversationQualityNotes (1 phrase)`,
     backgroundSound: 'office',
     backchannelingEnabled: true,
     modelOutputInMessagesEnabled: true,
-    numFastTurns: 2,
     backgroundDenoisingEnabled: true,
     serverUrl: WEBHOOK_URL,
     ...(VAPI_WEBHOOK_SECRET ? { serverUrlSecret: VAPI_WEBHOOK_SECRET } : {}),
     analysisPlan: {
       summaryPlan: {
         enabled: true,
-        prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison, (2) les infos importantes (nom, téléphone, adresse), (3) urgence ou non, (4) prochaine action. Maximum 3 phrases. Toujours en français.",
       },
       structuredDataPlan: {
         enabled: true,
