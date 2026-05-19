@@ -26,7 +26,7 @@ const FULL_STRUCTURED_DATA_SCHEMA = {
     appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
     appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
     smsBody:                  { type: 'string', description: "Accroche courte max 80 chars : nature exacte du problème + action immédiate. Toujours en français." },
-    fullSummary:              { type: 'string', description: "Résumé complet en 3 phrases max, toujours en français : (1) raison de l'appel, (2) nom + adresse + téléphone + détail technique, (3) URGENT/NORMAL/PEUT ATTENDRE + action concrète pour l'artisan. Style note de chantier, factuel." },
+    fullSummary:              { type: 'string', description: "Résumé complet en 4 éléments, toujours en français : (1) raison/problème principal, (2) contexte — ce qui a déjà été tenté ou durée du problème, (3) nom + adresse + téléphone + détail technique, (4) URGENT/NORMAL/PEUT ATTENDRE + action concrète. Style note de chantier, factuel." },
     clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'] },
     aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'] },
     conversationQualityScore: { type: 'integer', description: 'Note 0-10' },
