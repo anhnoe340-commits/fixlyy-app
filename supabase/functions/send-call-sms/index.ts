@@ -25,7 +25,8 @@ const FULL_STRUCTURED_DATA_SCHEMA = {
     urgency:                  { type: 'string', enum: ['urgent', 'non_urgent'] },
     appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
     appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
-    smsBody:                  { type: 'string', description: 'Résumé 1-2 phrases COURTES pour l\'artisan : nature exacte du problème et action à faire. Max 80 caractères. Ne pas répéter l\'urgence ni la date de RDV. Toujours en français.' },
+    smsBody:                  { type: 'string', description: "Accroche courte max 80 chars : nature exacte du problème + action immédiate. Toujours en français." },
+    fullSummary:              { type: 'string', description: "Résumé complet en 3 phrases max, toujours en français : (1) raison de l'appel, (2) nom + adresse + téléphone + détail technique, (3) URGENT/NORMAL/PEUT ATTENDRE + action concrète pour l'artisan. Style note de chantier, factuel." },
     clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'] },
     aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'] },
     conversationQualityScore: { type: 'integer', description: 'Note 0-10' },
@@ -245,22 +246,20 @@ serve(async (req) => {
 
     const structuredData = message.analysis?.structuredData || {}
     const callerName: string | null = structuredData.customerName || null
-    // Priorité absolue au smsBody FR de Mia — jamais le summary Vapi qui peut être en anglais
-    const rawSummary: string = structuredData.smsBody || ''
-    const smsSummary: string = rawSummary || '[Résumé indisponible]'
-    const reason: string | null = structuredData.reason || rawSummary || null
+    const smsBody: string = structuredData.smsBody || ''
+    const fullSummary: string = structuredData.fullSummary || ''
+    const reason: string | null = structuredData.reason || smsBody || null
     const clientTone: string | null              = structuredData.clientTone || null
     const aiToneUsed: string | null              = structuredData.aiToneUsed || null
     const qualityScore: number | null            = structuredData.conversationQualityScore ?? null
     const qualityNotes: string | null            = structuredData.conversationQualityNotes || null
     const appointmentDate: string | null         = structuredData.appointmentDate || null
     const appointmentTime: string | null         = structuredData.appointmentTime || null
-    const customerAddress: string | null         = structuredData.customerAddress || null
 
     // Transcription depuis artifact.messages
     const transcript: string | null = formatTranscript(message.artifact?.messages) || message.artifact?.transcript || null
 
-    if (!assistantId || !smsSummary) {
+    if (!assistantId || (!smsBody && !fullSummary)) {
       return new Response('no summary', { headers: cors })
     }
 
@@ -307,41 +306,6 @@ serve(async (req) => {
       return new Response('no profile', { headers: cors })
     }
 
-    // ── Patch analysisPlan si incomplet (summaryPlan FR + structuredDataPlan) ─
-    if (VAPI_API_KEY) {
-      try {
-        const getRes = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
-          headers: { Authorization: `Bearer ${VAPI_API_KEY}` },
-        })
-        if (getRes.ok) {
-          const assistant = await getRes.json()
-          const summaryPrompt = assistant.analysisPlan?.summaryPlan?.prompt || ''
-          const structuredEnabled = assistant.analysisPlan?.structuredDataPlan?.enabled === true
-          const summaryOk = summaryPrompt.includes('français')
-
-          if (!summaryOk || !structuredEnabled) {
-            await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
-              method: 'PATCH',
-              headers: { Authorization: `Bearer ${VAPI_API_KEY}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                analysisPlan: {
-                  summaryPlan: {
-                    prompt: "Rédige un résumé concis en français de cet appel. Indique : (1) la raison de l'appel, (2) les informations importantes (nom, téléphone, adresse si mentionnés), (3) si c'est urgent ou non, (4) la prochaine action à faire. Maximum 3 phrases. Réponds UNIQUEMENT en français, même si le client a parlé dans une autre langue.",
-                  },
-                  structuredDataPlan: {
-                    enabled: true,
-                    schema: FULL_STRUCTURED_DATA_SCHEMA,
-                  },
-                },
-              }),
-            })
-          }
-        }
-      } catch (e) {
-        console.error('analysisPlan patch failed (non-blocking):', e)
-      }
-    }
-
     // ── Auto-création/mise à jour de contact si nom connu ───────────────────
     if (callerName) {
       try {
@@ -366,36 +330,17 @@ serve(async (req) => {
       }
     }
 
-    // ── SMS — 2 segments UCS-2 sans adresse, 3 avec adresse (~195 chars max) ──
-    const BUDGET = 195
-    const phoneStr = callerNumber !== 'Inconnu' ? ` (${callerNumber})` : ''
-    const callerLabel = callerName ? `${callerName}${phoneStr}` : callerNumber
-    const headerLine = `📞 ${callerLabel}`
-    const footerLine = `— ${profile.assistant_name || 'Mia'}`
-    const urgentLine = structuredData.urgency === 'urgent' ? '⚡ URGENT' : null
-    const addressLine = customerAddress ? `📍 ${customerAddress}` : `📍 Adresse non communiquee`
-    const rdvLine = appointmentDate
-      ? `📅 ${appointmentDate}${appointmentTime ? ` ${appointmentTime}` : ''}`
-      : null
-    const usedChars = headerLine.length + 1
-      + (urgentLine ? urgentLine.length + 1 : 0)
-      + addressLine.length + 1
-      + (rdvLine ? rdvLine.length + 1 : 0)
-      + 1 // newline avant footer
-      + footerLine.length
-    const bodyBudget = BUDGET - usedChars
-    const bodyText = smsSummary.length > bodyBudget
-      ? smsSummary.slice(0, bodyBudget - 3) + '...'
-      : smsSummary
-    const smsParts = [headerLine]
-    if (urgentLine) smsParts.push(urgentLine)
-    smsParts.push(bodyText)
-    smsParts.push(addressLine)
-    if (rdvLine) smsParts.push(rdvLine)
-    smsParts.push(footerLine)
-    const smsBody = smsParts.join('\n')
+    // ── SMS : accroche courte + résumé structuré 3 phrases ──────────────────
+    const smsParts: string[] = []
+    smsParts.push(smsBody || '[Résumé indisponible]')
+    if (fullSummary) {
+      smsParts.push('')
+      smsParts.push(fullSummary)
+    }
+    smsParts.push(`– ${profile.assistant_name || 'Mia'}, réceptionniste Fixlyy`)
+    const smsText = smsParts.join('\n')
 
-    await sendSms(profile.twilio_number, profile.phone, smsBody)
+    await sendSms(profile.twilio_number, profile.phone, smsText)
 
     // ── Sauvegarde en base ───────────────────────────────────────────────────
     await supabase.from('calls').insert({
@@ -403,7 +348,8 @@ serve(async (req) => {
       caller_phone: callerNumber,
       caller_name: callerName,
       duration_seconds: durationSec,
-      summary: smsSummary,
+      summary: fullSummary || smsBody || null,
+      sms_body: smsBody || null,
       reason,
       status: 'new',
       vapi_call_id: callId,

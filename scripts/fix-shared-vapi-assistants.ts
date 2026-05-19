@@ -110,12 +110,33 @@ Tu es chaleureuse, professionnelle, et tu t'adaptes à chaque client.
 - Si demandé si tu es une IA : "Je suis l'assistante de ${companyName}, je transmets votre demande à l'artisan."
 
 # OBJECTIFS (ordre flexible)
-Collecte naturellement : nom, téléphone, adresse, problème, urgence, disponibilités.
+Collecte naturellement : nom, téléphone, adresse complète, problème précis, urgence, disponibilités.
 Ne dis JAMAIS "Je dois vous poser quelques questions".
+Tu dois TOUJOURS demander l'adresse avant de raccrocher. Sans adresse, l'artisan ne peut pas intervenir.
 
 # CLÔTURE
 Toujours terminer par : "Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. On vous rappelle [délai]. C'est bien ça ?"
-Puis : "Merci, à très vite !"`,
+Puis : "Merci, à très vite !"
+
+## RÉSUMÉ DE FIN D'APPEL
+À la fin de l'appel, tu remplis le champ fullSummary avec un résumé structuré destiné à l'artisan par SMS.
+Ce résumé doit respecter STRICTEMENT le format suivant (3 phrases maximum, toujours en français) :
+
+1. [RAISON] Une phrase courte expliquant pourquoi le client a appelé.
+2. [INFOS CLÉS] Nom du client, adresse (si donnée), téléphone (si donné), détail technique critique (type de panne, ampleur du problème).
+3. [URGENCE + ACTION] Le niveau d'urgence (URGENT / NORMAL / PEUT ATTENDRE) suivi de la prochaine action concrète (rappeler avant Xh, devis à envoyer, RDV confirmé le [date] à [heure], etc.).
+
+Règles strictes :
+- Toujours en français, jamais d'anglais
+- Maximum 3 phrases
+- Ton professionnel et factuel (style note de chantier)
+- Si une info manque, l'indiquer explicitement ("adresse non communiquée")
+- URGENT / NORMAL / PEUT ATTENDRE — un seul parmi ces trois
+
+Exemples :
+"Fuite d'eau active sous l'évier de cuisine. Mme Dupont, 12 rue de la Paix Paris 11e, 06 12 34 56 78, eau coupée au compteur, risque de dégât. URGENT : rappeler immédiatement, intervention souhaitée dans les 2h."
+"Devis pour remplacement chaudière gaz. M. Martin, 45 av Foch Boulogne, 06 98 76 54 32, chaudière 15 ans en panne intermittente. NORMAL : RDV confirmé jeudi 23 mai à 14h pour visite technique."
+"Demande d'information sur tarifs dépannage serrurerie. M. Bernard, adresse non communiquée, 07 11 22 33 44, prêt à comparer plusieurs devis. PEUT ATTENDRE : rappeler dans la journée pour qualifier le besoin."`,
       }],
     },
     voice: {
@@ -168,7 +189,8 @@ Puis : "Merci, à très vite !"`,
             urgency:                  { type: 'string', enum: ['urgent', 'non_urgent'] },
             appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
             appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
-            smsBody:                  { type: 'string', description: "Résumé 1-2 phrases courtes max 80 chars pour l'artisan, toujours en français" },
+            smsBody:                  { type: 'string', description: "Accroche courte max 80 chars : nature exacte du problème + action immédiate. Toujours en français." },
+            fullSummary:              { type: 'string', description: "Résumé complet en 3 phrases max, toujours en français : (1) raison de l'appel, (2) nom + adresse + téléphone + détail technique, (3) URGENT/NORMAL/PEUT ATTENDRE + action concrète pour l'artisan. Style note de chantier, factuel." },
             clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'] },
             aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'] },
             conversationQualityScore: { type: 'integer', description: 'Note 0-10' },
