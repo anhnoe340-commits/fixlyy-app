@@ -217,16 +217,24 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const startMs = Date.now()
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+  const authHeader = req.headers.get('Authorization') ?? ''
+  let userId: string
 
-  const { data: { user }, error: authErr } = await createClient(SB_URL, Deno.env.get('SUPABASE_ANON_KEY')!).auth.getUser(authHeader.replace('Bearer ', ''))
-  if (authErr || !user) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+  if (authHeader === `Bearer ${SB_SERVICE}`) {
+    const body = await req.json().catch(() => ({}))
+    userId = body?.user_id
+    if (!userId) return new Response(JSON.stringify({ error: 'Missing user_id' }), { status: 400, headers: corsHeaders })
+  } else {
+    const { data: { user }, error: authErr } = await createClient(SB_URL, Deno.env.get('SUPABASE_ANON_KEY')!).auth.getUser(authHeader.replace('Bearer ', ''))
+    if (authErr || !user) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    userId = user.id
+  }
 
-  const userId = user.id
   let assignedRow: any = null
   let twilioPatched = false
+  let twilioAlreadyConfigured = false
   let createdAssistantId: string | null = null
+  let assistantIdToUse: string | null = null
 
   try {
     // 1. Réservation atomique
@@ -237,30 +245,30 @@ Deno.serve(async (req) => {
 
     const { phone_number_id, twilio_sid, phone_number } = assignedRow
 
-    // Si déjà fully assigned, retour immédiat
-    if (assignedRow.vapi_phone_number_id) {
-      await sb.from('profiles').update({ twilio_number: phone_number }).eq('id', userId)
-      await log('success', Date.now() - startMs, { userId }, { phone_number, already_assigned: true })
-      return new Response(JSON.stringify({ phone_number }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
-
     // 2. Récupérer le profil pour personnaliser l'assistant
     const { data: profileData } = await sb
       .from('profiles')
-      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open')
+      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id')
       .eq('id', userId)
       .single()
 
-    // 3. Créer l'assistant Vapi dédié à cet artisan
-    createdAssistantId = await createDedicatedAssistant({
-      company_name:   profileData?.company_name   ?? null,
-      company_type:   profileData?.company_type   ?? null,
-      assistant_name: profileData?.assistant_name ?? null,
-      assistant_voice: profileData?.assistant_voice ?? null,
-      greeting_open:  profileData?.greeting_open  ?? null,
-    })
+    // 3. Assistant Vapi — réutilise l'existant ou en crée un nouveau
+    const existingAssistantId = profileData?.vapi_assistant_id ?? null
+    if (existingAssistantId) {
+      assistantIdToUse = existingAssistantId
+    } else {
+      createdAssistantId = await createDedicatedAssistant({
+        company_name:   profileData?.company_name   ?? null,
+        company_type:   profileData?.company_type   ?? null,
+        assistant_name: profileData?.assistant_name ?? null,
+        assistant_voice: profileData?.assistant_voice ?? null,
+        greeting_open:  profileData?.greeting_open  ?? null,
+      })
+      assistantIdToUse = createdAssistantId
+    }
 
     // 4. PATCH Twilio voiceUrl → Vapi
+    twilioAlreadyConfigured = !!assignedRow.vapi_phone_number_id
     const twilioRes = await fetchWithTimeout(
       `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers/${twilio_sid}.json`,
       {
@@ -278,22 +286,37 @@ Deno.serve(async (req) => {
     if (!twilioRes.ok) throw new Error(`Twilio PATCH failed: ${twilioRes.status}`)
     twilioPatched = true
 
-    // 5. Créer le mapping Vapi phone-number → assistant dédié
-    const vapiRes = await fetchWithTimeout('https://api.vapi.ai/phone-number', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: 'twilio',
-        number: phone_number,
-        twilioAccountSid: TWILIO_SID,
-        twilioAuthToken: TWILIO_TOKEN,
-        assistantId: createdAssistantId,
-        name: `fixlyy-${userId.slice(0, 8)}`,
-      }),
-    })
-    if (!vapiRes.ok) throw new Error(`Vapi POST phone-number failed: ${vapiRes.status} ${await vapiRes.text()}`)
-    const vapiData = await vapiRes.json()
-    const vapiPhoneNumberId = vapiData.id
+    // 5. Mapping Vapi phone-number → assistant (PATCH si existant, POST sinon)
+    let vapiPhoneNumberId: string
+    if (assignedRow.vapi_phone_number_id) {
+      const vapiRes = await fetchWithTimeout(`https://api.vapi.ai/phone-number/${assignedRow.vapi_phone_number_id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistantId: assistantIdToUse,
+          twilioAccountSid: TWILIO_SID,
+          twilioAuthToken: TWILIO_TOKEN,
+        }),
+      })
+      if (!vapiRes.ok) throw new Error(`Vapi PATCH phone-number failed: ${vapiRes.status} ${await vapiRes.text()}`)
+      vapiPhoneNumberId = assignedRow.vapi_phone_number_id
+    } else {
+      const vapiRes = await fetchWithTimeout('https://api.vapi.ai/phone-number', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'twilio',
+          number: phone_number,
+          twilioAccountSid: TWILIO_SID,
+          twilioAuthToken: TWILIO_TOKEN,
+          assistantId: assistantIdToUse,
+          name: `fixlyy-${userId.slice(0, 8)}`,
+        }),
+      })
+      if (!vapiRes.ok) throw new Error(`Vapi POST phone-number failed: ${vapiRes.status} ${await vapiRes.text()}`)
+      const vapiData = await vapiRes.json()
+      vapiPhoneNumberId = vapiData.id
+    }
 
     // 6. Finalise en base
     await sb.from('phone_numbers_pool').update({
@@ -304,13 +327,14 @@ Deno.serve(async (req) => {
 
     await sb.from('profiles').update({
       twilio_number: phone_number,
-      vapi_assistant_id: createdAssistantId,
+      vapi_assistant_id: assistantIdToUse,
+      provisioning_status: 'done',
     }).eq('id', userId)
 
     await log('success', Date.now() - startMs, { userId }, {
       phone_number,
       vapi_phone_number_id: vapiPhoneNumberId,
-      vapi_assistant_id: createdAssistantId,
+      vapi_assistant_id: assistantIdToUse,
     })
     return new Response(JSON.stringify({ phone_number }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -321,8 +345,8 @@ Deno.serve(async (req) => {
     if (createdAssistantId) {
       await deleteVapiAssistant(createdAssistantId)
     }
-    // Rollback Twilio voiceUrl si patché
-    if (twilioPatched && assignedRow?.twilio_sid) {
+    // Rollback Twilio voiceUrl si patché (seulement pour un nouveau provisioning)
+    if (twilioPatched && !twilioAlreadyConfigured && assignedRow?.twilio_sid) {
       await rollbackTwilioVoiceUrl(assignedRow.twilio_sid)
     }
     // Rollback pool si non finalisé
@@ -344,6 +368,7 @@ Deno.serve(async (req) => {
       })
     }
 
+    await sb.from('profiles').update({ provisioning_status: 'failed' }).eq('id', userId)
     await log('error', Date.now() - startMs, { userId }, {}, err.message)
     return new Response(JSON.stringify({ error: err.message }), {
       status: isPoolEmpty ? 503 : 500,
