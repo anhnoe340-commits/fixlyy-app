@@ -366,7 +366,7 @@ serve(async (req) => {
   // Récupérer le profil
   const { data: profile } = await supabase
     .from('profiles')
-    .select('vapi_assistant_id, phone, assistant_name, assistant_voice, company_name, company_type, transfer_phone, full_name')
+    .select('vapi_assistant_id, phone, assistant_name, assistant_voice, company_name, company_type, transfer_phone, full_name, greeting_open')
     .eq('id', userId)
     .single()
 
@@ -541,7 +541,7 @@ serve(async (req) => {
     patch.backchannelingEnabled        = true
     patch.modelOutputInMessagesEnabled = true
 
-    patch.firstMessage = `Allô, {{company_name}}, bonjour !`
+    patch.firstMessage = profile.greeting_open?.trim() || `Allô, {{company_name}}, bonjour !`
 
     patch.analysisPlan = {
       ...(assistant.analysisPlan ?? {}),
@@ -569,7 +569,12 @@ serve(async (req) => {
     }
   }
 
-  // 6. Sync webhook server URL uniquement
+  // 6. Sync salutation (firstMessage uniquement)
+  if (body.sync_greeting) {
+    patch.firstMessage = profile.greeting_open?.trim() || `Allô, {{company_name}}, bonjour !`
+  }
+
+  // 7. Sync webhook server URL uniquement
   if (body.sync_server) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const webhookSecret = Deno.env.get('VAPI_WEBHOOK_SECRET')

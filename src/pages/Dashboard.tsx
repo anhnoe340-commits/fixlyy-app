@@ -1143,6 +1143,16 @@ function GreetingPage({ accent }: { accent: string }) {
       greeting_open: profile.greeting_open,
       greeting_closed: profile.greeting_closed,
     })
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-vapi-assistant`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sync_greeting: true }),
+        })
+      }
+    } catch { /* silencieux */ }
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
