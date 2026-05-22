@@ -4,7 +4,7 @@ import Stripe from 'https://esm.sh/stripe@14'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SERVICE_ROLE_KEY')!
+  Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 )
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
