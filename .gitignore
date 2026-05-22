@@ -1,6 +1,7 @@
 node_modules
 dist
 backups/
+.vercel/
 .env.local
 .env
 *.local
