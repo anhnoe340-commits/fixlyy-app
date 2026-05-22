@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logEvent } from '../_shared/audit.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -140,6 +141,9 @@ serve(async (req) => {
 
   try {
     await sendSms(profile.twilio_number, normalizedPhone, smsBody)
+    await logEvent({ supabase, eventType: 'team_member_invited',
+      userId: user.id, resourceType: 'team_invitation', resourceId: invitation.id,
+      metadata: { invitee_phone: normalizedPhone }, severity: 'info' })
   } catch (e: any) {
     console.error('SMS send failed:', e.message)
     // L'invitation est créée même si le SMS échoue — le patron peut renvoyer

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logEvent } from '../_shared/audit.ts'
 
 const TWILIO_SID        = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN      = Deno.env.get('TWILIO_AUTH_TOKEN')!
@@ -336,6 +337,9 @@ Deno.serve(async (req) => {
       vapi_phone_number_id: vapiPhoneNumberId,
       vapi_assistant_id: assistantIdToUse,
     })
+    await logEvent({ supabase: sb, eventType: 'number_assigned',
+      userId, resourceType: 'phone_number', resourceId: phone_number,
+      metadata: { vapi_assistant_id: assistantIdToUse }, severity: 'info' })
     return new Response(JSON.stringify({ phone_number }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
@@ -370,6 +374,9 @@ Deno.serve(async (req) => {
 
     await sb.from('profiles').update({ provisioning_status: 'failed' }).eq('id', userId)
     await log('error', Date.now() - startMs, { userId }, {}, err.message)
+    await logEvent({ supabase: sb, eventType: 'number_assignment_failed',
+      userId, resourceType: 'phone_number', resourceId: null,
+      metadata: { error: err.message }, severity: 'warning' })
     return new Response(JSON.stringify({ error: err.message }), {
       status: isPoolEmpty ? 503 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

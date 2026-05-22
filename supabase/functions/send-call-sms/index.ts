@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logEvent } from '../_shared/audit.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
@@ -357,6 +358,9 @@ serve(async (req) => {
     const smsText = smsParts.join('\n')
 
     await sendSms(profile.twilio_number, profile.phone, smsText)
+    await logEvent({ supabase, eventType: 'call_summary_sms_sent',
+      userId: profile.id, resourceType: 'call', resourceId: callId,
+      metadata: { caller: callerNumber, duration_sec: durationSec }, severity: 'info' })
 
     // ── Sauvegarde en base ───────────────────────────────────────────────────
     await supabase.from('calls').insert({

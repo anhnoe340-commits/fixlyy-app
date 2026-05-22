@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logEvent } from '../_shared/audit.ts'
 
 const SB_URL      = Deno.env.get('SUPABASE_URL')!
 const supabase    = createClient(SB_URL, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
@@ -79,6 +80,9 @@ serve(async (req) => {
       const vapiData = await vapiRes.json()
       vapiCallId = vapiData.id || null
     }
+    await logEvent({ supabase, eventType: 'test_call_triggered',
+      userId: user.id, resourceType: 'vapi_call', resourceId: vapiCallId,
+      metadata: { phone: profile.phone }, severity: 'info' })
 
     // Mettre à jour le test call avec l'ID Vapi
     if (testCall?.id && vapiCallId) {
@@ -99,6 +103,9 @@ serve(async (req) => {
         await supabase.from('profiles')
           .update({ onboarding_completed: true })
           .eq('id', userId)
+        await logEvent({ supabase, eventType: 'test_call_succeeded',
+          userId, resourceType: 'vapi_call', resourceId: vapiCallId,
+          metadata: { test_call_id: testCall.id }, severity: 'info' })
 
         // SMS trophée — server-to-server, garanti même si le browser est fermé
         let smsSent = false

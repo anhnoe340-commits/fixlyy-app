@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@13?target=deno';
+import { logEvent } from '../_shared/audit.ts';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 const supabase = createClient(
@@ -92,6 +93,9 @@ serve(async (req) => {
           subscription_plan: planName,
         })
         .eq('stripe_customer_id', sub.customer as string);
+      await logEvent({ supabase, eventType: 'subscription_created',
+        userId: null, resourceType: 'subscription', resourceId: sub.id,
+        metadata: { status, plan: planName, customer: sub.customer }, severity: 'info' });
       break;
     }
 
@@ -103,6 +107,9 @@ serve(async (req) => {
       await supabase.from('profiles')
         .update({ vapi_enabled: false, subscription_status: 'canceled' })
         .eq('stripe_customer_id', sub.customer as string);
+      await logEvent({ supabase, eventType: 'subscription_canceled',
+        userId: null, resourceType: 'subscription', resourceId: sub.id,
+        metadata: { customer: sub.customer }, severity: 'warning' });
       break;
     }
 
@@ -111,6 +118,9 @@ serve(async (req) => {
       await supabase.from('profiles')
         .update({ vapi_enabled: false })
         .eq('stripe_customer_id', invoice.customer as string);
+      await logEvent({ supabase, eventType: 'payment_failed',
+        userId: null, resourceType: 'invoice', resourceId: invoice.id,
+        metadata: { customer: invoice.customer, amount_due: invoice.amount_due }, severity: 'critical' });
       break;
     }
 
