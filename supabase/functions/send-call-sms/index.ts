@@ -306,6 +306,22 @@ serve(async (req) => {
       return new Response('no profile', { headers: cors })
     }
 
+    // Déduplication : ignorer les retries Vapi pour le même appel
+    if (callId) {
+      const { data: existingCall } = await supabase
+        .from('calls')
+        .select('id')
+        .eq('vapi_call_id', callId)
+        .maybeSingle()
+
+      if (existingCall) {
+        console.log(`Duplicate webhook ignored for call ${callId}`)
+        return new Response(JSON.stringify({ ok: true, skipped: true }), {
+          headers: { ...cors, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     // ── Auto-création/mise à jour de contact si nom connu ───────────────────
     if (callerName) {
       try {
