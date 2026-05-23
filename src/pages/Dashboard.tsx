@@ -1955,7 +1955,7 @@ const DEFAULT_HOURS: DaySlot[] = [
 function HoursPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
   const [days, setDays] = useState<DaySlot[]>(() => {
-    try { return (profile as any)?.hours ? JSON.parse((profile as any).hours) : DEFAULT_HOURS }
+    try { return profile?.hours ? JSON.parse(profile.hours) : DEFAULT_HOURS }
     catch { return DEFAULT_HOURS }
   })
   const [saved, setSaved] = useState(false)
@@ -1965,7 +1965,7 @@ function HoursPage({ accent }: { accent: string }) {
   }
 
   const handleSave = async () => {
-    await updateProfile({ hours: JSON.stringify(days) } as any)
+    await updateProfile({ hours: JSON.stringify(days) })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }

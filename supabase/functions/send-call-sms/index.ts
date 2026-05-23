@@ -35,6 +35,37 @@ const FULL_STRUCTURED_DATA_SCHEMA = {
   },
 }
 
+type DaySlot = { day: string; open: string; close: string; on: boolean }
+const DAYS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+
+function isWithinHours(hours: DaySlot[], nowParis: Date): boolean {
+  const dayName = DAYS_FR[nowParis.getDay()]
+  const slot = hours.find(s => s.day === dayName)
+  if (!slot || !slot.on || !slot.open || !slot.close) return false
+  const [oh, om] = slot.open.split(':').map(Number)
+  const [ch, cm] = slot.close.split(':').map(Number)
+  const nowMin = nowParis.getHours() * 60 + nowParis.getMinutes()
+  return nowMin >= oh * 60 + om && nowMin < ch * 60 + cm
+}
+
+function nextOpeningInfo(hours: DaySlot[], nowParis: Date): string | null {
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(nowParis)
+    d.setDate(d.getDate() + i)
+    const dayName = DAYS_FR[d.getDay()]
+    const slot = hours.find(s => s.day === dayName)
+    if (!slot || !slot.on || !slot.open) continue
+    const [oh, om] = slot.open.split(':').map(Number)
+    if (i === 0) {
+      const nowMin = nowParis.getHours() * 60 + nowParis.getMinutes()
+      if (nowMin < oh * 60 + om) return `aujourd'hui à ${slot.open}`
+      continue
+    }
+    return `${i === 1 ? 'demain' : dayName} à ${slot.open}`
+  }
+  return null
+}
+
 // Construit le contexte temporel Paris pour l'assistant-request
 function buildDateContext(): string {
   const DAYS   = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
@@ -220,12 +251,51 @@ serve(async (req) => {
     const { message } = payload
     if (!message) return new Response('no message', { headers: cors })
 
-    // ── assistant-request : injecter la date/heure Paris avant chaque appel ──
+    // ── assistant-request : date/heure Paris + statut horaires artisan ──
     if (message.type === 'assistant-request') {
       const assistantId = message.call?.assistantId
+
+      let firstMessage: string | undefined
+      let statusLine = ''
+
+      if (assistantId) {
+        const { data: artisan } = await supabase
+          .from('profiles')
+          .select('greeting_open, greeting_closed, hours')
+          .eq('vapi_assistant_id', assistantId)
+          .maybeSingle()
+
+        if (artisan) {
+          const paris = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }))
+          let open = true
+          let parsedHours: DaySlot[] | null = null
+
+          if (artisan.hours) {
+            try {
+              parsedHours = JSON.parse(artisan.hours) as DaySlot[]
+              open = isWithinHours(parsedHours, paris)
+            } catch { /* JSON invalide, on reste ouvert par défaut */ }
+          }
+
+          firstMessage = open
+            ? (artisan.greeting_open || undefined)
+            : (artisan.greeting_closed || undefined)
+
+          if (open) {
+            statusLine = '\n\n[STATUT : OUVERT]'
+          } else {
+            const nextInfo = parsedHours ? nextOpeningInfo(parsedHours, paris) : null
+            statusLine = nextInfo
+              ? `\n\n[STATUT : FERMÉ - reprend ${nextInfo}]`
+              : '\n\n[STATUT : FERMÉ - horaires non configurés]'
+          }
+        }
+      }
+
       const responseBody: Record<string, unknown> = {
         assistantOverrides: {
-          model: { systemPromptSuffix: buildDateContext() },
+          ...(firstMessage ? { firstMessage } : {}),
+          model: { systemPromptSuffix: buildDateContext() + statusLine },
         },
       }
       if (assistantId) responseBody.assistantId = assistantId

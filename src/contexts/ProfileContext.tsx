@@ -26,6 +26,7 @@ export interface Profile {
   subscription_trial_end: string | null    // ISO date
   subscription_plan: string | null         // Solo | Pro | Équipe
   transfer_phone: string | null            // Numéro de transfert intelligent E.164
+  hours: string | null                     // JSON DaySlot[] — horaires d'ouverture
 }
 
 interface ProfileContextType {
@@ -57,6 +58,7 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   subscription_trial_end: null,
   subscription_plan: null,
   transfer_phone: null,
+  hours: null,
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null)
