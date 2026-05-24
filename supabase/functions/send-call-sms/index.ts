@@ -257,15 +257,20 @@ serve(async (req) => {
 
       let firstMessage: string | undefined
       let statusLine = ''
+      let artisanName    = 'votre artisan'
+      let assistantName2 = 'Mia'
 
       if (assistantId) {
         const { data: artisan } = await supabase
           .from('profiles')
-          .select('greeting_open, greeting_closed, hours')
+          .select('greeting_open, greeting_closed, hours, assistant_name, company_name')
           .eq('vapi_assistant_id', assistantId)
           .maybeSingle()
 
         if (artisan) {
+          artisanName    = artisan.company_name   || 'votre artisan'
+          assistantName2 = artisan.assistant_name || 'Mia'
+
           const paris = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }))
           let open = true
           let parsedHours: DaySlot[] | null = null
@@ -292,10 +297,12 @@ serve(async (req) => {
         }
       }
 
+      const identityBlock = `\n\n[IDENTITÉ — APPLIQUE PARTOUT]\nTon prénom est : ${assistantName2}.\nL'artisan s'appelle : ${artisanName}.\nRemplace {{assistant_name}} par "${assistantName2}" et {{artisan_name}} par "${artisanName}" dans toutes tes réponses.`
+
       const responseBody: Record<string, unknown> = {
         assistantOverrides: {
           ...(firstMessage ? { firstMessage } : {}),
-          model: { systemPromptSuffix: buildDateContext() + statusLine },
+          model: { systemPromptSuffix: buildDateContext() + statusLine + identityBlock },
         },
       }
       if (assistantId) responseBody.assistantId = assistantId
