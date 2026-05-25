@@ -627,6 +627,11 @@ serve(async (req) => {
       ? normalizePhone(phoneToUse)
       : null
   }
+  // Sync vapi_system_prompt si le prompt a été modifié
+  const newSysMsg = patch.model?.messages?.find((m: any) => m.role === 'system')
+  if (newSysMsg?.content) {
+    profileUpdate.vapi_system_prompt = newSysMsg.content
+  }
   if (Object.keys(profileUpdate).length > 0) {
     await supabase.from('profiles').update(profileUpdate).eq('id', userId)
   }

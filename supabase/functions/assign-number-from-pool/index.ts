@@ -72,7 +72,7 @@ async function createDedicatedAssistant(profile: {
   assistant_name: string | null
   assistant_voice: string | null
   greeting_open: string | null
-}): Promise<string> {
+}): Promise<{ id: string; systemPrompt: string }> {
   const assistantName = profile.assistant_name || 'Mia'
   const companyName   = profile.company_name   || 'votre artisan'
   const companyType   = profile.company_type   || 'artisan'
@@ -211,7 +211,8 @@ Exemples :
     throw new Error(`Vapi assistant creation failed: ${res.status} ${text}`)
   }
   const data = await res.json()
-  return data.id as string
+  const systemPromptContent: string = body.model.messages[0].content
+  return { id: data.id as string, systemPrompt: systemPromptContent }
 }
 
 Deno.serve(async (req) => {
@@ -235,6 +236,7 @@ Deno.serve(async (req) => {
   let twilioPatched = false
   let twilioAlreadyConfigured = false
   let createdAssistantId: string | null = null
+  let createdSystemPrompt: string | null = null
   let assistantIdToUse: string | null = null
 
   try {
@@ -258,14 +260,16 @@ Deno.serve(async (req) => {
     if (existingAssistantId) {
       assistantIdToUse = existingAssistantId
     } else {
-      createdAssistantId = await createDedicatedAssistant({
+      const created = await createDedicatedAssistant({
         company_name:   profileData?.company_name   ?? null,
         company_type:   profileData?.company_type   ?? null,
         assistant_name: profileData?.assistant_name ?? null,
         assistant_voice: profileData?.assistant_voice ?? null,
         greeting_open:  profileData?.greeting_open  ?? null,
       })
-      assistantIdToUse = createdAssistantId
+      createdAssistantId  = created.id
+      createdSystemPrompt = created.systemPrompt
+      assistantIdToUse    = created.id
     }
 
     // 4. PATCH Twilio voiceUrl → Vapi
@@ -330,6 +334,7 @@ Deno.serve(async (req) => {
       twilio_number: phone_number,
       vapi_assistant_id: assistantIdToUse,
       provisioning_status: 'done',
+      ...(createdSystemPrompt ? { vapi_system_prompt: createdSystemPrompt } : {}),
     }).eq('id', userId)
 
     await log('success', Date.now() - startMs, { userId }, {

@@ -263,7 +263,7 @@ serve(async (req) => {
       if (assistantId) {
         const { data: artisan } = await supabase
           .from('profiles')
-          .select('greeting_open, greeting_closed, hours, assistant_name, company_name')
+          .select('greeting_open, greeting_closed, hours, assistant_name, company_name, vapi_system_prompt')
           .eq('vapi_assistant_id', assistantId)
           .maybeSingle()
 
@@ -297,12 +297,23 @@ serve(async (req) => {
         }
       }
 
-      const identityBlock = `\n\n[IDENTITÉ — APPLIQUE PARTOUT]\nTon prénom est : ${assistantName2}.\nL'artisan s'appelle : ${artisanName}.\nRemplace {{assistant_name}} par "${assistantName2}" et {{artisan_name}} par "${artisanName}" dans toutes tes réponses.`
+      // Substitution des variables artisan dans le systemPrompt mis en cache
+      let resolvedSystemPrompt: string | undefined
+      const rawPrompt: string | null = (artisan as any)?.vapi_system_prompt ?? null
+      if (rawPrompt) {
+        resolvedSystemPrompt = rawPrompt
+          .replaceAll('{{artisan_name}}', artisanName)
+          .replaceAll('{{assistant_name}}', assistantName2)
+          .replaceAll('{{company_name}}', artisanName)
+          + buildDateContext() + statusLine
+      }
 
       const responseBody: Record<string, unknown> = {
         assistantOverrides: {
           ...(firstMessage ? { firstMessage } : {}),
-          model: { systemPromptSuffix: buildDateContext() + statusLine + identityBlock },
+          model: resolvedSystemPrompt
+            ? { messages: [{ role: 'system', content: resolvedSystemPrompt }] }
+            : { systemPromptSuffix: buildDateContext() + statusLine },
         },
       }
       if (assistantId) responseBody.assistantId = assistantId
