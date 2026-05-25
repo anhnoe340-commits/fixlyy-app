@@ -66,6 +66,19 @@ function nextOpeningInfo(hours: DaySlot[], nowParis: Date): string | null {
   return null
 }
 
+function buildPlanningBlock(hours: DaySlot[] | null): string {
+  if (!hours || hours.length === 0) return ''
+  const ORDER = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+  const lines = ORDER.map(day => {
+    const slot = hours.find(s => s.day === day)
+    if (!slot || !slot.on) return `${day} : fermé`
+    const o = slot.open.replace(':', 'h')
+    const c = slot.close.replace(':', 'h')
+    return `${day} : ${o}–${c}`
+  })
+  return `\n\n[PLANNING ARTISAN — SEMAINE]\n${lines.join('\n')}\nSi un client propose un jour marqué "fermé", refuser poliment et proposer le prochain jour ouvert de la liste.`
+}
+
 // Construit le contexte temporel Paris pour l'assistant-request
 function buildDateContext(): string {
   const DAYS   = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
@@ -259,6 +272,7 @@ serve(async (req) => {
       let statusLine = ''
       let artisanName    = 'votre artisan'
       let assistantName2 = 'Mia'
+      let parsedHours: DaySlot[] | null = null
 
       if (assistantId) {
         const { data: artisan } = await supabase
@@ -273,7 +287,6 @@ serve(async (req) => {
 
           const paris = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }))
           let open = true
-          let parsedHours: DaySlot[] | null = null
 
           if (artisan.hours) {
             try {
@@ -301,11 +314,12 @@ serve(async (req) => {
       let resolvedSystemPrompt: string | undefined
       const rawPrompt: string | null = (artisan as any)?.vapi_system_prompt ?? null
       if (rawPrompt) {
+        const planningBlock = buildPlanningBlock(parsedHours)
         resolvedSystemPrompt = rawPrompt
           .replaceAll('{{artisan_name}}', artisanName)
           .replaceAll('{{assistant_name}}', assistantName2)
           .replaceAll('{{company_name}}', artisanName)
-          + buildDateContext() + statusLine
+          + buildDateContext() + statusLine + planningBlock
       }
 
       const responseBody: Record<string, unknown> = {
