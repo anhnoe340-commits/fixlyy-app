@@ -27,7 +27,7 @@ const FULL_STRUCTURED_DATA_SCHEMA = {
     appointmentDate:          { type: 'string', description: 'Date souhaitée si mentionnée' },
     appointmentTime:          { type: 'string', description: 'Heure souhaitée si mentionnée' },
     smsBody:                  { type: 'string', description: "Accroche courte max 80 chars : nature exacte du problème + action immédiate. Toujours en français." },
-    fullSummary:              { type: 'string', description: "Résumé complet en 4 éléments, toujours en français : (1) raison/problème principal, (2) contexte — ce qui a déjà été tenté ou durée du problème, (3) nom + adresse + téléphone + détail technique, (4) URGENT/NORMAL/PEUT ATTENDRE + action concrète. Style note de chantier, factuel." },
+    fullSummary:              { type: 'string', description: "Résumé détaillé de la conversation en 3-5 phrases : ce que le client a dit, son état émotionnel, ce qui a été convenu. Toujours en français." },
     clientTone:               { type: 'string', enum: ['calme', 'stressé', 'agressif', 'confus'] },
     aiToneUsed:               { type: 'string', enum: ['efficace', 'empathique', 'rassurante'] },
     conversationQualityScore: { type: 'integer', description: 'Note 0-10' },
@@ -348,16 +348,19 @@ serve(async (req) => {
     const callId = message.call?.id || ''
 
     const structuredData = message.analysis?.structuredData || {}
-    const callerName: string | null = structuredData.customerName || null
-    const smsBody: string = structuredData.smsBody || ''
-    const fullSummary: string = structuredData.fullSummary || ''
-    const reason: string | null = structuredData.reason || smsBody || null
-    const clientTone: string | null              = structuredData.clientTone || null
-    const aiToneUsed: string | null              = structuredData.aiToneUsed || null
-    const qualityScore: number | null            = structuredData.conversationQualityScore ?? null
-    const qualityNotes: string | null            = structuredData.conversationQualityNotes || null
-    const appointmentDate: string | null         = structuredData.appointmentDate || null
-    const appointmentTime: string | null         = structuredData.appointmentTime || null
+    const callerName: string | null     = structuredData.customerName || null
+    const callerPhone: string | null    = structuredData.customerPhone || null
+    const callerAddress: string | null  = structuredData.customerAddress || null
+    const urgency: string | null        = structuredData.urgency || null
+    const smsBody: string               = structuredData.smsBody || ''
+    const fullSummary: string           = structuredData.fullSummary || ''
+    const reason: string | null         = structuredData.reason || smsBody || null
+    const clientTone: string | null     = structuredData.clientTone || null
+    const aiToneUsed: string | null     = structuredData.aiToneUsed || null
+    const qualityScore: number | null   = structuredData.conversationQualityScore ?? null
+    const qualityNotes: string | null   = structuredData.conversationQualityNotes || null
+    const appointmentDate: string | null = structuredData.appointmentDate || null
+    const appointmentTime: string | null = structuredData.appointmentTime || null
 
     // Transcription depuis artifact.messages
     const transcript: string | null = formatTranscript(message.artifact?.messages) || message.artifact?.transcript || null
@@ -449,14 +452,38 @@ serve(async (req) => {
       }
     }
 
-    // ── SMS : accroche courte + résumé structuré 3 phrases ──────────────────
+    // ── SMS structuré avec tous les champs collectés par Mia ────────────────
+    const effectivePhone = callerPhone || (callerNumber !== 'Inconnu' ? callerNumber : null)
+    const isUrgent = urgency === 'urgent'
+    const bodyText = fullSummary || smsBody
+
     const smsParts: string[] = []
-    smsParts.push(smsBody || '[Résumé indisponible]')
-    if (fullSummary) {
-      smsParts.push('')
-      smsParts.push(fullSummary)
+
+    // Header
+    smsParts.push(isUrgent
+      ? `🚨 URGENT — ${callerName || 'Client inconnu'}`
+      : `📞 APPEL — ${callerName || 'Client inconnu'}`)
+
+    // Contact (lignes conditionnelles)
+    if (effectivePhone) smsParts.push(`📱 ${effectivePhone}`)
+    if (callerAddress)  smsParts.push(`📍 ${callerAddress}`)
+
+    // Corps
+    smsParts.push('')
+    smsParts.push(`💬 ${bodyText}`)
+
+    // RDV
+    smsParts.push('')
+    if (appointmentDate) {
+      const rdvLabel = isUrgent ? 'RDV' : 'RDV souhaité'
+      const rdvTime = appointmentTime ? ` à ${appointmentTime}` : ''
+      smsParts.push(`🗓️ ${rdvLabel} : ${appointmentDate}${rdvTime}`)
+    } else {
+      smsParts.push(`🗓️ Pas de RDV pris`)
     }
-    smsParts.push(`– ${profile.assistant_name || 'Mia'}, réceptionniste Fixlyy`)
+
+    smsParts.push('')
+    smsParts.push(`— ${profile.assistant_name || 'Mia'}, Fixlyy`)
     const smsText = smsParts.join('\n')
 
     await sendSms(profile.twilio_number, profile.phone, smsText)
