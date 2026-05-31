@@ -3710,7 +3710,7 @@ function StatsPage({ accent }: { accent: string }) {
     duration_seconds: number | null
     conversation_quality_score: number | null
     client_tone: string | null
-    urgency: string | null
+    reason: string | null
   }[]>([])
   const [contacts, setContacts] = useState(0)
   const [appointments, setAppointments] = useState(0)
@@ -3721,7 +3721,7 @@ function StatsPage({ accent }: { accent: string }) {
     if (!user) return
     Promise.all([
       supabase.from('calls')
-        .select('created_at, status, duration_seconds, conversation_quality_score, client_tone, urgency')
+        .select('created_at, status, duration_seconds, conversation_quality_score, client_tone, reason')
         .eq('artisan_id', user.id)
         .order('created_at', { ascending: false }),
       supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
@@ -3760,8 +3760,14 @@ function StatsPage({ accent }: { accent: string }) {
   const avgQuality = qualityScores.length ? (qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length).toFixed(1) : null
   const qualityColor = avgQuality == null ? '#9CA3AF' : Number(avgQuality) >= 7 ? '#10B981' : Number(avgQuality) >= 5 ? '#F59E0B' : '#EF4444'
 
-  const urgentCount = filteredCalls.filter(c => c.status === 'urgent' || c.urgency === 'urgent').length
-  const urgencyRate = totalCalls > 0 ? Math.round((urgentCount / totalCalls) * 100) : 0
+  const totalSeconds = filteredCalls.reduce((sum, c) => sum + (c.duration_seconds || 0), 0)
+  const totalHours = Math.floor(totalSeconds / 3600)
+  const totalMinutes = Math.floor((totalSeconds % 3600) / 60)
+  const tempsDecroche = totalSeconds === 0 ? '--' : totalHours > 0 ? `${totalHours}h ${totalMinutes}min` : `${totalMinutes}min`
+
+  const nonSpamCalls = filteredCalls.filter(c => c.status !== 'spam').length
+  const tauxConversion = nonSpamCalls === 0 ? '--' : `${Math.round((appointments / nonSpamCalls) * 100)}%`
+  const tauxConversionNum = nonSpamCalls === 0 ? 0 : Math.min(100, Math.round((appointments / nonSpamCalls) * 100))
 
   // Graphique sur la période choisie (max 30 jours)
   const chartDays = Math.min(periodDays, 30)
@@ -3853,20 +3859,20 @@ function StatsPage({ accent }: { accent: string }) {
         </div>
 
         <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
-          <p className="text-sm font-semibold mb-1">Taux d'urgence</p>
-          <p className="text-[11px] text-gray-400 mb-4">Appels qualifiés urgents par Mia</p>
+          <p className="text-sm font-semibold mb-1">Temps décroché</p>
+          <p className="text-[11px] text-gray-400 mb-4">Temps d'appel géré par Mia</p>
           <div className="flex items-center gap-4">
-            <p className="text-5xl font-bold leading-none" style={{ color: urgencyRate > 30 ? '#EF4444' : urgencyRate > 15 ? '#F59E0B' : '#10B981' }}>
-              {totalCalls > 0 ? `${urgencyRate}%` : '—'}
+            <p className="text-5xl font-bold leading-none" style={{ color: totalSeconds > 0 ? '#10B981' : '#9CA3AF' }}>
+              {tempsDecroche}
             </p>
             <div className="flex-1">
               <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full rounded-full transition-all" style={{
-                  width: `${urgencyRate}%`,
-                  background: urgencyRate > 30 ? '#EF4444' : urgencyRate > 15 ? '#F59E0B' : '#10B981'
+                  width: `${Math.min(100, Math.round((totalSeconds / 3600) * 100))}%`,
+                  background: '#10B981'
                 }} />
               </div>
-              <p className="text-[10px] text-gray-400 mt-1.5">{urgentCount} appels urgents sur {totalCalls}</p>
+              <p className="text-[10px] text-gray-400 mt-1.5">{durations.length} appels avec durée enregistrée</p>
             </div>
           </div>
         </div>
@@ -3980,6 +3986,22 @@ function StatsPage({ accent }: { accent: string }) {
             <p className="text-xs text-gray-500 font-medium">Contacts enregistrés</p>
             <p className="text-lg font-bold mt-0.5" style={{ color: contacts > 0 ? accent : '#9CA3AF' }}>{contacts}</p>
           </div>
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-semibold">Taux de conversion</p>
+              <p className="text-xs text-gray-400 mt-0.5">Appels non-spam → RDV</p>
+            </div>
+            <p className="text-[32px] font-bold tracking-tight leading-none" style={{ color: tauxConversion !== '--' ? '#10B981' : '#9CA3AF' }}>
+              {tauxConversion}
+            </p>
+          </div>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${tauxConversionNum}%`, background: '#10B981' }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-2">{appointments} RDV sur {nonSpamCalls} appels</p>
         </div>
       </div>
     </div>
