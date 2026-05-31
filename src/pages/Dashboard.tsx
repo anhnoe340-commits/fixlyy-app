@@ -1602,39 +1602,130 @@ function InboundReasonsPage({ accent }: { accent: string }) {
 }
 
 // ── Outbound Reasons Page ─────────────────────────────────────────────────────
-type CallReason = { id: number; label: string; desc: string; on: boolean }
+type OutboundReason = {
+  id: string
+  label: string
+  description: string | null
+  is_active: boolean
+  sort_order: number
+}
 
 function OutboundReasonsPage({ accent }: { accent: string }) {
-  const [reasons, setReasons] = useState<CallReason[]>([])
+  const { user } = useAuth()
+  const [reasons, setReasons] = useState<OutboundReason[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [newDesc, setNewDesc] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type?: 'error' } | null>(null)
 
-  const remove = (id: number) => setReasons(prev => prev.filter(r => r.id !== id))
-  const toggle = (id: number) => setReasons(prev => prev.map(r => r.id === id ? { ...r, on: !r.on } : r))
-  const add = () => {
-    if (!newLabel.trim()) return
-    setReasons(prev => [...prev, { id: Date.now(), label: newLabel, desc: newDesc, on: true }])
-    setNewLabel(''); setNewDesc(''); setShowAdd(false)
+  const showToast = (msg: string, type?: 'error') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('outbound_reasons')
+      .select('id, label, description, is_active, sort_order')
+      .eq('user_id', user.id)
+      .order('sort_order')
+      .then(({ data }) => {
+        setReasons((data || []) as OutboundReason[])
+        setLoading(false)
+      })
+  }, [user?.id])
+
+  const handleToggle = async (r: OutboundReason) => {
+    const snapshot = reasons
+    setReasons(prev => prev.map(x => x.id === r.id ? { ...x, is_active: !x.is_active } : x))
+    const { error } = await supabase
+      .from('outbound_reasons')
+      .update({ is_active: !r.is_active, updated_at: new Date().toISOString() })
+      .eq('id', r.id)
+    if (error) {
+      setReasons(snapshot)
+      showToast('Erreur lors de la mise à jour', 'error')
+    } else {
+      showToast(!r.is_active ? 'Activé' : 'Désactivé')
+    }
+  }
+
+  const handleAdd = async () => {
+    if (!newLabel.trim() || !user) return
+    setAdding(true)
+    const { data, error } = await supabase
+      .from('outbound_reasons')
+      .insert({
+        user_id: user.id,
+        label: newLabel.trim(),
+        description: newDesc.trim() || null,
+        sort_order: reasons.length,
+      })
+      .select('id, label, description, is_active, sort_order')
+      .single()
+    setAdding(false)
+    if (error) {
+      showToast("Erreur lors de l'ajout", 'error')
+    } else {
+      setReasons(prev => [...prev, data as OutboundReason])
+      setNewLabel('')
+      setNewDesc('')
+      setShowAdd(false)
+      showToast('Motif ajouté')
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const snapshot = reasons
+    setReasons(prev => prev.filter(x => x.id !== id))
+    const { error } = await supabase
+      .from('outbound_reasons')
+      .delete()
+      .eq('id', id)
+    if (error) {
+      setReasons(snapshot)
+      showToast('Erreur lors de la suppression', 'error')
+    } else {
+      showToast('Motif supprimé')
+    }
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-end justify-between">
-        <SettingsHeader section="Répondre" title="Raisons sortantes" />
+        <div>
+          <SettingsHeader section="Répondre" title="Raisons sortantes" />
+          <p className="text-xs text-gray-400 -mt-4 mb-4">Ces motifs serviront aux rappels sortants automatiques (à venir).</p>
+        </div>
         <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
           + Ajouter
         </button>
       </div>
 
       <Card>
-        {reasons.length === 0 && !showAdd ? (
+        {loading ? (
+          <div className="flex flex-col divide-y divide-gray-50">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="flex items-center gap-4 py-3.5 animate-pulse">
+                <div className="flex-1">
+                  <div className="h-3.5 bg-gray-100 rounded w-40 mb-1.5" />
+                  <div className="h-2.5 bg-gray-50 rounded w-56" />
+                </div>
+                <div className="w-10 h-5 bg-gray-100 rounded-full" />
+                <div className="w-7 h-7 bg-gray-50 rounded-lg" />
+              </div>
+            ))}
+          </div>
+        ) : reasons.length === 0 && !showAdd ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
               <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 3h5m0 0v5m0-5l-6 6M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"/></svg>
             </div>
-            <p className="text-sm font-medium text-gray-400">Aucune raison configurée</p>
-            <p className="text-xs text-gray-300 mt-1">Ajoutez des motifs pour que l'assistante rappelle vos clients</p>
+            <p className="text-sm font-medium text-gray-400">Aucun motif sortant</p>
+            <p className="text-xs text-gray-300 mt-1">Ajoutez vos premiers motifs de rappel.</p>
           </div>
         ) : (
           <div className="flex flex-col divide-y divide-gray-50">
@@ -1642,10 +1733,10 @@ function OutboundReasonsPage({ accent }: { accent: string }) {
               <div key={r.id} className="flex items-center gap-4 py-3.5">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900">{r.label}</p>
-                  {r.desc && <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>}
+                  {r.description && <p className="text-xs text-gray-400 mt-0.5">{r.description}</p>}
                 </div>
-                <Toggle defaultOn={r.on} accent={accent} onChange={() => toggle(r.id)} />
-                <button onClick={() => remove(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none ml-1">×</button>
+                <Toggle defaultOn={r.is_active} accent={accent} onChange={() => handleToggle(r)} />
+                <button onClick={() => handleDelete(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none ml-1">×</button>
               </div>
             ))}
           </div>
@@ -1655,6 +1746,7 @@ function OutboundReasonsPage({ accent }: { accent: string }) {
           <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
             <Field label="Intitulé de la raison">
               <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
                 placeholder="Ex : Rappel devis envoyé"
                 className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
             </Field>
@@ -1664,12 +1756,20 @@ function OutboundReasonsPage({ accent }: { accent: string }) {
                 className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
             </Field>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Ajouter</button>
+              <button onClick={() => { setShowAdd(false); setNewLabel(''); setNewDesc('') }} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
+              <button onClick={handleAdd} disabled={adding || !newLabel.trim()} className="text-xs px-4 py-2 rounded-xl text-white font-semibold disabled:opacity-50" style={{ background: accent }}>
+                {adding ? '…' : 'Ajouter'}
+              </button>
             </div>
           </div>
         )}
       </Card>
+
+      {toast && (
+        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-white text-sm font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-500' : 'bg-gray-900'}`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   )
 }
