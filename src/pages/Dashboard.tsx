@@ -1225,81 +1225,382 @@ function GreetingPage({ accent }: { accent: string }) {
 }
 
 // ── Inbound Reasons Page ──────────────────────────────────────────────────────
-type CallReason = { id: number; label: string; desc: string; on: boolean }
+type CatalogReason = {
+  id: string
+  slug: string
+  label: string
+  description: string
+  category: string
+  is_emergency: boolean
+  sort_order: number
+}
+
+type ActiveReason = {
+  id: string
+  reason_id: string
+  label: string
+  is_active: boolean
+  emergency_behavior: 'transfer' | 'priority_message' | 'both' | null
+}
+
+type EmergencyBehavior = 'transfer' | 'priority_message' | 'both' | null
 
 function InboundReasonsPage({ accent }: { accent: string }) {
-  const [reasons, setReasons] = useState<CallReason[]>([
-    { id: 1, label: 'Demande générale', desc: 'Collecte le motif, le nom et le numéro du client', on: true },
-  ])
-  const [showAdd, setShowAdd] = useState(false)
-  const [newLabel, setNewLabel] = useState('')
-  const [newDesc, setNewDesc] = useState('')
+  const { user } = useAuth()
 
-  const toggle = (id: number) => setReasons(prev => prev.map(r => r.id === id ? { ...r, on: !r.on } : r))
-  const remove = (id: number) => setReasons(prev => prev.filter(r => r.id !== id))
-  const add = () => {
-    if (!newLabel.trim()) return
-    setReasons(prev => [...prev, { id: Date.now(), label: newLabel, desc: newDesc, on: true }])
-    setNewLabel(''); setNewDesc(''); setShowAdd(false)
+  const [catalog, setCatalog] = useState<CatalogReason[]>([])
+  const [activeMap, setActiveMap] = useState<Map<string, ActiveReason>>(new Map())
+  const [loading, setLoading] = useState(true)
+
+  // Urgency config (profiles columns)
+  const [emergencyNumber, setEmergencyNumber] = useState('')
+  const [defaultBehavior, setDefaultBehavior] = useState<EmergencyBehavior>(null)
+  const [showUrgencyConfig, setShowUrgencyConfig] = useState(false)
+  const [savingUrgency, setSavingUrgency] = useState(false)
+  const [lastSyncTs, setLastSyncTs] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+
+  // Filters
+  const [search, setSearch] = useState('')
+  const [filterEmergency, setFilterEmergency] = useState(false)
+  const [filterActive, setFilterActive] = useState(false)
+
+  // Toast
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast({ msg, type })
+    toastTimer.current = setTimeout(() => setToast(null), 2000)
   }
+
+  useEffect(() => {
+    if (!user) return
+    const load = async () => {
+      setLoading(true)
+      const [catRes, activeRes, profileRes] = await Promise.all([
+        supabase.from('reasons_catalog').select('id,slug,label,description,category,is_emergency,sort_order').eq('is_active_in_catalog', true).order('sort_order'),
+        supabase.from('inbound_reasons').select('id,reason_id,label,is_active,emergency_behavior').eq('user_id', user.id),
+        supabase.from('profiles').select('emergency_transfer_number,default_emergency_behavior,last_vapi_sync_at').eq('id', user.id).single(),
+      ])
+      if (catRes.data) setCatalog(catRes.data as CatalogReason[])
+      if (activeRes.data) {
+        const m = new Map<string, ActiveReason>()
+        ;(activeRes.data as ActiveReason[]).forEach(r => m.set(r.reason_id, r))
+        setActiveMap(m)
+      }
+      if (profileRes.data) {
+        setEmergencyNumber(profileRes.data.emergency_transfer_number ?? '')
+        setDefaultBehavior(profileRes.data.default_emergency_behavior as EmergencyBehavior ?? null)
+        setLastSyncTs(profileRes.data.last_vapi_sync_at ?? null)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [user])
+
+  const handleToggle = async (reason: CatalogReason) => {
+    if (!user) return
+    const wasActive = activeMap.has(reason.id)
+    const snapshot = new Map(activeMap)
+    const optimistic = new Map(activeMap)
+    if (wasActive) {
+      optimistic.delete(reason.id)
+    } else {
+      optimistic.set(reason.id, { id: '__opt__', reason_id: reason.id, label: reason.label, is_active: true, emergency_behavior: null })
+    }
+    setActiveMap(optimistic)
+
+    const { data, error } = await supabase.rpc('toggle_inbound_reason_from_catalog', {
+      p_user_id: user.id,
+      p_reason_id: reason.id,
+      p_activate: !wasActive,
+    })
+    if (error) {
+      setActiveMap(snapshot)
+      showToast('Erreur lors de la mise à jour', 'error')
+      return
+    }
+    if (!wasActive && Array.isArray(data) && data.length > 0) {
+      const confirmed = new Map(optimistic)
+      confirmed.set(reason.id, data[0] as ActiveReason)
+      setActiveMap(confirmed)
+    }
+    showToast(wasActive ? 'Désactivé' : 'Activé')
+  }
+
+  const handleBehaviorChange = async (reason: CatalogReason, behavior: EmergencyBehavior) => {
+    if (!user) return
+    const active = activeMap.get(reason.id)
+    if (!active || active.id === '__opt__') return
+
+    const snapshot = new Map(activeMap)
+    const optimistic = new Map(activeMap)
+    optimistic.set(reason.id, { ...active, emergency_behavior: behavior })
+    setActiveMap(optimistic)
+
+    const { error } = await supabase.rpc('update_inbound_reason_emergency_behavior', {
+      p_user_id: user.id,
+      p_inbound_reason_id: active.id,
+      p_behavior: behavior,
+    })
+    if (error) {
+      setActiveMap(snapshot)
+      showToast('Erreur comportement urgence', 'error')
+    } else {
+      showToast('Comportement mis à jour')
+    }
+  }
+
+  const handleSaveUrgency = async () => {
+    if (!user) return
+    setSavingUrgency(true)
+    const { error } = await supabase.from('profiles').update({
+      emergency_transfer_number: emergencyNumber.trim() || null,
+      default_emergency_behavior: defaultBehavior,
+    }).eq('id', user.id)
+    setSavingUrgency(false)
+    if (error) showToast('Erreur enregistrement', 'error')
+    else showToast('Configuration urgences enregistrée')
+  }
+
+  const handleSync = async () => {
+    if (!user || syncing) return
+    setSyncing(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('no session')
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/update-vapi-assistant`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sync_conversational: true, sync_multilingual: true, sync_urgency: true, sync_reasons: true, sync_analysis_plan: true }),
+      })
+      const now = new Date().toISOString()
+      await supabase.from('profiles').update({ last_vapi_sync_at: now }).eq('id', user.id)
+      setLastSyncTs(now)
+      showToast('Mia synchronisée')
+    } catch {
+      showToast('Erreur sync Mia', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const formatSyncTs = (ts: string | null) => {
+    if (!ts) return null
+    const d = new Date(ts)
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  // Filter + group
+  const filtered = catalog.filter(r => {
+    if (filterEmergency && !r.is_emergency) return false
+    if (filterActive && !activeMap.has(r.id)) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!r.label.toLowerCase().includes(q) && !r.category.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+
+  const grouped = filtered.reduce<Record<string, CatalogReason[]>>((acc, r) => {
+    if (!acc[r.category]) acc[r.category] = []
+    acc[r.category].push(r)
+    return acc
+  }, {})
+
+  const categories = Object.keys(grouped).sort()
+  const activeCount = activeMap.size
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Header */}
       <div className="flex items-end justify-between">
-        <SettingsHeader section="Répondre" title="Raisons entrantes" />
-        <button onClick={() => setShowAdd(true)} className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0" style={{ background: accent }}>
-          + Ajouter
+        <div>
+          <SettingsHeader section="Répondre" title="Raisons entrantes" />
+          {activeCount > 0 && (
+            <p className="text-xs text-gray-400 -mt-3 mb-4 ml-0.5">{activeCount} raison{activeCount > 1 ? 's' : ''} active{activeCount > 1 ? 's' : ''}</p>
+          )}
+        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="text-sm px-4 py-2 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity mb-5 flex-shrink-0 disabled:opacity-60"
+          style={{ background: accent }}
+        >
+          {syncing ? 'Sync…' : 'Sync Mia'}
         </button>
       </div>
 
-      <Card>
-        {reasons.length === 0 && !showAdd ? (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
-              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-            </div>
-            <p className="text-sm font-medium text-gray-400">Aucune raison configurée</p>
-            <p className="text-xs text-gray-300 mt-1">Ajoutez des motifs pour guider l'assistante</p>
-          </div>
-        ) : (
-          <div className="flex flex-col divide-y divide-gray-50">
-            {reasons.map(r => (
-              <div key={r.id} className="flex items-center gap-4 py-3.5">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{r.label}</p>
-                  {r.desc && <p className="text-xs text-gray-400 mt-0.5">{r.desc}</p>}
-                </div>
-                <Toggle defaultOn={r.on} accent={accent} onChange={() => toggle(r.id)} />
-                <button onClick={() => remove(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all text-lg leading-none ml-1">×</button>
-              </div>
-            ))}
-          </div>
-        )}
+      {lastSyncTs && (
+        <p className="text-xs text-gray-400 -mt-3">Dernière sync : {formatSyncTs(lastSyncTs)}</p>
+      )}
 
-        {showAdd && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3">
-            <Field label="Intitulé de la raison">
-              <input autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
-                placeholder="Ex : Demande de devis"
-                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+      {/* Urgency config collapsible */}
+      <div className="glass-light rounded-2xl overflow-hidden">
+        <button
+          onClick={() => setShowUrgencyConfig(v => !v)}
+          className="w-full flex items-center justify-between px-5 py-4 text-left"
+        >
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Configuration urgences</p>
+            <p className="text-xs text-gray-400 mt-0.5">Numéro de transfert et comportement par défaut</p>
+          </div>
+          <svg className={`w-4 h-4 text-gray-400 transition-transform ${showUrgencyConfig ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {showUrgencyConfig && (
+          <div className="px-5 pb-5 flex flex-col gap-4 border-t border-gray-50">
+            <Field label="Numéro de transfert urgences">
+              <input
+                value={emergencyNumber}
+                onChange={e => setEmergencyNumber(e.target.value)}
+                placeholder="Ex : +33612345678 (sinon : transfert principal)"
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60"
+              />
             </Field>
-            <Field label="Description (optionnel)">
-              <input value={newDesc} onChange={e => setNewDesc(e.target.value)}
-                placeholder="Ex : L'assistante collecte le motif et planifie un rappel"
-                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+            <Field label="Comportement par défaut (urgences non configurées)">
+              <select
+                value={defaultBehavior ?? ''}
+                onChange={e => setDefaultBehavior((e.target.value || null) as EmergencyBehavior)}
+                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60"
+              >
+                <option value="">— Aucun (pas de traitement urgence) —</option>
+                <option value="transfer">Transfert immédiat</option>
+                <option value="priority_message">Message prioritaire SMS</option>
+                <option value="both">Transfert + SMS</option>
+              </select>
             </Field>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Ajouter</button>
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveUrgency}
+                disabled={savingUrgency}
+                className="text-xs px-4 py-2 rounded-xl text-white font-semibold disabled:opacity-60"
+                style={{ background: accent }}
+              >
+                {savingUrgency ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
             </div>
           </div>
         )}
-      </Card>
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Rechercher une raison…"
+          className="flex-1 min-w-[160px] border border-gray-100 rounded-xl px-3 py-2 text-sm outline-none focus:border-gray-300 bg-white/80"
+        />
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={filterEmergency} onChange={e => setFilterEmergency(e.target.checked)} style={{ accentColor: accent }} />
+          Urgences
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={filterActive} onChange={e => setFilterActive(e.target.checked)} style={{ accentColor: accent }} />
+          Mes raisons activées
+        </label>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="glass-light rounded-2xl p-5 animate-pulse">
+              <div className="h-4 bg-gray-100 rounded w-1/3 mb-4" />
+              {[0, 1, 2].map(j => (
+                <div key={j} className="flex items-center gap-3 py-3 border-t border-gray-50">
+                  <div className="flex-1 h-3 bg-gray-100 rounded" />
+                  <div className="w-4 h-4 bg-gray-100 rounded" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="glass-light rounded-2xl flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm font-medium text-gray-400">Aucune raison trouvée</p>
+          <button
+            onClick={() => { setSearch(''); setFilterEmergency(false); setFilterActive(false) }}
+            className="text-xs mt-2 underline text-gray-400"
+          >
+            Réinitialiser les filtres
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {categories.map(cat => (
+            <div key={cat} className="glass-light rounded-2xl overflow-hidden divide-y divide-gray-50">
+              <div className="px-5 py-3 bg-gray-50/60">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{cat}</p>
+              </div>
+              {grouped[cat].map(reason => {
+                const active = activeMap.get(reason.id)
+                const isChecked = !!active
+                const isEmergency = reason.is_emergency
+                return (
+                  <div key={reason.id} className={`flex flex-col ${isChecked && isEmergency ? 'bg-red-50/40' : ''}`}>
+                    <label className="flex items-center gap-3 px-5 py-3.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggle(reason)}
+                        style={{ accentColor: isEmergency ? '#ef4444' : accent }}
+                        className="w-4 h-4 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-gray-900">{reason.label}</p>
+                          {isEmergency && (
+                            <span className="text-[10px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">URGENCE</span>
+                          )}
+                        </div>
+                        {reason.description && (
+                          <p className="text-xs text-gray-400 mt-0.5 truncate">{reason.description}</p>
+                        )}
+                      </div>
+                    </label>
+
+                    {isChecked && isEmergency && (
+                      <div className="px-5 pb-3.5 flex items-center gap-2">
+                        <p className="text-xs text-gray-500 flex-shrink-0">Comportement :</p>
+                        <select
+                          value={active?.emergency_behavior ?? ''}
+                          onChange={e => handleBehaviorChange(reason, (e.target.value || null) as EmergencyBehavior)}
+                          className="flex-1 border border-red-100 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-red-300 bg-white"
+                        >
+                          <option value="">— Défaut compte —</option>
+                          <option value="transfer">Transfert immédiat</option>
+                          <option value="priority_message">Message prioritaire SMS</option>
+                          <option value="both">Transfert + SMS</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-white text-sm font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-500' : 'bg-gray-900'}`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Outbound Reasons Page ─────────────────────────────────────────────────────
+type CallReason = { id: number; label: string; desc: string; on: boolean }
+
 function OutboundReasonsPage({ accent }: { accent: string }) {
   const [reasons, setReasons] = useState<CallReason[]>([])
   const [showAdd, setShowAdd] = useState(false)

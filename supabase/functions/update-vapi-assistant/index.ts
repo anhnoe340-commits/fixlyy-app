@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logEvent } from '../_shared/audit.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -16,7 +17,12 @@ const CONV_MARKER_START = '<!-- FIXLYY_CONVERSATIONAL_DEBUT -->'
 const CONV_MARKER_END = '<!-- FIXLYY_CONVERSATIONAL_FIN -->'
 
 const ML_MARKER_START = '\n\n<!-- FIXLYY_MULTILINGUAL_DEBUT -->'
-const ML_MARKER_END = '<!-- FIXLYY_MULTILINGUAL_FIN -->'
+const ML_MARKER_END   = '<!-- FIXLYY_MULTILINGUAL_FIN -->'
+
+const REASONS_MARKER_START     = '\n\n<!-- FIXLYY_REASONS_DEBUT -->'
+const REASONS_MARKER_END       = '<!-- FIXLYY_REASONS_FIN -->'
+const URG_REASONS_MARKER_START = '\n\n<!-- FIXLYY_URGENCY_REASONS_DEBUT -->'
+const URG_REASONS_MARKER_END   = '<!-- FIXLYY_URGENCY_REASONS_FIN -->'
 
 // ── Prompt V4 (variables {{…}} résolues par Vapi à chaque appel) ─────────────
 const PROMPT_V4 = `Tu es {{assistant_name}}, la secrétaire téléphonique de {{artisan_name}} chez {{company_name}}.
@@ -317,6 +323,24 @@ function injectMultilingualInPrompt(currentPrompt: string, mlBlock: string): str
   return currentPrompt + ML_MARKER_START + '\n' + mlBlock + '\n' + ML_MARKER_END
 }
 
+// ── Injection générique par marqueurs (réutilisé par sync_reasons) ──────────
+function injectMarkerBlock(
+  currentPrompt: string,
+  block: string,
+  markerStart: string,
+  markerEnd: string,
+): string {
+  const start = currentPrompt.indexOf(markerStart)
+  const end   = currentPrompt.indexOf(markerEnd)
+  if (start !== -1 && end !== -1) {
+    return (
+      currentPrompt.slice(0, start) +
+      markerStart + '\n' + block + '\n' + markerEnd +
+      currentPrompt.slice(end + markerEnd.length)
+    )
+  }
+  return currentPrompt + markerStart + '\n' + block + '\n' + markerEnd
+}
 
 // Schema structuredData complet (qualité conversationnelle incluse)
 const FULL_STRUCTURED_DATA_SCHEMA = {
@@ -359,6 +383,8 @@ serve(async (req) => {
     sync_conversational?: boolean
     sync_voice?: boolean
     sync_server?: boolean
+    sync_urgency?: boolean
+    sync_reasons?: boolean
   }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
@@ -620,7 +646,175 @@ serve(async (req) => {
     }
   }
 
+  // 8. Sync raisons d'appel personnalisées depuis le catalogue
+  if (body.sync_reasons) {
+    try {
+      const { data: reasonsRaw, error: reasonsErr } = await supabase
+        .from('inbound_reasons')
+        .select(`
+          id,
+          emergency_behavior,
+          reasons_catalog!reason_id (
+            label,
+            description,
+            category,
+            is_emergency,
+            sort_order
+          )
+        `)
+        .eq('user_id', userId)
+        .eq('is_active', true)
+
+      if (reasonsErr) {
+        console.error('[sync_reasons] fetch inbound_reasons error:', reasonsErr.message)
+      } else {
+        const { data: urgProfile } = await supabase
+          .from('profiles')
+          .select('emergency_transfer_number, default_emergency_behavior')
+          .eq('id', userId)
+          .single()
+
+        type CatalogJoin = {
+          label: string
+          description: string | null
+          category: string
+          is_emergency: boolean
+          sort_order: number
+        }
+        type ReasonRow = {
+          id: string
+          emergency_behavior: string | null
+          reasons_catalog: CatalogJoin | null
+        }
+
+        const rows     = ((reasonsRaw ?? []) as ReasonRow[]).filter(r => r.reasons_catalog !== null)
+        const standard = rows.filter(r => !r.reasons_catalog!.is_emergency)
+        const urgent   = rows.filter(r =>  r.reasons_catalog!.is_emergency)
+
+        // ── BLOC A : raisons standard ──────────────────────────────────────────
+        let blocA: string
+        if (standard.length > 0) {
+          const byCategory = new Map<string, ReasonRow[]>()
+          for (const r of standard) {
+            const cat = r.reasons_catalog!.category
+            if (!byCategory.has(cat)) byCategory.set(cat, [])
+            byCategory.get(cat)!.push(r)
+          }
+          const sortedCats = [...byCategory.keys()].sort()
+          const lines: string[] = [
+            '## Motifs d\'appel pertinents pour cet artisan',
+            'L\'artisan traite les types de demandes suivants. Si le client mentionne l\'un de ces motifs, qualifie-le naturellement :',
+            '',
+          ]
+          for (const cat of sortedCats) {
+            const items = byCategory.get(cat)!
+              .sort((a, b) => a.reasons_catalog!.sort_order - b.reasons_catalog!.sort_order)
+            lines.push(`### ${cat}`)
+            for (const r of items) {
+              const desc = r.reasons_catalog!.description ? ` : ${r.reasons_catalog!.description}` : ''
+              lines.push(`- **${r.reasons_catalog!.label}**${desc}`)
+            }
+            lines.push('')
+          }
+          blocA = lines.join('\n')
+        } else {
+          blocA = '## Motifs d\'appel\nAucun motif spécifique configuré. Gère les demandes générales.'
+        }
+
+        // ── BLOC B : raisons urgentes (uniquement si au moins une cochée) ──────
+        const transferNumber =
+          (urgProfile as { emergency_transfer_number?: string | null } | null)?.emergency_transfer_number
+          ?? profile.transfer_phone
+          ?? null
+
+        let blocB = ''
+        if (urgent.length > 0) {
+          const companyName    = profile.company_name || 'l\'artisan'
+          const transferTarget = transferNumber || 'non configuré — prendre un message prioritaire'
+          const sortedUrgent   = [...urgent].sort((a, b) => {
+            const catCmp = a.reasons_catalog!.category.localeCompare(b.reasons_catalog!.category)
+            return catCmp !== 0 ? catCmp : a.reasons_catalog!.sort_order - b.reasons_catalog!.sort_order
+          })
+          const lines: string[] = [
+            '## 🚨 SITUATIONS D\'URGENCE — TRAITEMENT PRIORITAIRE',
+            'Les motifs suivants sont classés URGENTS pour cet artisan.',
+            '',
+          ]
+          for (const r of sortedUrgent) {
+            const behavior = (
+              r.emergency_behavior
+              ?? (urgProfile as { default_emergency_behavior?: string | null } | null)?.default_emergency_behavior
+              ?? 'priority_message'
+            ) as string
+            if (behavior === 'transfer') {
+              lines.push(
+                `- **${r.reasons_catalog!.label}** [TRANSFERT IMMÉDIAT] : Si le client confirme une urgence active, indique-lui : 'Je transfère immédiatement votre appel. Restez en ligne.' Puis déclenche la fonction transfer_call avec le numéro : ${transferTarget}.`
+              )
+            } else if (behavior === 'both') {
+              lines.push(
+                `- **${r.reasons_catalog!.label}** [TRANSFERT + MESSAGE] : Propose d'abord le transfert : 'Voulez-vous être transféré immédiatement ou laisser un message ?' Selon la réponse : transfer_call OU prise de message prioritaire.`
+              )
+            } else {
+              lines.push(
+                `- **${r.reasons_catalog!.label}** [MESSAGE PRIORITAIRE] : Prends rapidement le nom, l'adresse, le problème exact. Indique : 'Je transmets immédiatement à ${companyName} qui vous rappelle dans les plus brefs délais.' SMS marqué 🚨 URGENT.`
+              )
+            }
+            lines.push('')
+          }
+          blocB = lines.join('\n')
+        }
+
+        // ── Injection dans le message système ──────────────────────────────────
+        const messages: any[] = (patch.model?.messages ?? assistant.model?.messages ?? []) // any : structure Vapi opaque
+        const sysIndex = messages.findIndex((m: any) => m.role === 'system')
+        const updatedMessages = [...messages]
+        if (sysIndex !== -1) {
+          let cur: string = messages[sysIndex].content ?? ''
+          cur = injectMarkerBlock(cur, blocA, REASONS_MARKER_START, REASONS_MARKER_END)
+          if (blocB) {
+            cur = injectMarkerBlock(cur, blocB, URG_REASONS_MARKER_START, URG_REASONS_MARKER_END)
+          }
+          updatedMessages[sysIndex] = { ...messages[sysIndex], content: cur }
+        } else {
+          let content = REASONS_MARKER_START + '\n' + blocA + '\n' + REASONS_MARKER_END
+          if (blocB) content += URG_REASONS_MARKER_START + '\n' + blocB + '\n' + URG_REASONS_MARKER_END
+          updatedMessages.unshift({ role: 'system', content })
+        }
+        patch.model = { ...(patch.model ?? assistant.model), messages: updatedMessages }
+
+        // ── logEvent ──────────────────────────────────────────────────────────
+        await logEvent({
+          supabase,
+          eventType: 'vapi_sync_reasons',
+          userId,
+          metadata: {
+            standard_count: standard.length,
+            emergency_count: urgent.length,
+            has_emergency_transfer_number: !!(
+              (urgProfile as { emergency_transfer_number?: string | null } | null)?.emergency_transfer_number
+            ),
+            has_default_behavior: !!(
+              (urgProfile as { default_emergency_behavior?: string | null } | null)?.default_emergency_behavior
+            ),
+          },
+          severity: 'info',
+        })
+        if (urgent.length > 0 && !transferNumber) {
+          await logEvent({
+            supabase,
+            eventType: 'sync_emergency_no_transfer_number',
+            userId,
+            severity: 'warning',
+          })
+        }
+      }
+    } catch (e) {
+      console.error('[sync_reasons] unexpected error:', e)
+    }
+  }
+
   // ── PATCH VAPI ────────────────────────────────────────────────────────────────
+  let vapiPatchSucceeded = false
   if (Object.keys(patch).length > 0) {
     const patchRes = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
       method: 'PATCH',
@@ -635,6 +829,7 @@ serve(async (req) => {
         { status: 502, headers: { ...CORS, 'Content-Type': 'application/json' } }
       )
     }
+    vapiPatchSucceeded = true
   }
 
   // ── Sauvegarder dans profiles ─────────────────────────────────────────────────
@@ -649,6 +844,9 @@ serve(async (req) => {
   const newSysMsg = patch.model?.messages?.find((m: any) => m.role === 'system')
   if (newSysMsg?.content) {
     profileUpdate.vapi_system_prompt = newSysMsg.content
+  }
+  if (body.sync_reasons && vapiPatchSucceeded) {
+    profileUpdate.last_vapi_sync_at = new Date().toISOString()
   }
   if (Object.keys(profileUpdate).length > 0) {
     await supabase.from('profiles').update(profileUpdate).eq('id', userId)
