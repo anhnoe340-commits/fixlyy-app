@@ -6,7 +6,7 @@ import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
 
 type Page =
-  | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats'
+  | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
   | 'subscription'
@@ -95,6 +95,7 @@ export default function Dashboard() {
             <NavItem icon={<CalendarIcon />} label="Agenda" active={page === 'agenda'} onClick={() => setPage('agenda')} accent={accent} />
             <NavItem icon={<UserIcon />} label="Contacts" active={page === 'contacts'} onClick={() => setPage('contacts')} accent={accent} />
             <NavItem icon={<ChartIcon />} label="Statistiques" active={page === 'stats'} onClick={() => setPage('stats')} accent={accent} />
+            <NavItem icon={<SmsIcon />} label="Messages" active={page === 'messages'} onClick={() => setPage('messages')} accent={accent} />
           </div>
 
           {/* Mia */}
@@ -198,6 +199,7 @@ export default function Dashboard() {
           {page === 'contacts' && <ContactsPage accent={accent} />}
           {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
           {page === 'stats' && <StatsPage accent={accent} />}
+          {page === 'messages' && <MessagesPage accent={accent} />}
           {page === 'greeting' && <GreetingPage accent={accent} />}
           {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} />}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
@@ -224,6 +226,7 @@ const PAGE_LABELS: Record<Page, string> = {
   contacts: 'Contacts',
   agenda: 'Agenda',
   stats: 'Statistiques',
+  messages: 'Messages',
   greeting: 'Paramètres de salutation',
   'inbound-reasons': "Raisons d'appel entrantes",
   'outbound-reasons': "Raisons d'appel sortantes",
@@ -4008,6 +4011,197 @@ function StatsPage({ accent }: { accent: string }) {
   )
 }
 
+// ── Messages Page ─────────────────────────────────────────────────────────────
+interface SmsMessage {
+  role: 'user' | 'assistant' | 'artisan'
+  content: string
+}
+interface SmsConversation {
+  id: string
+  artisan_id: string
+  client_phone: string
+  messages: SmsMessage[]
+  updated_at: string
+}
+
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('33')) {
+    const local = digits.slice(2)
+    return '+33' + local.replace(/(.{2})(?=.)/g, '$1 ')
+  }
+  return phone
+}
+
+function MessagesPage({ accent }: { accent: string }) {
+  const [conversations, setConversations] = useState<SmsConversation[]>([])
+  const [selected, setSelected] = useState<SmsConversation | null>(null)
+  const [reply, setReply] = useState('')
+  const [sending, setSending] = useState(false)
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    supabase
+      .from('sms_conversations')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) {
+          setConversations(data as SmsConversation[])
+          if (!selected && data.length > 0) setSelected(data[0] as SmsConversation)
+        }
+      })
+
+    const channel = supabase
+      .channel('sms_conversations_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_conversations' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setConversations(prev => [payload.new as SmsConversation, ...prev])
+        } else if (payload.eventType === 'UPDATE') {
+          const updated = payload.new as SmsConversation
+          setConversations(prev => prev.map(c => c.id === updated.id ? updated : c).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
+          setSelected(prev => prev?.id === updated.id ? updated : prev)
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [selected?.messages])
+
+  async function sendReply() {
+    if (!reply.trim() || !selected || sending) return
+    setSending(true)
+    const text = reply.trim()
+    setReply('')
+
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms-reply`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session?.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ conversation_id: selected.id, message: text }),
+    })
+
+    if (!res.ok) {
+      setReply(text)
+    }
+    setSending(false)
+  }
+
+  function isUnread(conv: SmsConversation) {
+    const last = conv.messages[conv.messages.length - 1]
+    return last?.role === 'user'
+  }
+
+  function selectConversation(conv: SmsConversation) {
+    setSelected(conv)
+    setMobileView('detail')
+  }
+
+  return (
+    <div className="flex h-[calc(100vh-120px)] gap-4 overflow-hidden">
+      {/* Liste conversations */}
+      <div className={`${mobileView === 'detail' ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-72 shrink-0 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden`}>
+        <div className="px-4 py-3 border-b border-gray-100">
+          <p className="text-sm font-semibold text-gray-800">Conversations</p>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {conversations.length === 0 && (
+            <p className="text-xs text-gray-400 text-center mt-8">Aucune conversation</p>
+          )}
+          {conversations.map(conv => (
+            <button key={conv.id} onClick={() => selectConversation(conv)}
+              className={`w-full px-4 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors ${selected?.id === conv.id ? 'bg-blue-50' : ''}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-800">{formatPhone(conv.client_phone)}</span>
+                {isUnread(conv) && (
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: accent }} />
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">
+                {conv.messages[conv.messages.length - 1]?.content ?? ''}
+              </p>
+              <p className="text-[10px] text-gray-300 mt-0.5">
+                {new Date(conv.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Détail conversation */}
+      <div className={`${mobileView === 'list' ? 'hidden' : 'flex'} md:flex flex-col flex-1 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden`}>
+        {!selected ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-sm text-gray-400">Sélectionnez une conversation</p>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+              <button className="md:hidden text-gray-400 hover:text-gray-600 mr-1" onClick={() => setMobileView('list')}>
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <p className="text-sm font-semibold text-gray-800">{formatPhone(selected.client_phone)}</p>
+              <span className="text-xs text-gray-400">{selected.messages.length} messages</span>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+              {selected.messages.map((msg, i) => {
+                const isClient = msg.role === 'user'
+                const isArtisan = msg.role === 'artisan'
+                return (
+                  <div key={i} className={`flex ${isClient ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${
+                      isClient ? 'bg-gray-100 text-gray-800 rounded-bl-sm' :
+                      isArtisan ? 'text-white rounded-br-sm' : 'bg-blue-50 text-blue-800 rounded-br-sm'
+                    }`}
+                      style={isArtisan ? { background: accent } : {}}
+                    >
+                      {!isClient && !isArtisan && (
+                        <p className="text-[9px] font-semibold text-blue-400 mb-0.5 uppercase tracking-wide">Mia</p>
+                      )}
+                      {msg.content}
+                    </div>
+                  </div>
+                )
+              })}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input réponse */}
+            <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
+              <input
+                value={reply}
+                onChange={e => setReply(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply() } }}
+                placeholder="Répondre au client…"
+                className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-blue-300 transition-colors"
+              />
+              <button
+                onClick={sendReply}
+                disabled={!reply.trim() || sending}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white transition-opacity disabled:opacity-40"
+                style={{ background: accent }}
+              >
+                {sending ? '…' : 'Envoyer'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── SVG Icons ──────────────────────────────────────────────────────────────────
 const HomeIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 6.5L8 2l6 4.5V14a1 1 0 01-1 1H9.5v-4h-3v4H3a1 1 0 01-1-1V6.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
 const PhoneIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5V2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -4029,3 +4223,4 @@ const ChartIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 12V7M6 
 const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.2"/><circle cx="5.5" cy="10" r="1" fill="currentColor"/><circle cx="8" cy="10" r="1" fill="currentColor"/><circle cx="10.5" cy="10" r="1" fill="currentColor"/></svg>
 const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10.5 11l3-3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+const SmsIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6l-3 2.5V11H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8" cy="6.5" r="0.8" fill="currentColor"/><circle cx="10.5" cy="6.5" r="0.8" fill="currentColor"/></svg>
