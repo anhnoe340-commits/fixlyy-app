@@ -103,6 +103,7 @@ export default function OnboardingV2({ onDone }: Props) {
               userId={state.userId}
               artisanPhone={state.artisanPhone}
               onDone={handleStep3Done}
+              onBackToStep2={() => setState(s => ({ ...s, step: 2 }))}
             />
           )}
         </div>

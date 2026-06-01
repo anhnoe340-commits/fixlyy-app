@@ -13,9 +13,10 @@ interface Props {
   userId: string
   artisanPhone: string
   onDone: () => void
+  onBackToStep2?: () => void
 }
 
-export default function Step3TestCall({ userId, artisanPhone, onDone }: Props) {
+export default function Step3TestCall({ userId, artisanPhone, onDone, onBackToStep2 }: Props) {
   const [status, setStatus] = useState<Status>('countdown')
   const [countdown, setCountdown] = useState(COUNTDOWN_START)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -226,7 +227,7 @@ export default function Step3TestCall({ userId, artisanPhone, onDone }: Props) {
             style={{ background: BRAND }}>
             Réessayer l'appel test
           </button>
-          <button
+          <button onClick={onBackToStep2}
             className="w-full py-3.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:border-gray-300 transition-colors">
             Refaire le code de renvoi
           </button>

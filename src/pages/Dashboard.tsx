@@ -2732,27 +2732,63 @@ function AssistantPage({ accent }: { accent: string }) {
 }
 
 // ── Webhooks Page ─────────────────────────────────────────────────────────────
-type Webhook = { id: number; url: string; events: string[]; active: boolean }
+type UserWebhook = { id: string; url: string; events: string[]; active: boolean; secret: string | null }
 
 function WebhooksPage({ accent }: { accent: string }) {
-  const [webhooks, setWebhooks] = useState<Webhook[]>([])
+  const { user } = useAuth()
+  const [webhooks, setWebhooks] = useState<UserWebhook[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ url: '', events: [] as string[] })
+  const [saving, setSaving] = useState(false)
+  const [newSecret, setNewSecret] = useState<string | null>(null)
 
   const eventOptions = ['end-of-call-report', 'status-update', 'call-started', 'call-ended']
 
-  const add = () => {
-    if (!form.url.trim()) return
-    setWebhooks(prev => [...prev, { id: Date.now(), url: form.url, events: form.events, active: true }])
+  useEffect(() => {
+    if (!user) return
+    supabase.from('user_webhooks').select('*').eq('artisan_id', user.id).order('created_at').then(({ data }) => {
+      setWebhooks((data || []) as UserWebhook[])
+      setLoading(false)
+    })
+  }, [user])
+
+  const toggleEvent = (ev: string) => {
+    setForm(f => ({ ...f, events: f.events.includes(ev) ? f.events.filter(e => e !== ev) : [...f.events, ev] }))
+  }
+
+  const generateSecret = () => {
+    const arr = new Uint8Array(24)
+    crypto.getRandomValues(arr)
+    return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  const add = async () => {
+    if (!form.url.trim() || !user) return
+    setSaving(true)
+    const secret = generateSecret()
+    const { data, error } = await supabase
+      .from('user_webhooks')
+      .insert({ artisan_id: user.id, url: form.url.trim(), events: form.events, secret })
+      .select()
+      .single()
+    setSaving(false)
+    if (error || !data) return
+    setWebhooks(prev => [...prev, data as UserWebhook])
+    setNewSecret(secret)
     setForm({ url: '', events: [] })
     setShowAdd(false)
   }
 
-  const toggleEvent = (ev: string) => {
-    setForm(f => ({
-      ...f,
-      events: f.events.includes(ev) ? f.events.filter(e => e !== ev) : [...f.events, ev]
-    }))
+  const toggleActive = async (wh: UserWebhook) => {
+    const updated = { ...wh, active: !wh.active }
+    setWebhooks(prev => prev.map(w => w.id === wh.id ? updated : w))
+    await supabase.from('user_webhooks').update({ active: updated.active }).eq('id', wh.id)
+  }
+
+  const remove = async (id: string) => {
+    setWebhooks(prev => prev.filter(w => w.id !== id))
+    await supabase.from('user_webhooks').delete().eq('id', id)
   }
 
   const smsWebhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sms-inbound`
@@ -2771,6 +2807,20 @@ function WebhooksPage({ accent }: { accent: string }) {
           + Créer
         </button>
       </div>
+
+      {newSecret && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+          <p className="text-sm font-semibold text-emerald-800 mb-1">Webhook créé — copiez votre secret maintenant</p>
+          <p className="text-xs text-emerald-600 mb-2">Il ne sera plus jamais affiché après fermeture de cette bannière.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-white border border-emerald-200 rounded-lg px-3 py-2 font-mono text-emerald-700 break-all">{newSecret}</code>
+            <button onClick={() => { navigator.clipboard.writeText(newSecret); setNewSecret(null) }}
+              className="flex-shrink-0 text-xs px-3 py-2 rounded-lg font-semibold text-white" style={{ background: accent }}>
+              Copier &amp; fermer
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bot SMS RDV */}
       <Card>
@@ -2806,7 +2856,9 @@ function WebhooksPage({ accent }: { accent: string }) {
       </Card>
 
       <Card>
-        {webhooks.length === 0 && !showAdd ? (
+        {loading ? (
+          <div className="py-10 flex justify-center"><div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" /></div>
+        ) : webhooks.length === 0 && !showAdd ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
               <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
@@ -2826,10 +2878,11 @@ function WebhooksPage({ accent }: { accent: string }) {
                     ))}
                   </div>
                 </div>
-                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                <button onClick={() => toggleActive(wh)}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${wh.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                   {wh.active ? 'Actif' : 'Inactif'}
-                </span>
-                <button onClick={() => setWebhooks(prev => prev.filter(w => w.id !== wh.id))} className="text-gray-300 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
+                </button>
+                <button onClick={() => remove(wh.id)} className="text-gray-300 hover:text-red-500 text-lg leading-none flex-shrink-0">×</button>
               </div>
             ))}
           </div>
@@ -2856,7 +2909,9 @@ function WebhooksPage({ accent }: { accent: string }) {
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowAdd(false)} className="text-xs px-4 py-2 rounded-xl border border-gray-200 text-gray-500 font-medium">Annuler</button>
-              <button onClick={add} className="text-xs px-4 py-2 rounded-xl text-white font-semibold" style={{ background: accent }}>Créer le webhook</button>
+              <button onClick={add} disabled={saving} className="text-xs px-4 py-2 rounded-xl text-white font-semibold disabled:opacity-60" style={{ background: accent }}>
+                {saving ? 'Création…' : 'Créer le webhook'}
+              </button>
             </div>
           </div>
         )}
@@ -3136,7 +3191,9 @@ function IntegrationsPage({ accent }: { accent: string }) {
 
 // ── Timezone Page ─────────────────────────────────────────────────────────────
 function TimezonePage({ accent }: { accent: string }) {
-  const [timezone, setTimezone] = useState('Europe/Paris')
+  const { profile, updateProfile } = useProfile()
+  const [timezone, setTimezone] = useState(profile?.timezone || 'Europe/Paris')
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const timezones = [
@@ -3196,10 +3253,16 @@ function TimezonePage({ accent }: { accent: string }) {
       </Card>
 
       <div className="flex justify-end items-center gap-3">
-        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
-        <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 2500) }}
-          className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
-          Enregistrer
+        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Fuseau horaire enregistré</span>}
+        <button onClick={async () => {
+          setSaving(true)
+          await updateProfile({ timezone })
+          setSaving(false)
+          setSaved(true)
+          setTimeout(() => setSaved(false), 2500)
+        }} disabled={saving}
+          className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: accent }}>
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
         </button>
       </div>
     </div>
@@ -3628,7 +3691,7 @@ function ToggleRow({ label, desc, defaultOn, accent }: { label: string; desc: st
 // ── Agenda Page ───────────────────────────────────────────────────────────────
 type AppointmentRow = { id: string; client_name: string | null; client_phone: string | null; reason: string | null; appointment_date: string; appointment_time: string; duration_minutes: number; status: string; created_at: string }
 
-function AgendaPage({ accent, onGoToIntegrations: _onGoToIntegrations }: { accent: string; onGoToIntegrations: () => void }) {
+function AgendaPage({ accent, onGoToIntegrations }: { accent: string; onGoToIntegrations: () => void }) {
   const { user } = useAuth()
   const [calls, setCalls] = useState<CallRow[]>([])
   const [appointments, setAppointments] = useState<AppointmentRow[]>([])
@@ -3854,6 +3917,12 @@ function AgendaPage({ accent, onGoToIntegrations: _onGoToIntegrations }: { accen
               </div>
             )}
           </Card>
+
+          <button onClick={onGoToIntegrations}
+            className="w-full text-xs text-gray-400 hover:text-gray-600 py-2 flex items-center justify-center gap-1.5 transition-colors">
+            <span>⚙</span>
+            <span>Gérer les intégrations agenda</span>
+          </button>
         </div>
       </div>
     </div>

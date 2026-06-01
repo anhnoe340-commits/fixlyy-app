@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
 
 const BRAND = '#2850c8'
@@ -146,8 +147,11 @@ export default function Step2Forwarding({ userId, fixlyyNumber, onDone }: Props)
         /* ── Desktop : QR code ou SMS ──────────────────────────────────────── */
         <div className="flex flex-col gap-4">
           <div className="border border-gray-200 rounded-2xl p-6 text-center">
-            <div className="w-32 h-32 bg-gray-100 rounded-xl mx-auto mb-4 flex items-center justify-center">
-              <p className="text-xs text-gray-400 text-center px-2">QR code<br />(à générer)</p>
+            <div className="mx-auto mb-4 w-fit">
+              {twilioNum
+                ? <QRCodeSVG value={`**21*${twilioNum}#`} size={128} bgColor="#ffffff" fgColor="#111827" level="M" />
+                : <div className="w-32 h-32 bg-gray-100 rounded-xl flex items-center justify-center"><p className="text-xs text-gray-400 text-center px-2">Numéro en cours<br />d'attribution…</p></div>
+              }
             </div>
             <p className="text-sm font-medium text-gray-700 mb-1">Scannez ce QR code avec votre téléphone</p>
             <p className="text-xs text-gray-400">Vous pourrez activer le renvoi directement depuis votre mobile</p>

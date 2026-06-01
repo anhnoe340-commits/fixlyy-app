@@ -28,6 +28,7 @@ export interface Profile {
   transfer_phone: string | null            // Numéro de transfert intelligent E.164
   hours: string | null                     // JSON DaySlot[] — horaires d'ouverture
   email_notifications_enabled: boolean    // Email post-appel activé/désactivé
+  timezone: string                         // Fuseau horaire IANA (ex: Europe/Paris)
 }
 
 interface ProfileContextType {
@@ -61,6 +62,7 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   transfer_phone: null,
   hours: null,
   email_notifications_enabled: true,
+  timezone: 'Europe/Paris',
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null)
