@@ -372,7 +372,7 @@ serve(async (req) => {
     // Trouver l'artisan par vapi_assistant_id (maybeSingle pour éviter un crash si doublon résiduel)
     const { data: profiles, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, phone, twilio_number, assistant_name, company_name')
+      .select('id, phone, twilio_number, assistant_name, company_name, email, email_notifications_enabled')
       .eq('vapi_assistant_id', assistantId)
       .limit(2)
 
@@ -487,6 +487,96 @@ serve(async (req) => {
     const smsText = smsParts.join('\n')
 
     await sendSms(profile.twilio_number, profile.phone, smsText)
+
+    // ── Email post-appel (non-bloquant) ──────────────────────────────────────
+    if (profile.email && profile.email_notifications_enabled !== false) {
+      ;(async () => {
+        try {
+          const durationStr = durationSec > 0
+            ? durationSec >= 60
+              ? `${Math.floor(durationSec / 60)}min ${durationSec % 60}s`
+              : `${durationSec}s`
+            : 'Non disponible'
+          const urgent = urgency === 'urgent'
+
+          const htmlBody = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:0}
+  .container{max-width:560px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .header{background:${urgent?'#EF4444':'#1e293b'};padding:24px 32px}
+  .header h1{color:#fff;margin:0;font-size:18px;font-weight:600}
+  .header p{color:rgba(255,255,255,.7);margin:4px 0 0;font-size:13px}
+  .body{padding:24px 32px}
+  .section{margin-bottom:20px}
+  .label{font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+  .value{font-size:15px;color:#1e293b;line-height:1.5}
+  .summary{background:#f8fafc;border-left:3px solid ${urgent?'#EF4444':'#3b82f6'};border-radius:0 8px 8px 0;padding:12px 16px;font-size:14px;color:#334155;line-height:1.6}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;background:${urgent?'#fef2f2':'#f0fdf4'};color:${urgent?'#dc2626':'#16a34a'}}
+  .footer{padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8}
+  .rdv{background:#eff6ff;border-radius:8px;padding:12px 16px;font-size:14px;color:#1e40af}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>${urgent?'🚨 ':'📞 '}Appel géré par ${profile.assistant_name||'Mia'}</h1>
+    <p>${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}</p>
+  </div>
+  <div class="body">
+    <div class="section">
+      <div class="label">Statut</div>
+      <span class="badge">${urgent?'⚡ Urgent':'✓ Message pris'}</span>
+    </div>
+    <div class="section">
+      <div class="label">Client</div>
+      <div class="value">${callerName||'Inconnu'}${callerPhone?` · ${callerPhone}`:''}${callerAddress?`<br><span style="color:#64748b;font-size:13px">${callerAddress}</span>`:''}</div>
+    </div>
+    ${reason?`<div class="section"><div class="label">Motif</div><div class="value">${reason}</div></div>`:''}
+    ${fullSummary?`<div class="section"><div class="label">Résumé</div><div class="summary">${fullSummary}</div></div>`:''}
+    ${appointmentDate?`<div class="section"><div class="label">Rendez-vous</div><div class="rdv">📅 ${appointmentDate}${appointmentTime?` à ${appointmentTime}`:''}</div></div>`:''}
+    <div class="section" style="display:flex;gap:16px">
+      ${durationSec>0?`<div><div class="label">Durée</div><div class="value">${durationStr}</div></div>`:''}
+      ${qualityScore!=null?`<div><div class="label">Qualité</div><div class="value">${qualityScore}/10</div></div>`:''}
+    </div>
+  </div>
+  <div class="footer">Envoyé par Fixlyy · ${profile.company_name||''} · <a href="https://app.fixlyy.fr" style="color:#3b82f6">Voir le dashboard</a></div>
+</div>
+</body>
+</html>`
+
+          const resendRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Fixlyy <notifications@fixlyy.fr>',
+              to: [profile.email],
+              subject: urgent
+                ? `🚨 Appel urgent — ${callerName||callerNumber}`
+                : `📞 Nouvel appel — ${callerName||callerNumber}`,
+              html: htmlBody,
+            }),
+          })
+
+          if (!resendRes.ok) {
+            console.error('[email_post_call] Resend error:', await resendRes.text())
+          } else {
+            await logEvent({ supabase, eventType: 'email_post_call_sent',
+              userId: profile.id, metadata: { to: profile.email, is_urgent: urgent, caller: callerName||callerNumber }, severity: 'info' })
+          }
+        } catch (e: any) {
+          console.error('[email_post_call] unexpected error:', e.message)
+        }
+      })()
+    }
+    // ── Fin email post-appel ─────────────────────────────────────────────────
+
     await logEvent({ supabase, eventType: 'call_summary_sms_sent',
       userId: profile.id, resourceType: 'call', resourceId: callId,
       metadata: { caller: callerNumber, duration_sec: durationSec }, severity: 'info' })

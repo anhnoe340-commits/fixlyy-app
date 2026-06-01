@@ -1934,15 +1934,49 @@ function CallTransferPage({ accent }: { accent: string }) {
 // ── Post Processing Page ──────────────────────────────────────────────────────
 function PostProcessingPage({ accent }: { accent: string }) {
   const { profile, updateProfile } = useProfile()
-  const [emailNotif, setEmailNotif] = useState(true)
-  const [saved, setSaved] = useState(false)
+  const [emailEnabled, setEmailEnabled] = useState(profile?.email_notifications_enabled ?? true)
+  const [emailValue, setEmailValue] = useState(profile?.email || '')
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type?: 'error' } | null>(null)
+
+  useEffect(() => {
+    if (profile) {
+      setEmailEnabled(profile.email_notifications_enabled ?? true)
+      setEmailValue(profile.email || '')
+    }
+  }, [profile?.id])
 
   if (!profile) return null
 
-  const handleSave = async () => {
-    await updateProfile({ email: profile.email })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+  const showToast = (msg: string, type?: 'error') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  const handleToggle = async () => {
+    const next = !emailEnabled
+    setEmailEnabled(next)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ email_notifications_enabled: next })
+      .eq('id', profile.id)
+    if (error) {
+      setEmailEnabled(!next)
+      showToast('Erreur lors de la mise à jour', 'error')
+    } else {
+      showToast(next ? 'Emails activés' : 'Emails désactivés')
+    }
+  }
+
+  const handleSaveEmail = async () => {
+    if (!emailValue.includes('@')) {
+      showToast('Adresse email invalide', 'error')
+      return
+    }
+    setSaving(true)
+    await updateProfile({ email: emailValue.trim() })
+    setSaving(false)
+    showToast('Email enregistré')
   }
 
   return (
@@ -1950,16 +1984,39 @@ function PostProcessingPage({ accent }: { accent: string }) {
       <SettingsHeader section="Répondre" title="Post-traitement" />
 
       <Card>
-        <ToggleRow label="Email de notification" desc="Recevez un résumé de chaque appel par email dès la fin de la conversation" defaultOn={emailNotif} accent={accent} />
-        {emailNotif && (
-          <div className="mt-3 pt-3 border-t border-gray-50">
-            <Field label="Adresse email">
-              <input
-                value={profile.email || ''}
-                onChange={e => updateProfile({ email: e.target.value })}
-                placeholder="votre@email.fr"
-                className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60 mt-1"
-              />
+        <div className="flex items-center justify-between">
+          <div className="flex-1 min-w-0 pr-4">
+            <p className="text-sm font-semibold text-gray-900">Email de notification</p>
+            <p className="text-xs text-gray-400 mt-0.5">Recevez un résumé de chaque appel par email dès la fin de la conversation</p>
+            <p className={`text-xs mt-2 font-medium ${emailEnabled ? 'text-emerald-600' : 'text-gray-400'}`}>
+              {emailEnabled
+                ? 'Vous recevrez un email après chaque appel géré par Mia.'
+                : 'Les emails post-appel sont désactivés.'}
+            </p>
+          </div>
+          <Toggle defaultOn={emailEnabled} accent={accent} onChange={handleToggle} className="flex-shrink-0" />
+        </div>
+
+        {emailEnabled && (
+          <div className="mt-4 pt-4 border-t border-gray-50">
+            <Field label="Adresse email de destination">
+              <div className="flex gap-2 mt-1">
+                <input
+                  value={emailValue}
+                  onChange={e => setEmailValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveEmail() }}
+                  placeholder="votre@email.fr"
+                  className="flex-1 border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60"
+                />
+                <button
+                  onClick={handleSaveEmail}
+                  disabled={saving}
+                  className="text-sm px-4 py-2.5 rounded-xl text-white font-semibold disabled:opacity-50 shrink-0"
+                  style={{ background: accent }}
+                >
+                  {saving ? '…' : 'Enregistrer'}
+                </button>
+              </div>
             </Field>
           </div>
         )}
@@ -1974,12 +2031,11 @@ function PostProcessingPage({ accent }: { accent: string }) {
         <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
       </Card>
 
-      <div className="flex justify-end items-center gap-3">
-        {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
-        <button onClick={handleSave} className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity" style={{ background: accent }}>
-          Enregistrer
-        </button>
-      </div>
+      {toast && (
+        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-white text-sm font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-500' : 'bg-gray-900'}`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   )
 }
