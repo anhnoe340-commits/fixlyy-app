@@ -1986,12 +1986,12 @@ function PostProcessingPage({ accent }: { accent: string }) {
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0 pr-4">
-            <p className="text-sm font-semibold text-gray-900">Email de notification</p>
-            <p className="text-xs text-gray-400 mt-0.5">Recevez un résumé de chaque appel par email dès la fin de la conversation</p>
+            <p className="text-sm font-semibold text-gray-900">Récapitulatif hebdomadaire</p>
+            <p className="text-xs text-gray-400 mt-0.5">Recevez chaque lundi un résumé de la semaine : appels gérés, RDV pris, clients contactés.</p>
             <p className={`text-xs mt-2 font-medium ${emailEnabled ? 'text-emerald-600' : 'text-gray-400'}`}>
               {emailEnabled
-                ? 'Vous recevrez un email après chaque appel géré par Mia.'
-                : 'Les emails post-appel sont désactivés.'}
+                ? 'Vous recevrez votre récap chaque lundi matin.'
+                : 'Le récapitulatif hebdomadaire est désactivé.'}
             </p>
           </div>
           <Toggle defaultOn={emailEnabled} accent={accent} onChange={handleToggle} className="flex-shrink-0" />

@@ -176,6 +176,7 @@ serve(async (req) => {
     .select('id, email, company_name, assistant_name')
     .in('subscription_status', ['active', 'trialing'])
     .not('email', 'is', null)
+    .eq('email_notifications_enabled', true)
 
   if (error || !artisans?.length) {
     console.error('No artisans or error:', error)
