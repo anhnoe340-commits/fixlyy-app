@@ -3,11 +3,29 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ProfileProvider } from '@/contexts/ProfileContext'
 import OnboardingV2 from '@/pages/onboarding-v2/OnboardingV2'
 import Dashboard from '@/pages/Dashboard'
+import AdminPage from '@/pages/AdminPage'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
 import ResumePage from '@/pages/ResumePage'
 import { supabase } from '@/lib/supabase'
+
+const ADMIN_USER_ID = 'e537e7ab-5f0e-489f-8acc-7faae4dbe0d7'
+
+// AdminGuard : valide l'auth avant de rendre AdminPage
+function AdminGuard() {
+  const { user, loading } = useAuth()
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="w-8 h-8 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  if (!user || user.id !== ADMIN_USER_ID) {
+    window.location.href = '/'
+    return null
+  }
+  return <AdminPage />
+}
 
 function Spinner() {
   return (
@@ -80,5 +98,6 @@ export default function App() {
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
   if (window.location.pathname.startsWith('/r/')) return <ResumePage />
+  if (window.location.pathname === '/admin') return <AuthProvider><AdminGuard /></AuthProvider>
   return <AuthProvider><AppContent /></AuthProvider>
 }

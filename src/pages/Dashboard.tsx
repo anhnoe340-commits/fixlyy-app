@@ -128,6 +128,19 @@ export default function Dashboard() {
           </div>
         </nav>
 
+          {/* Admin — visible uniquement pour Noé */}
+          {user?.id === 'e537e7ab-5f0e-489f-8acc-7faae4dbe0d7' && (
+            <div className="px-2 mt-4 border-t border-white/10 pt-3">
+              <NavItem
+                icon={<span className="text-base leading-none">🔧</span>}
+                label="Admin"
+                active={false}
+                onClick={() => { window.location.href = '/admin' }}
+                accent={accent}
+              />
+            </div>
+          )}
+
         {/* Pied de page — utilisateur */}
         <div className="border-t border-white/10 px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
