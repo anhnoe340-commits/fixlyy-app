@@ -7,10 +7,12 @@
 
 -- 1. weekly-report : doublon de weekly-report-monday (même schedule 0 7 * * 1)
 --    Les deux appelaient la même fonction weekly-report/index.ts en simultané.
-SELECT cron.unschedule('weekly-report');
+SELECT cron.unschedule('weekly-report')
+WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'weekly-report');
 
 -- 2. trial-lifecycle-hourly : cassé + redondant
 --    Cassé : envoyait Authorization Bearer au lieu de x-cron-secret → 401
 --    Cassé : envoyait body {} sans action → 400 unknown_action
 --    Redondant : trial-reminder/trial-expire/trial-cleanup couvrent les 3 actions
-SELECT cron.unschedule('trial-lifecycle-hourly');
+SELECT cron.unschedule('trial-lifecycle-hourly')
+WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'trial-lifecycle-hourly');

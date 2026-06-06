@@ -7,4 +7,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- Supprime le job alert-low-pool dupliqué (remplacé par alert-low-pool-6h)
-SELECT cron.unschedule('alert-low-pool');
+-- WHERE EXISTS rend la migration idempotente si le job a déjà été supprimé manuellement
+SELECT cron.unschedule('alert-low-pool')
+WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'alert-low-pool');
