@@ -454,31 +454,33 @@ export default function AdminPage() {
   return (
     <div className="dashboard-bg min-h-screen" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
-      {/* ── Header fixe ── */}
+      {/* ── Header fixe (glass-topbar = fond clair → texte sombre) ── */}
       <div className="sticky top-0 z-40 glass-topbar px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-white font-black text-lg leading-tight">Admin — Fixlyy Internal</h1>
-          <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest mt-0.5">Accès restreint</p>
+          <h1 className="text-gray-900 font-black text-lg leading-tight">Admin — Fixlyy Internal</h1>
+          <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest mt-0.5">Accès restreint</p>
         </div>
-        <button onClick={() => window.location.href = '/'} className="text-slate-400 hover:text-white text-sm transition-colors px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20">
+        <button onClick={() => window.location.href = '/'} className="text-gray-500 hover:text-gray-900 text-sm transition-colors px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300">
           ← Dashboard
         </button>
       </div>
 
-      {/* ── Navigation desktop ── */}
-      <div className="hidden md:flex gap-0 border-b border-white/10 px-6">
+      {/* ── Navigation desktop (sur dashboard-bg clair → texte sombre) ── */}
+      <div className="hidden md:flex gap-0 border-b border-gray-200 px-6">
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all border-b-2 ${
-              activeTab === tab.id ? 'border-[#2850c8] text-white' : 'border-transparent text-slate-400 hover:text-white'
+              activeTab === tab.id
+                ? 'border-[#2850c8] text-[#2850c8]'
+                : 'border-transparent text-gray-500 hover:text-gray-900'
             }`}
           >
             <span>{tab.icon}</span>
             <span>{tab.label}</span>
             {tab.id === 'overview' && unresolvedAlerts > 0 && (
-              <span className="w-4 h-4 bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center leading-none">
+              <span className="w-4 h-4 bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none">
                 {unresolvedAlerts > 9 ? '9+' : unresolvedAlerts}
               </span>
             )}
@@ -494,25 +496,30 @@ export default function AdminPage() {
         ════════════════════════════════════════════════════ */}
         {activeTab === 'overview' && (<>
 
-          {/* Row 1 — KPI */}
+          {/* Row 1 — KPI (.glass = fond bleu foncé → text-white + text-muted-2) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[{ label: 'Total artisans', value: metrics.totalArtisans, icon: '👷' }, { label: 'Artisans actifs', value: metrics.actifs, icon: '✅' }, { label: 'Appels ce mois', value: metrics.appels, icon: '📞' }, { label: 'Essais actifs', value: metrics.essais, icon: '🎁' }].map(k => (
+            {[
+              { label: 'Total artisans', value: metrics.totalArtisans, icon: '👷' },
+              { label: 'Artisans actifs', value: metrics.actifs, icon: '✅' },
+              { label: 'Appels ce mois', value: metrics.appels, icon: '📞' },
+              { label: 'Essais actifs', value: metrics.essais, icon: '🎁' },
+            ].map(k => (
               <div key={k.label} className="glass rounded-2xl px-5 py-5">
                 <div className="w-10 h-10 rounded-xl bg-[#2850c8]/10 flex items-center justify-center text-lg mb-3">{k.icon}</div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{k.label}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 mb-1">{k.label}</p>
                 <p className="text-2xl font-black text-white">{dataLoading ? '…' : k.value}</p>
               </div>
             ))}
           </div>
 
-          {/* Row 2 — Alerts + Pool */}
+          {/* Row 2 — Alerts + Pool (.glass-light = fond blanc → texte gris foncé) */}
           <div className="grid md:grid-cols-3 gap-4">
 
             {/* Critical Alerts */}
             <div className="md:col-span-2">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
+              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
                 Critical Alerts
-                {unresolvedAlerts > 0 && <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] normal-case font-bold">{unresolvedAlerts} ouvertes</span>}
+                {unresolvedAlerts > 0 && <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500/20 text-red-500 text-[10px] normal-case font-bold">{unresolvedAlerts} ouvertes</span>}
               </h2>
 
               {/* Cartes abus */}
@@ -526,19 +533,19 @@ export default function AdminPage() {
                       const matchLabel = m.match_type === 'both' ? 'Téléphone + IP' : m.match_type === 'phone' ? 'Téléphone' : 'IP (90j)'
                       const isBusy = processingAbuseId === a.id
                       return (
-                        <div key={a.id} className="border border-orange-300/50 bg-orange-500/10 rounded-2xl p-4">
+                        <div key={a.id} className="border border-orange-200 bg-orange-50 rounded-2xl p-4">
                           <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="space-y-1.5 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-400/30 text-[10px] font-bold whitespace-nowrap">⚠️ Abus essai suspecté</span>
-                                <span className="text-[10px] text-slate-400">{fmt(a.created_at)}</span>
+                                <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold">⚠️ Abus essai suspecté</span>
+                                <span className="text-[10px] text-gray-400">{fmt(a.created_at)}</span>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5 text-xs">
-                                <div><span className="text-slate-400">Nouveau : </span><span className="font-mono text-white">{m.new_email ?? '—'}</span></div>
-                                <div><span className="text-slate-400">Précédent : </span><span className="font-mono text-slate-300">{m.previous_email ?? '—'}</span></div>
-                                <div><span className="text-slate-400">Tél : </span><span className="font-mono text-white">{m.new_phone ?? '—'}</span></div>
-                                <div><span className="text-slate-400">IP : </span><span className="font-mono text-white">{m.ip_address ?? '—'}</span></div>
-                                <div><span className="text-slate-400">Match : </span><span className="font-semibold text-orange-400">{matchLabel}</span></div>
+                                <div><span className="text-gray-400">Nouveau : </span><span className="font-mono text-gray-800">{m.new_email ?? '—'}</span></div>
+                                <div><span className="text-gray-400">Précédent : </span><span className="font-mono text-gray-600">{m.previous_email ?? '—'}</span></div>
+                                <div><span className="text-gray-400">Tél : </span><span className="font-mono text-gray-800">{m.new_phone ?? '—'}</span></div>
+                                <div><span className="text-gray-400">IP : </span><span className="font-mono text-gray-800">{m.ip_address ?? '—'}</span></div>
+                                <div><span className="text-gray-400">Match : </span><span className="font-semibold text-orange-600">{matchLabel}</span></div>
                               </div>
                             </div>
                             <div className="flex gap-2 flex-shrink-0">
@@ -554,18 +561,18 @@ export default function AdminPage() {
               })()}
 
               <div className="glass-light rounded-2xl p-4">
-                {dataLoading ? <p className="text-sm text-slate-400">Chargement…</p> : alerts.filter(a => a.alert_type !== 'trial_abuse_suspected' || !!a.resolved_at).length === 0 ? <p className="text-sm text-slate-400">Aucune alerte.</p> : (
+                {dataLoading ? <p className="text-sm text-gray-400">Chargement…</p> : alerts.filter(a => a.alert_type !== 'trial_abuse_suspected' || !!a.resolved_at).length === 0 ? <p className="text-sm text-gray-400">Aucune alerte.</p> : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead><tr className="border-b border-white/10">{['Date','Type','Message','Statut',''].map(h => <th key={h} className="text-left py-2 px-2 text-slate-400 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
+                      <thead><tr className="border-b border-gray-100">{['Date','Type','Message','Statut',''].map(h => <th key={h} className="text-left py-2 px-2 text-gray-400 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
                       <tbody>
                         {alerts.filter(a => a.alert_type !== 'trial_abuse_suspected' || !!a.resolved_at).map(a => (
-                          <tr key={a.id} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-2 px-2 text-slate-400 whitespace-nowrap">{fmt(a.created_at)}</td>
+                          <tr key={a.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                            <td className="py-2 px-2 text-gray-500 whitespace-nowrap">{fmt(a.created_at)}</td>
                             <td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${severityBadge(a.severity)}`}>{a.alert_type}</span></td>
-                            <td className="py-2 px-2 text-slate-300 max-w-[160px] truncate">{a.message}</td>
-                            <td className="py-2 px-2">{a.resolved_at ? <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">Résolu</span> : <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 text-[10px] font-bold">Ouvert</span>}</td>
-                            <td className="py-2 px-2">{!a.resolved_at && <button onClick={() => resolveAlert(a.id)} disabled={resolvingId === a.id} className="text-[10px] font-semibold text-[#4070e8] hover:underline disabled:opacity-40">{resolvingId === a.id ? '…' : 'Résoudre'}</button>}</td>
+                            <td className="py-2 px-2 text-gray-700 max-w-[160px] truncate">{a.message}</td>
+                            <td className="py-2 px-2">{a.resolved_at ? <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-600">Résolu</span> : <span className="px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-[10px] font-bold text-red-600">Ouvert</span>}</td>
+                            <td className="py-2 px-2">{!a.resolved_at && <button onClick={() => resolveAlert(a.id)} disabled={resolvingId === a.id} className="text-[10px] font-semibold text-[#2850c8] hover:underline disabled:opacity-40">{resolvingId === a.id ? '…' : 'Résoudre'}</button>}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -577,16 +584,20 @@ export default function AdminPage() {
 
             {/* Pool téléphonique */}
             <div>
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Pool téléphonique</h2>
+              <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Pool téléphonique</h2>
               <div className="glass-light rounded-2xl p-5 space-y-4">
-                {[{ label: 'Total', value: poolStats.total, color: 'text-white' }, { label: 'Disponibles', value: poolStats.disponibles, color: 'text-emerald-400' }, { label: 'Assignés', value: poolStats.assignes, color: 'text-blue-400' }].map(s => (
+                {[
+                  { label: 'Total', value: poolStats.total, color: 'text-gray-900' },
+                  { label: 'Disponibles', value: poolStats.disponibles, color: 'text-emerald-600' },
+                  { label: 'Assignés', value: poolStats.assignes, color: 'text-blue-600' },
+                ].map(s => (
                   <div key={s.label} className="flex items-center justify-between">
-                    <p className="text-xs text-slate-400">{s.label}</p>
+                    <p className="text-xs text-gray-500">{s.label}</p>
                     <p className={`text-2xl font-black ${s.color}`}>{dataLoading ? '…' : s.value}</p>
                   </div>
                 ))}
                 {!dataLoading && poolStats.disponibles < 3 && (
-                  <div className="mt-2 px-3 py-2 bg-red-500/15 border border-red-500/30 rounded-xl text-xs font-bold text-red-400">🚨 Pool bas — action requise</div>
+                  <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600">🚨 Pool bas — action requise</div>
                 )}
               </div>
             </div>
@@ -594,20 +605,20 @@ export default function AdminPage() {
 
           {/* Row 3 — Derniers inscrits */}
           <div>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Derniers inscrits</h2>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Derniers inscrits</h2>
             <div className="glass-light rounded-2xl p-4">
-              {dataLoading ? <p className="text-sm text-slate-400">Chargement…</p> : recentProfiles.length === 0 ? <p className="text-sm text-slate-400">Aucun profil.</p> : (
+              {dataLoading ? <p className="text-sm text-gray-400">Chargement…</p> : recentProfiles.length === 0 ? <p className="text-sm text-gray-400">Aucun profil.</p> : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead><tr className="border-b border-white/10">{['Entreprise','Téléphone','Inscrit le','Plan','Statut'].map(h => <th key={h} className="text-left py-2 px-3 text-slate-400 font-semibold">{h}</th>)}</tr></thead>
+                    <thead><tr className="border-b border-gray-100">{['Entreprise','Téléphone','Inscrit le','Plan','Statut'].map(h => <th key={h} className="text-left py-2 px-3 text-gray-400 font-semibold">{h}</th>)}</tr></thead>
                     <tbody>
                       {recentProfiles.map(p => (
-                        <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
-                          <td className="py-2 px-3 font-semibold text-white">{p.company_name || '—'}</td>
-                          <td className="py-2 px-3 text-slate-400 font-mono">{p.phone || '—'}</td>
-                          <td className="py-2 px-3 text-slate-400 whitespace-nowrap">{fmtDate(p.created_at)}</td>
-                          <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-[#2850c8]/20 text-[#4070e8] text-[10px] font-bold">{p.subscription_plan || 'essai'}</span></td>
-                          <td className="py-2 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${p.subscription_status === 'active' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : p.subscription_status === 'trialing' ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30'}`}>{p.subscription_status || 'essai'}</span></td>
+                        <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                          <td className="py-2 px-3 font-semibold text-gray-800">{p.company_name || '—'}</td>
+                          <td className="py-2 px-3 text-gray-500 font-mono">{p.phone || '—'}</td>
+                          <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{fmtDate(p.created_at)}</td>
+                          <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-[#2850c8]/10 text-[#2850c8] text-[10px] font-bold">{p.subscription_plan || 'essai'}</span></td>
+                          <td className="py-2 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${p.subscription_status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : p.subscription_status === 'trialing' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{p.subscription_status || 'essai'}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -627,54 +638,54 @@ export default function AdminPage() {
           {rentView === 'global' && (
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Rentabilité par artisan — {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</h2>
-                <button onClick={() => { setRentRows([]); loadRentabilite() }} className="text-xs font-semibold text-[#4070e8] hover:underline">↻ Actualiser</button>
+                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Rentabilité par artisan — {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</h2>
+                <button onClick={() => { setRentRows([]); loadRentabilite() }} className="text-xs font-semibold text-[#2850c8] hover:underline">↻ Actualiser</button>
               </div>
               {rentLoading && rentRows.length === 0 ? (
-                <div className="glass-light rounded-2xl p-8 text-center"><div className="w-6 h-6 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin mx-auto mb-2"/><p className="text-sm text-slate-400">Chargement des profils…</p></div>
+                <div className="glass-light rounded-2xl p-8 text-center"><div className="w-6 h-6 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin mx-auto mb-2"/><p className="text-sm text-gray-400">Chargement des profils…</p></div>
               ) : rentRows.length === 0 ? (
-                <div className="glass-light rounded-2xl p-8 text-center"><p className="text-sm text-slate-400">Aucun artisan avec abonnement actif.</p></div>
+                <div className="glass-light rounded-2xl p-8 text-center"><p className="text-sm text-gray-400">Aucun artisan avec abonnement actif.</p></div>
               ) : (
                 <div className="glass-light rounded-2xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-white/10 bg-white/5">
+                        <tr className="border-b border-gray-100 bg-gray-50/50">
                           {['Artisan','Plan','Appels','Vapi $','SMS €','Twilio €','Coût total','Revenu','Marge','Santé',''].map(h => (
-                            <th key={h} className="text-left py-3 px-3 text-slate-400 font-semibold whitespace-nowrap">{h}</th>
+                            <th key={h} className="text-left py-3 px-3 text-gray-400 font-semibold whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {rentRows.map(row => (
-                          <tr key={row.profile.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <tr key={row.profile.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
                             <td className="py-3 px-3">
-                              <p className="font-semibold text-white">{row.profile.company_name || row.profile.full_name || '—'}</p>
-                              <p className="text-slate-400 font-mono text-[10px]">{row.profile.phone || '—'}</p>
+                              <p className="font-semibold text-gray-800">{row.profile.company_name || row.profile.full_name || '—'}</p>
+                              <p className="text-gray-400 font-mono text-[10px]">{row.profile.phone || '—'}</p>
                             </td>
-                            <td className="py-3 px-3"><span className="px-2 py-0.5 rounded-full bg-[#2850c8]/20 text-[#4070e8] font-bold">{row.profile.subscription_plan || '—'}</span></td>
-                            <td className="py-3 px-3 text-slate-300 font-semibold">{row.callCount}</td>
-                            <td className="py-3 px-3">{row.loading ? <span className="text-slate-500">…</span> : <span className="font-mono text-slate-300">{fmtCost(row.vapiCost)}</span>}</td>
-                            <td className="py-3 px-3 font-mono text-slate-300">{fmtCost(row.smsCost, '€')}</td>
-                            <td className="py-3 px-3 font-mono text-slate-300">{fmtCost(row.twilioNumber, '€')}</td>
-                            <td className="py-3 px-3">{row.loading ? <span className="text-slate-500">…</span> : <span className="font-mono font-semibold text-white">{fmtCost(row.totalCost, '€')}</span>}</td>
-                            <td className="py-3 px-3 font-mono font-semibold text-white">{fmtCost(row.revenue, '€')}</td>
-                            <td className="py-3 px-3">{row.loading ? <span className="text-slate-500">…</span> : <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${marginBadge(row.marginPct)}`}>{Math.round(row.marginPct)}%</span>}</td>
-                            <td className="py-3 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${row.profile.subscription_status === 'active' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : row.profile.subscription_status === 'trialing' ? 'bg-blue-500/15 text-blue-400 border-blue-500/30' : 'bg-slate-500/15 text-slate-400 border-slate-500/30'}`}>{row.profile.subscription_status || 'inconnu'}</span></td>
-                            <td className="py-3 px-3"><button onClick={() => openArtisanDetail(row.profile.id)} className="text-[11px] font-semibold text-[#4070e8] hover:underline whitespace-nowrap">Voir détail →</button></td>
+                            <td className="py-3 px-3"><span className="px-2 py-0.5 rounded-full bg-[#2850c8]/10 text-[#2850c8] font-bold">{row.profile.subscription_plan || '—'}</span></td>
+                            <td className="py-3 px-3 text-gray-700 font-semibold">{row.callCount}</td>
+                            <td className="py-3 px-3">{row.loading ? <span className="text-gray-300">…</span> : <span className="font-mono text-gray-700">{fmtCost(row.vapiCost)}</span>}</td>
+                            <td className="py-3 px-3 font-mono text-gray-700">{fmtCost(row.smsCost, '€')}</td>
+                            <td className="py-3 px-3 font-mono text-gray-700">{fmtCost(row.twilioNumber, '€')}</td>
+                            <td className="py-3 px-3">{row.loading ? <span className="text-gray-300">…</span> : <span className="font-mono font-semibold text-gray-800">{fmtCost(row.totalCost, '€')}</span>}</td>
+                            <td className="py-3 px-3 font-mono font-semibold text-gray-800">{fmtCost(row.revenue, '€')}</td>
+                            <td className="py-3 px-3">{row.loading ? <span className="text-gray-300">…</span> : <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${marginBadge(row.marginPct)}`}>{Math.round(row.marginPct)}%</span>}</td>
+                            <td className="py-3 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${row.profile.subscription_status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : row.profile.subscription_status === 'trialing' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{row.profile.subscription_status || 'inconnu'}</span></td>
+                            <td className="py-3 px-3"><button onClick={() => openArtisanDetail(row.profile.id)} className="text-[11px] font-semibold text-[#2850c8] hover:underline whitespace-nowrap">Voir détail →</button></td>
                           </tr>
                         ))}
-                        <tr className="bg-white/5 border-t-2 border-white/20 font-bold">
-                          <td className="py-3 px-3 text-slate-300" colSpan={6}>TOTAL ({rentRows.length} artisans)</td>
-                          <td className="py-3 px-3 font-mono text-white">{fmtCost(rentTotal.cost, '€')}</td>
-                          <td className="py-3 px-3 font-mono text-white">{fmtCost(rentTotal.revenue, '€')}</td>
+                        <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold">
+                          <td className="py-3 px-3 text-gray-700" colSpan={6}>TOTAL ({rentRows.length} artisans)</td>
+                          <td className="py-3 px-3 font-mono text-gray-900">{fmtCost(rentTotal.cost, '€')}</td>
+                          <td className="py-3 px-3 font-mono text-gray-900">{fmtCost(rentTotal.revenue, '€')}</td>
                           <td className="py-3 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${marginBadge(rentGlobalMarginPct)}`}>{Math.round(rentGlobalMarginPct)}%</span></td>
                           <td colSpan={2}/>
                         </tr>
                       </tbody>
                     </table>
                   </div>
-                  <div className="px-5 py-3 bg-white/5 border-t border-white/5 text-[10px] text-slate-500">
+                  <div className="px-5 py-3 bg-gray-50/50 border-t border-gray-100 text-[10px] text-gray-400">
                     * Vapi = coûts réels API ce mois · SMS = estimation 0.08€/appel · Twilio = 1€ fixe/numéro
                   </div>
                 </div>
@@ -684,13 +695,13 @@ export default function AdminPage() {
 
           {rentView === 'detail' && detailProfile && (
             <section>
-              <button onClick={() => setRentView('global')} className="text-sm text-slate-400 hover:text-white transition-colors mb-4 flex items-center gap-1">← Retour au tableau</button>
+              <button onClick={() => setRentView('global')} className="text-sm text-gray-500 hover:text-gray-900 transition-colors mb-4 flex items-center gap-1">← Retour au tableau</button>
               <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
                 <div>
-                  <h2 className="text-xl font-bold text-white">{detailProfile.company_name || detailProfile.full_name || '—'}</h2>
-                  <p className="text-sm text-slate-400 mt-0.5">{detailProfile.phone} · {detailProfile.subscription_plan || 'essai'}</p>
+                  <h2 className="text-xl font-bold text-gray-900">{detailProfile.company_name || detailProfile.full_name || '—'}</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">{detailProfile.phone} · {detailProfile.subscription_plan || 'essai'}</p>
                 </div>
-                <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${healthScore === 'ok' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : healthScore === 'warning' ? 'bg-orange-500/15 text-orange-400 border-orange-500/30' : 'bg-red-500/15 text-red-400 border-red-500/30'}`}>{healthLabel}</span>
+                <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${healthScore === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : healthScore === 'warning' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-red-50 text-red-600 border-red-200'}`}>{healthLabel}</span>
               </div>
               {(() => {
                 const row = rentRows.find(r => r.profile.id === detailProfile.id)
@@ -705,29 +716,29 @@ export default function AdminPage() {
                     ].map(k => (
                       <div key={k.label} className="glass rounded-2xl px-5 py-5">
                         <div className="w-10 h-10 rounded-xl bg-[#2850c8]/10 flex items-center justify-center text-lg mb-3">{k.icon}</div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{k.label}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 mb-1">{k.label}</p>
                         <p className={`text-xl font-black ${k.highlight ? marginBadge(row.marginPct).includes('emerald') ? 'text-emerald-400' : marginBadge(row.marginPct).includes('orange') ? 'text-orange-400' : 'text-red-400' : 'text-white'}`}>{k.value}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">{k.sub}</p>
+                        <p className="text-[10px] text-muted mt-1">{k.sub}</p>
                       </div>
                     ))}
                   </div>
                 )
               })()}
               <div className="glass-light rounded-2xl p-5 mb-6">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Appels ce mois ({detailCalls.length})</h3>
-                {detailCalls.length === 0 ? <p className="text-sm text-slate-400">Aucun appel ce mois.</p> : (
+                <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3">Appels ce mois ({detailCalls.length})</h3>
+                {detailCalls.length === 0 ? <p className="text-sm text-gray-400">Aucun appel ce mois.</p> : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead><tr className="border-b border-white/10">{['Date','Appelant','Téléphone','Durée','Statut','Résumé'].map(h => <th key={h} className="text-left py-2 px-3 text-slate-400 font-semibold">{h}</th>)}</tr></thead>
+                      <thead><tr className="border-b border-gray-100">{['Date','Appelant','Téléphone','Durée','Statut','Résumé'].map(h => <th key={h} className="text-left py-2 px-3 text-gray-400 font-semibold">{h}</th>)}</tr></thead>
                       <tbody>
                         {detailCalls.map(c => (
-                          <tr key={c.id} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-2 px-3 text-slate-400 whitespace-nowrap">{fmt(c.created_at)}</td>
-                            <td className="py-2 px-3 text-slate-300">{c.caller_name || '—'}</td>
-                            <td className="py-2 px-3 text-slate-400 font-mono">{c.caller_phone || '—'}</td>
-                            <td className="py-2 px-3 text-slate-400">{c.duration_seconds != null ? `${Math.round(c.duration_seconds / 60)}min ${c.duration_seconds % 60}s` : '—'}</td>
-                            <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-300 text-[10px] font-semibold">{c.status || '—'}</span></td>
-                            <td className="py-2 px-3 text-slate-400 max-w-[200px] truncate">{(c as any).summary?.slice(0,60) || '—'}</td>
+                          <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                            <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{fmt(c.created_at)}</td>
+                            <td className="py-2 px-3 text-gray-700">{c.caller_name || '—'}</td>
+                            <td className="py-2 px-3 text-gray-500 font-mono">{c.caller_phone || '—'}</td>
+                            <td className="py-2 px-3 text-gray-500">{c.duration_seconds != null ? `${Math.round(c.duration_seconds / 60)}min ${c.duration_seconds % 60}s` : '—'}</td>
+                            <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold">{c.status || '—'}</span></td>
+                            <td className="py-2 px-3 text-gray-500 max-w-[200px] truncate">{(c as any).summary?.slice(0,60) || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -736,26 +747,26 @@ export default function AdminPage() {
                 )}
               </div>
               <div className="glass-light rounded-2xl p-5 mb-6">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Health Check ({healthOk}✅ {healthWarning > 0 && `${healthWarning}⚠️`} {healthError > 0 && `${healthError}🔴`})</h3>
+                <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3">Health Check ({healthOk}✅ {healthWarning > 0 && `${healthWarning}⚠️`} {healthError > 0 && `${healthError}🔴`})</h3>
                 <div className="space-y-2">
                   {healthChecks.map(check => (
-                    <div key={check.id} className="flex items-start gap-3 py-2 border-b border-white/5 last:border-0">
+                    <div key={check.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
                       <span className="text-base leading-none mt-0.5 flex-shrink-0">{healthIcon(check.status)}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white">{check.label || `Check ${check.id}`}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{check.message || (check.status === 'loading' ? 'Vérification…' : '')}</p>
+                        <p className="text-xs font-semibold text-gray-800">{check.label || `Check ${check.id}`}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{check.message || (check.status === 'loading' ? 'Vérification…' : '')}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="glass-light rounded-2xl p-5">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Actions rapides</h3>
+                <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3">Actions rapides</h3>
                 <div className="flex flex-wrap gap-3">
                   <button onClick={toggleDetailMia} disabled={detailTogglingMia} className={`text-sm font-semibold px-4 py-2.5 rounded-xl transition-all ${detailProfile.vapi_enabled ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'} disabled:opacity-40`}>{detailTogglingMia ? '…' : detailProfile.vapi_enabled ? '🔇 Désactiver Mia' : '🎙️ Activer Mia'}</button>
                   {detailSub?.stripe_customer_id && <a href={`https://dashboard.stripe.com/customers/${detailSub.stripe_customer_id}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold px-4 py-2.5 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all">Voir dans Stripe →</a>}
                   {detailProfile.vapi_assistant_id && <a href={`https://dashboard.vapi.ai/assistants/${detailProfile.vapi_assistant_id}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold px-4 py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all">Voir dans Vapi →</a>}
-                  {detailProfile.phone && <a href={`mailto:support@fixlyy.fr?subject=Support - ${detailProfile.company_name}&body=Bonjour, je vous contacte concernant votre compte Fixlyy.`} className="text-sm font-semibold px-4 py-2.5 rounded-xl bg-white/10 text-slate-300 hover:bg-white/15 transition-all">Envoyer email support →</a>}
+                  {detailProfile.phone && <a href={`mailto:support@fixlyy.fr?subject=Support - ${detailProfile.company_name}&body=Bonjour, je vous contacte concernant votre compte Fixlyy.`} className="text-sm font-semibold px-4 py-2.5 rounded-xl bg-gray-50 text-gray-600 hover:bg-gray-100 transition-all">Envoyer email support →</a>}
                 </div>
               </div>
             </section>
@@ -768,35 +779,35 @@ export default function AdminPage() {
         ════════════════════════════════════════════════════ */}
         {activeTab === 'support' && (
           <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Recherche artisan</h2>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Recherche artisan</h2>
             <div className="glass-light rounded-2xl p-5">
               <div className="flex gap-3 mb-5">
-                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchArtisan()} placeholder="UUID artisan ou téléphone (+33…)" className="flex-1 border border-white/10 bg-white/5 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#2850c8] transition-colors font-mono placeholder:text-slate-500" />
+                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchArtisan()} placeholder="UUID artisan ou téléphone (+33…)" className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#2850c8] transition-colors font-mono" />
                 <button onClick={searchArtisan} disabled={searchLoading || !searchQuery.trim()} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all" style={{ background: 'linear-gradient(135deg, #2850c8, #4070e8)' }}>{searchLoading ? '…' : 'Rechercher'}</button>
               </div>
               {foundProfile && (
                 <div className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
-                    <div className="bg-white/5 rounded-xl p-4 space-y-1.5">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Profil</p>
+                    <div className="bg-gray-50 rounded-xl p-4 space-y-1.5">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Profil</p>
                       {[['Nom', foundProfile.full_name], ['Téléphone', foundProfile.phone], ['Entreprise', foundProfile.company_name], ['Métier', foundProfile.company_type], ['Inscrit le', fmtDate(foundProfile.created_at)], ['Plan', foundProfile.subscription_plan], ['Statut', foundProfile.subscription_status], ['Twilio', foundProfile.twilio_number], ['Vapi ID', foundProfile.vapi_assistant_id?.slice(0,16)+'…']].map(([l, v]) => (
                         <div key={l as string} className="flex items-center gap-2">
-                          <span className="text-[11px] text-slate-500 w-24 flex-shrink-0">{l}</span>
-                          <span className="text-xs font-medium text-slate-200 font-mono">{(v as string) || '—'}</span>
+                          <span className="text-[11px] text-gray-400 w-24 flex-shrink-0">{l}</span>
+                          <span className="text-xs font-medium text-gray-800 font-mono">{(v as string) || '—'}</span>
                         </div>
                       ))}
                     </div>
                     <div className="space-y-3">
                       {foundSub && (
-                        <div className="bg-white/5 rounded-xl p-4">
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Abonnement</p>
+                        <div className="bg-gray-50 rounded-xl p-4">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Abonnement</p>
                           {[['Customer', foundSub.stripe_customer_id?.slice(0,14)+'…'], ['Sub', foundSub.stripe_subscription_id?.slice(0,14)+'…'], ['Fin', fmtDate(foundSub.current_period_end)]].map(([l, v]) => (
-                            <div key={l as string} className="flex items-center gap-2 mb-1"><span className="text-[11px] text-slate-500 w-16">{l}</span><span className="text-xs font-mono text-slate-300">{(v as string) || '—'}</span></div>
+                            <div key={l as string} className="flex items-center gap-2 mb-1"><span className="text-[11px] text-gray-400 w-16">{l}</span><span className="text-xs font-mono text-gray-700">{(v as string) || '—'}</span></div>
                           ))}
                         </div>
                       )}
-                      <div className="bg-white/5 rounded-xl p-4 flex flex-col gap-2">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Actions</p>
+                      <div className="bg-gray-50 rounded-xl p-4 flex flex-col gap-2">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Actions</p>
                         <button onClick={toggleMia} disabled={togglingMia} className={`text-xs font-semibold px-3 py-2 rounded-lg transition-all ${foundProfile.vapi_enabled ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'} disabled:opacity-40`}>{togglingMia ? '…' : foundProfile.vapi_enabled ? '🔇 Désactiver Mia' : '🎙️ Activer Mia'}</button>
                         {foundSub?.stripe_customer_id && <a href={`https://dashboard.stripe.com/customers/${foundSub.stripe_customer_id}`} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold px-3 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all text-center">Voir dans Stripe →</a>}
                         {foundProfile.vapi_assistant_id && <a href={`https://dashboard.vapi.ai/assistants/${foundProfile.vapi_assistant_id}`} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold px-3 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all text-center">Voir dans Vapi →</a>}
@@ -805,18 +816,18 @@ export default function AdminPage() {
                   </div>
                   {foundCalls.length > 0 && (
                     <div>
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">10 derniers appels</p>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">10 derniers appels</p>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
-                          <thead><tr className="border-b border-white/10">{['Date','Appelant','Téléphone','Statut','Durée'].map(h => <th key={h} className="text-left py-2 px-3 text-slate-400 font-semibold">{h}</th>)}</tr></thead>
+                          <thead><tr className="border-b border-gray-100">{['Date','Appelant','Téléphone','Statut','Durée'].map(h => <th key={h} className="text-left py-2 px-3 text-gray-400 font-semibold">{h}</th>)}</tr></thead>
                           <tbody>
                             {foundCalls.map(c => (
-                              <tr key={c.id} className="border-b border-white/5 hover:bg-white/5">
-                                <td className="py-2 px-3 text-slate-400 whitespace-nowrap">{fmt(c.created_at)}</td>
-                                <td className="py-2 px-3 text-slate-300">{c.caller_name || '—'}</td>
-                                <td className="py-2 px-3 text-slate-400 font-mono">{c.caller_phone || '—'}</td>
-                                <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-white/10 text-slate-300 text-[10px] font-semibold">{c.status || '—'}</span></td>
-                                <td className="py-2 px-3 text-slate-400">{c.duration_seconds != null ? `${c.duration_seconds}s` : '—'}</td>
+                              <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                                <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{fmt(c.created_at)}</td>
+                                <td className="py-2 px-3 text-gray-700">{c.caller_name || '—'}</td>
+                                <td className="py-2 px-3 text-gray-500 font-mono">{c.caller_phone || '—'}</td>
+                                <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold">{c.status || '—'}</span></td>
+                                <td className="py-2 px-3 text-gray-400">{c.duration_seconds != null ? `${c.duration_seconds}s` : '—'}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -836,24 +847,24 @@ export default function AdminPage() {
         {activeTab === 'infra' && (<>
 
           <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Infrastructure & Services externes</h2>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Infrastructure & Services externes</h2>
             {(['critical', 'important', 'secondary'] as const).map(level => {
               const { dot, label } = criticalityConfig(level)
               return (
                 <div key={level} className="mb-6">
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">{dot} {label}</p>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">{dot} {label}</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {SERVICES.filter(s => s.criticality === level).map(s => {
                       const cc = criticalityConfig(s.criticality)
                       return (
                         <div key={s.name} className="glass-light rounded-2xl p-4 flex flex-col gap-2">
                           <div className="flex items-start justify-between gap-2">
-                            <div><p className="text-sm font-bold text-white">{s.name}</p><p className="text-xs text-slate-400 mt-0.5">{s.role}</p></div>
+                            <div><p className="text-sm font-bold text-gray-900">{s.name}</p><p className="text-xs text-gray-500 mt-0.5">{s.role}</p></div>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${cc.cls}`}>{cc.label}</span>
                           </div>
-                          <p className="text-[11px] text-slate-500">{s.billing}</p>
-                          {s.keyName && <span className="font-mono text-[10px] bg-white/10 text-slate-400 px-2 py-1 rounded-lg w-fit">{s.keyName}</span>}
-                          <a href={s.dashboard} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-[#4070e8] hover:underline mt-1">Ouvrir dashboard →</a>
+                          <p className="text-[11px] text-gray-400">{s.billing}</p>
+                          {s.keyName && <span className="font-mono text-[10px] bg-gray-100 text-gray-500 px-2 py-1 rounded-lg w-fit">{s.keyName}</span>}
+                          <a href={s.dashboard} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-[#2850c8] hover:underline mt-1">Ouvrir dashboard →</a>
                         </div>
                       )
                     })}
@@ -864,23 +875,23 @@ export default function AdminPage() {
           </section>
 
           <section>
-            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">🔑 Renouvellement des clés API</h2>
+            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">🔑 Renouvellement des clés API</h2>
             <div className="glass-light rounded-2xl p-5">
-              {keyRotations.length === 0 ? <p className="text-sm text-slate-400">Aucune clé enregistrée.</p> : (
+              {keyRotations.length === 0 ? <p className="text-sm text-gray-400">Aucune clé enregistrée.</p> : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead><tr className="border-b border-white/10">{['Service','Clé','Dernière rotation','Prochaine rotation','Statut',''].map(h => <th key={h} className="text-left py-2 px-3 text-slate-400 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
+                    <thead><tr className="border-b border-gray-100">{['Service','Clé','Dernière rotation','Prochaine rotation','Statut',''].map(h => <th key={h} className="text-left py-2 px-3 text-gray-400 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
                     <tbody>
                       {keyRotations.map(k => {
                         const badge = rotationBadge(k.next_rotation_at)
                         return (
-                          <tr key={k.id} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-2 px-3 font-semibold text-white">{k.service_name}</td>
-                            <td className="py-2 px-3 font-mono text-slate-400 text-[10px]">{k.key_name}</td>
-                            <td className="py-2 px-3 text-slate-400">{fmtDate(k.last_rotated_at)}</td>
-                            <td className="py-2 px-3 text-slate-400">{fmtDate(k.next_rotation_at)}</td>
+                          <tr key={k.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                            <td className="py-2 px-3 font-semibold text-gray-800">{k.service_name}</td>
+                            <td className="py-2 px-3 font-mono text-gray-500 text-[10px]">{k.key_name}</td>
+                            <td className="py-2 px-3 text-gray-400">{fmtDate(k.last_rotated_at)}</td>
+                            <td className="py-2 px-3 text-gray-400">{fmtDate(k.next_rotation_at)}</td>
                             <td className="py-2 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge.cls}`}>{badge.label}</span></td>
-                            <td className="py-2 px-3"><button onClick={() => markKeyRotated(k.id)} disabled={rotatingId === k.id} className="text-[10px] font-semibold text-[#4070e8] hover:underline disabled:opacity-40 whitespace-nowrap">{rotatingId === k.id ? '…' : 'Marquer renouvelée'}</button></td>
+                            <td className="py-2 px-3"><button onClick={() => markKeyRotated(k.id)} disabled={rotatingId === k.id} className="text-[10px] font-semibold text-[#2850c8] hover:underline disabled:opacity-40 whitespace-nowrap">{rotatingId === k.id ? '…' : 'Marquer renouvelée'}</button></td>
                           </tr>
                         )
                       })}
@@ -900,18 +911,18 @@ export default function AdminPage() {
           <section>
             <div className="glass-light rounded-2xl p-4 mb-4 flex flex-wrap gap-3 items-end">
               <div className="flex-1 min-w-[200px]">
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Titre</label>
-                <input value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Nouvelle tâche…" className="w-full border border-white/10 bg-white/5 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#2850c8] transition-colors placeholder:text-slate-500" />
+                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Titre</label>
+                <input value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTask()} placeholder="Nouvelle tâche…" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#2850c8] transition-colors" />
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Priorité</label>
-                <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value as AdminTask['priority'])} className="border border-white/10 bg-slate-800 text-white rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#2850c8]">
+                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Priorité</label>
+                <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value as AdminTask['priority'])} className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#2850c8] bg-white">
                   <option value="critical">🔴 Critique</option><option value="high">🟠 Haute</option><option value="medium">🟡 Moyenne</option><option value="low">⚪ Basse</option>
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Échéance</label>
-                <input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)} className="border border-white/10 bg-slate-800 text-white rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#2850c8]" />
+                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Échéance</label>
+                <input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#2850c8] bg-white" />
               </div>
               <button onClick={addTask} disabled={addingTask || !newTaskTitle.trim()} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg, #2850c8, #4070e8)' }}>{addingTask ? '…' : 'Ajouter'}</button>
             </div>
@@ -922,26 +933,26 @@ export default function AdminPage() {
                 { key: 'done' as const, label: 'Fait ✓', items: tasks.filter(t => t.status === 'done'), prevStatus: 'in_progress' as const, prevLabel: '← En cours' },
               ]).map(col => (
                 <div key={col.key} className="glass-light rounded-2xl p-4">
-                  <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold text-slate-300 uppercase tracking-wider">{col.label}</p><span className="text-[10px] text-slate-500 font-semibold">{col.items.length}</span></div>
+                  <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold text-gray-700 uppercase tracking-wider">{col.label}</p><span className="text-[10px] text-gray-400 font-semibold">{col.items.length}</span></div>
                   <div className="space-y-2.5">
                     {col.items.map(task => {
                       const isOverdue = task.due_date && new Date(task.due_date) < new Date()
                       return (
-                        <div key={task.id} className="bg-white/5 border border-white/10 rounded-xl p-3">
+                        <div key={task.id} className="bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
                           <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <p className="text-xs font-semibold text-white leading-tight flex-1">{task.title}</p>
+                            <p className="text-xs font-semibold text-gray-800 leading-tight flex-1">{task.title}</p>
                             <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold flex-shrink-0 ${priorityBadge(task.priority)}`}>{task.priority}</span>
                           </div>
-                          {task.due_date && <p className={`text-[10px] font-semibold mb-2 ${isOverdue ? 'text-red-400' : 'text-slate-500'}`}>{isOverdue ? '⚠️ ' : ''}Échéance : {fmtDate(task.due_date)}</p>}
+                          {task.due_date && <p className={`text-[10px] font-semibold mb-2 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`}>{isOverdue ? '⚠️ ' : ''}Échéance : {fmtDate(task.due_date)}</p>}
                           <div className="flex gap-1.5 flex-wrap">
-                            {col.nextStatus && <button onClick={() => moveTask(task.id, col.nextStatus!)} className="text-[10px] font-semibold text-[#4070e8] hover:underline">{col.nextLabel}</button>}
-                            {col.prevStatus && <button onClick={() => moveTask(task.id, col.prevStatus!)} className="text-[10px] font-semibold text-slate-500 hover:underline">{col.prevLabel}</button>}
+                            {col.nextStatus && <button onClick={() => moveTask(task.id, col.nextStatus!)} className="text-[10px] font-semibold text-[#2850c8] hover:underline">{col.nextLabel}</button>}
+                            {col.prevStatus && <button onClick={() => moveTask(task.id, col.prevStatus!)} className="text-[10px] font-semibold text-gray-400 hover:underline">{col.prevLabel}</button>}
                             <button onClick={() => deleteTask(task.id)} className="text-[10px] font-semibold text-red-400 hover:underline ml-auto">Suppr.</button>
                           </div>
                         </div>
                       )
                     })}
-                    {col.items.length === 0 && <p className="text-[11px] text-slate-600 text-center py-3">Vide</p>}
+                    {col.items.length === 0 && <p className="text-[11px] text-gray-300 text-center py-3">Vide</p>}
                   </div>
                 </div>
               ))}
@@ -951,7 +962,7 @@ export default function AdminPage() {
 
       </div>
 
-      {/* ── Navigation mobile (fixed bottom) ── */}
+      {/* ── Navigation mobile fixe en bas (glass-bottom-nav = fond clair → texte sombre) ── */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-bottom-nav">
         <div className="flex">
           {TABS.map(tab => (
@@ -959,7 +970,7 @@ export default function AdminPage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-all relative ${
-                activeTab === tab.id ? 'text-[#4070e8]' : 'text-slate-500'
+                activeTab === tab.id ? 'text-[#2850c8]' : 'text-gray-400'
               }`}
             >
               <span className="text-xl leading-none">{tab.icon}</span>
