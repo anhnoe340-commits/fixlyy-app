@@ -67,13 +67,37 @@ Deno.serve(async (req) => {
     // Non bloquant
   }
 
+  // Dry-run replenish pour diagnostiquer combien de numéros seraient achetés
+  let replenishDryRun: object | null = null
+  try {
+    const res = await fetch(
+      `${SB_URL}/functions/v1/replenish-phone-pool`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SB_SERVICE}`,
+        },
+        body: JSON.stringify({ dry_run: true }),
+      }
+    )
+    replenishDryRun = await res.json()
+  } catch {
+    // Non bloquant
+  }
+
   await sb.from('edge_function_logs').insert({
     function_name: 'alert-low-pool',
     status: 'success',
     duration_ms: Date.now() - startMs,
     input_meta: {},
-    output_meta: { available, severity, alerted: true },
+    output_meta: { available, severity, alerted: true, replenish_dry_run: replenishDryRun },
   })
 
-  return new Response(JSON.stringify({ alerted: true, available, severity }), { status: 200 })
+  return new Response(JSON.stringify({
+    alerted: true,
+    available,
+    severity,
+    replenish_dry_run: replenishDryRun,
+  }), { status: 200 })
 })

@@ -42,11 +42,45 @@ async function buyFrenchNumber(): Promise<{ sid: string; phoneNumber: string } |
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
-  if (req.headers.get('x-cron-secret') !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
+
+  // Auth duale : x-cron-secret (cron pg) OU Bearer service_role (service-to-service)
+  const cronSecret = req.headers.get('x-cron-secret')
+  const isServiceRole = req.headers.get('Authorization') === `Bearer ${SB_SERVICE}`
+  if (cronSecret !== CRON_SECRET && !isServiceRole) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  const { dry_run = false } = await req.json().catch(() => ({}))
 
   const startMs = Date.now()
 
   try {
+    // ── dry_run : simulation sans achat ni écriture ──────────────────────────
+    if (dry_run) {
+      const { count } = await sb
+        .from('phone_numbers_pool')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'available')
+
+      const available = count ?? 0
+      const wouldPurchase = available < THRESHOLD
+        ? Math.min(TARGET - available, MAX_BUYS_PER_RUN)
+        : 0
+
+      return new Response(JSON.stringify({
+        dry_run: true,
+        message: wouldPurchase > 0
+          ? `Would purchase ${wouldPurchase} numbers to reach minimum pool`
+          : 'Pool OK, no purchase needed',
+        current_pool_size:  available,
+        minimum_required:   THRESHOLD,
+        would_purchase:     wouldPurchase,
+      }), { status: 200 })
+    }
+
+    // ⚠️ PRODUCTION MODE: ne passer dry_run=false qu'après
+    // validation manuelle — chaque numéro Twilio coûte ~1$/mois
+
     // ── Fail-safe 1 : anti-runaway horaire ──────────────────────────────────
     const oneHourAgo = new Date(Date.now() - 3600_000).toISOString()
     const { count: recentRuns } = await sb
