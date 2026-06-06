@@ -3281,6 +3281,34 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [portalLoading, setPortalLoading] = useState(false)
   const [billing, setBilling] = useState<'monthly'|'annual'>('monthly')
   const [associates, setAssociates] = useState(2)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  async function handleDeleteAccount() {
+    setDeleteLoading(true)
+    setDeleteError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Non authentifié')
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ confirm: 'DELETE MY ACCOUNT' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Erreur lors de la suppression')
+      await supabase.auth.signOut()
+      window.location.href = 'https://fixlyy.fr?account=deleted'
+    } catch (e: any) {
+      setDeleteError(e.message)
+      setDeleteLoading(false)
+    }
+  }
 
   async function openPortal() {
     setPortalLoading(true)
@@ -3626,6 +3654,68 @@ function SubscriptionPage({ accent }: { accent: string }) {
             style={{ background: accent }}>
             {checkoutLoading ? 'Redirection…' : selected === null ? 'Choisir un plan' : `Essayer ${plans[selected].name} gratuitement`}
           </button>
+        </div>
+      )}
+
+      {/* ── Zone dangereuse ── */}
+      <div className="mt-12 border border-red-500/20 rounded-2xl p-6">
+        <h3 className="text-red-400 font-bold mb-2">Zone dangereuse</h3>
+        <p className="text-muted-2 text-sm mb-4">
+          La suppression de votre compte est irréversible. Toutes vos données (appels, contacts, RDV)
+          seront définitivement effacées de nos systèmes conformément au RGPD.
+        </p>
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="text-sm font-semibold text-red-400 border border-red-500/30 hover:bg-red-500/10 px-4 py-2 rounded-lg transition-all">
+          Supprimer mon compte
+        </button>
+      </div>
+
+      {/* ── Modale de confirmation suppression ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="glass-light rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Supprimer votre compte</h3>
+            <p className="text-sm text-gray-500 mb-1">
+              Cette action est <strong>irréversible</strong>. Toutes vos données seront définitivement
+              effacées : appels, contacts, rendez-vous, historique SMS.
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Votre abonnement Stripe sera annulé immédiatement et votre numéro Fixlyy sera libéré.
+            </p>
+            <p className="text-sm font-semibold text-gray-700 mb-2">
+              Tapez{' '}
+              <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-red-600">SUPPRIMER</span>
+              {' '}pour confirmer
+            </p>
+            <input
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              placeholder="SUPPRIMER"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-red-400 transition-colors mb-3"
+              autoFocus
+            />
+            {deleteError && (
+              <p className="text-xs text-red-500 mb-3">{deleteError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); setDeleteError('') }}
+                disabled={deleteLoading}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all disabled:opacity-50">
+                Annuler
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteInput !== 'SUPPRIMER' || deleteLoading}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 transition-all flex items-center justify-center gap-2">
+                {deleteLoading && (
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                )}
+                Supprimer définitivement
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
