@@ -171,6 +171,7 @@ export default function Step1Account({ onDone }: Props) {
   // ── Phase OTP ────────────────────────────────────────────────────────────────
   if (phase === 'otp') {
     return (
+      <div className="max-w-sm mx-auto glass-light rounded-2xl p-6">
       <div className="flex flex-col gap-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Code de vérification</h2>
@@ -231,12 +232,14 @@ export default function Step1Account({ onDone }: Props) {
           ← Modifier mon numéro
         </button>
       </div>
+      </div>
     )
   }
 
-  // ── Phase formulaire ─────────────────────────────────────────────────────────
+  // ── Phase login ──────────────────────────────────────────────────────────────
   if (isLogin) {
     return (
+      <div className="max-w-sm mx-auto glass-light rounded-2xl p-6">
       <div className="flex flex-col gap-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Bon retour !</h2>
@@ -284,11 +287,44 @@ export default function Step1Account({ onDone }: Props) {
           </button>
         </p>
       </div>
+      </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="grid md:grid-cols-2 gap-12 items-center">
+
+      {/* ── Colonne gauche — marketing (desktop uniquement) ── */}
+      <div className="hidden md:flex flex-col gap-8 py-8">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: BRAND }}>F</div>
+          <span className="text-base font-semibold text-gray-800">Fixlyy</span>
+        </div>
+        <div>
+          <h1 className="text-4xl font-bold text-gray-900 leading-tight mb-6">
+            Votre secrétaire IA<br />en 10 minutes.
+          </h1>
+          <ul className="flex flex-col gap-4">
+            {[
+              'Répond 24h/24 à vos appels',
+              'SMS récap en 30 secondes',
+              'Sans engagement · 7 jours gratuits',
+            ].map(item => (
+              <li key={item} className="flex items-center gap-3 text-sm text-gray-600">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs flex-shrink-0" style={{ background: BRAND }}>✓</div>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/60 border border-gray-100 rounded-xl text-xs text-gray-400 w-fit">
+          🔒 Données sécurisées · Hébergé en Europe
+        </div>
+      </div>
+
+      {/* ── Colonne droite — formulaire ── */}
+      <div className="glass-light rounded-2xl p-6">
+      <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Activons Mia en 3 minutes</h2>
         <p className="text-sm text-gray-500">3 infos. Pas de carte bancaire.</p>
@@ -374,6 +410,8 @@ export default function Step1Account({ onDone }: Props) {
         </button>
         {' '}· Essai gratuit 7 jours, sans CB.
       </p>
+      </div>
+      </div>
     </div>
   )
 }

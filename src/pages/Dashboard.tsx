@@ -58,7 +58,7 @@ export default function Dashboard() {
   const accent = BRAND
 
   return (
-    <div className="dashboard-bg flex min-h-screen text-[#1A1A1A] overflow-x-hidden" style={{ fontFamily: "'system-ui', sans-serif" }}>
+    <div className="dashboard-bg flex min-h-screen text-[#1A1A1A] overflow-x-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       {/* Overlay mobile sidebar */}
       {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/40 z-10" onClick={() => setSidebarOpen(false)} />}
 
@@ -3444,13 +3444,13 @@ function SubscriptionPage({ accent }: { accent: string }) {
           { label: 'Forfait actuel', value: currentPlanLabel, sub: isActive ? 'actif' : isTrialActive ? `${daysLeft}j restants` : isCanceled ? 'annulé' : '—', icon: '👑', highlight: true },
           { label: 'Statut', value: isActive ? 'Actif' : isTrialActive ? 'Essai' : isCanceled ? 'Annulé' : 'Inactif', sub: isActive ? 'prélèvement mensuel' : isTrialActive ? `prélèvement le ${trialEndDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : isCanceled ? 'assistante désactivée' : '—', icon: isActive ? '✅' : isTrialActive ? '🎁' : '⚠️' },
         ].map(s => (
-          <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-4 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{s.label}</p>
-              <span className="text-base">{s.icon}</span>
+          <div key={s.label} className="glass rounded-2xl px-5 py-5 hover:border-[#2850c8]/20 transition-all duration-200">
+            <div className="w-10 h-10 rounded-xl bg-[#2850c8]/10 flex items-center justify-center text-lg mb-3">
+              {s.icon}
             </div>
-            <p className="text-xl font-bold leading-none" style={s.highlight ? { color: accent } : { color: '#111827' }}>{s.value}</p>
-            <p className="text-[10px] text-gray-400 mt-1">{s.sub}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 mb-1">{s.label}</p>
+            <p className="text-xl font-black leading-none text-white" style={s.highlight ? { color: accent } : {}}>{s.value}</p>
+            <p className="text-[10px] text-muted mt-1">{s.sub}</p>
           </div>
         ))}
       </div>
@@ -4048,15 +4048,18 @@ function StatsPage({ accent }: { accent: string }) {
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total appels', value: String(totalCalls), sub: period === 'all' ? 'depuis le début' : `sur ${periodDays} jours`, color: accent },
-          { label: "Aujourd'hui", value: String(todayCount), sub: 'appels reçus', color: todayCount > 0 ? accent : '#9CA3AF' },
-          { label: 'Durée moy.', value: avgMinStr, sub: 'par appel', color: '#374151' },
-          { label: 'RDV pris', value: String(appointments), sub: 'par Mia', color: appointments > 0 ? '#10B981' : '#9CA3AF' },
+          { label: 'Total appels', value: String(totalCalls), sub: period === 'all' ? 'depuis le début' : `sur ${periodDays} jours`, icon: '📊' },
+          { label: "Aujourd'hui", value: String(todayCount), sub: 'appels reçus', icon: '📅' },
+          { label: 'Durée moy.', value: avgMinStr, sub: 'par appel', icon: '⏱️' },
+          { label: 'RDV pris', value: String(appointments), sub: 'par Mia', icon: '🗓️' },
         ].map(s => (
-          <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3.5 shadow-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
-            <p className="text-2xl font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{s.sub}</p>
+          <div key={s.label} className="glass rounded-2xl px-5 py-4 hover:border-[#2850c8]/20 transition-all duration-200">
+            <div className="w-10 h-10 rounded-xl bg-[#2850c8]/10 flex items-center justify-center text-lg mb-3">
+              {s.icon}
+            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-2 mb-1">{s.label}</p>
+            <p className="text-2xl font-black leading-none text-white">{s.value}</p>
+            <p className="text-[10px] text-muted mt-0.5">{s.sub}</p>
           </div>
         ))}
       </div>

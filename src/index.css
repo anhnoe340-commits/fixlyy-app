@@ -60,6 +60,7 @@ html, body, #root {
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 }
 
@@ -151,3 +152,22 @@ html, body, #root {
   border-top: 1px solid rgba(200, 210, 255, 0.40) !important;
   box-shadow: 0 -4px 24px rgba(59, 91, 245, 0.06) !important;
 }
+
+/* KPI card glass — teinté bleu foncé, texte blanc lisible */
+.glass {
+  background: linear-gradient(
+    145deg,
+    rgba(20, 50, 160, 0.48) 0%,
+    rgba(30, 60, 170, 0.42) 50%,
+    rgba(40, 70, 180, 0.38) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 2px 20px rgba(20, 50, 160, 0.18),
+    0 1px 4px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Text utilities pour les glass cards */
+.text-muted-2 { color: rgba(203, 213, 225, 0.85); }
+.text-muted   { color: rgba(148, 163, 184, 0.75); }

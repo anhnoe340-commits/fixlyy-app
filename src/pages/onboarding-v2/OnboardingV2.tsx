@@ -60,58 +60,66 @@ export default function OnboardingV2({ onDone }: Props) {
   const progress = ((state.step - 1) / (STEPS.length - 1)) * 100
 
   return (
-    <div className="min-h-screen dashboard-bg flex flex-col items-center justify-center p-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen dashboard-bg flex flex-col items-center justify-center p-4" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
 
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: BRAND }}>F</div>
-          <span className="text-base font-semibold text-gray-800">Fixlyy</span>
+      {state.step === 1 ? (
+        /* Étape 1 — large 2 colonnes desktop, Step1Account gère son propre layout */
+        <div className="w-full max-w-4xl">
+          <Step1Account onDone={handleStep1Done} />
         </div>
+      ) : (
+        /* Étapes 2 & 3 — layout étroit centré */
+        <div className="w-full max-w-sm">
 
-        {/* Progress */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            {STEPS.map((label, i) => (
-              <div key={i} className="flex flex-col items-center flex-1">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mb-1 transition-all ${
-                  state.step > i + 1 ? 'text-white' : state.step === i + 1 ? 'text-white' : 'bg-gray-200 text-gray-400'
-                }`} style={state.step >= i + 1 ? { background: BRAND } : {}}>
-                  {state.step > i + 1 ? '✓' : i + 1}
+          {/* Logo */}
+          <div className="flex items-center justify-center gap-2 mb-8">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ background: BRAND }}>F</div>
+            <span className="text-base font-semibold text-gray-800">Fixlyy</span>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              {STEPS.map((label, i) => (
+                <div key={i} className="flex flex-col items-center flex-1">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mb-1 transition-all ${
+                    state.step > i + 1 ? 'text-white' : state.step === i + 1 ? 'text-white' : 'bg-gray-200 text-gray-400'
+                  }`} style={state.step >= i + 1 ? { background: BRAND } : {}}>
+                    {state.step > i + 1 ? '✓' : i + 1}
+                  </div>
+                  <span className={`text-[10px] font-medium ${state.step === i + 1 ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
                 </div>
-                <span className={`text-[10px] font-medium ${state.step === i + 1 ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1">
+              <div className="h-1 rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: BRAND }} />
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-1">
-            <div className="h-1 rounded-full transition-all duration-500" style={{ width: `${progress}%`, background: BRAND }} />
+
+          {/* Card */}
+          <div className="glass-light rounded-2xl p-6">
+            {state.step === 2 && (
+              <Step2Forwarding
+                userId={state.userId!}
+                fixlyyNumber={state.fixlyyNumber}
+                onDone={handleStep2Done}
+              />
+            )}
+            {state.step === 3 && state.userId && state.artisanPhone && (
+              <Step3TestCall
+                userId={state.userId}
+                artisanPhone={state.artisanPhone}
+                onDone={handleStep3Done}
+                onBackToStep2={() => setState(s => ({ ...s, step: 2 }))}
+              />
+            )}
           </div>
-        </div>
 
-        {/* Card */}
-        <div className="glass-light rounded-2xl p-6">
-          {state.step === 1 && <Step1Account onDone={handleStep1Done} />}
-          {state.step === 2 && (
-            <Step2Forwarding
-              userId={state.userId!}
-              fixlyyNumber={state.fixlyyNumber}
-              onDone={handleStep2Done}
-            />
-          )}
-          {state.step === 3 && state.userId && state.artisanPhone && (
-            <Step3TestCall
-              userId={state.userId}
-              artisanPhone={state.artisanPhone}
-              onDone={handleStep3Done}
-              onBackToStep2={() => setState(s => ({ ...s, step: 2 }))}
-            />
-          )}
+          <p className="text-[11px] text-gray-400 text-center mt-4">
+            Essai gratuit 7 jours · Sans carte bancaire · Annulation à tout moment
+          </p>
         </div>
-
-        <p className="text-[11px] text-gray-400 text-center mt-4">
-          Essai gratuit 7 jours · Sans carte bancaire · Annulation à tout moment
-        </p>
-      </div>
+      )}
     </div>
   )
 }
