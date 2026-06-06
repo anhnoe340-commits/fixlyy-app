@@ -242,8 +242,9 @@ serve(async (req) => {
       )
       sent++
     } catch (e: any) {
-      console.error(`Failed for ${artisan.email}:`, e.message)
-      errors.push(`${artisan.email}: ${e.message}`)
+      const maskedEmail = artisan.email ? artisan.email.split('@')[0].slice(0,2) + '***@' + artisan.email.split('@')[1] : 'unknown'
+      console.error(`Failed for ${maskedEmail}:`, e.message)
+      errors.push(`${maskedEmail}: ${e.message}`)
     }
   }
 

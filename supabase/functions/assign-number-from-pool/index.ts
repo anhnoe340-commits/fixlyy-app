@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { logEvent } from '../_shared/audit.ts'
+import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
 const TWILIO_SID        = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN      = Deno.env.get('TWILIO_AUTH_TOKEN')!
@@ -215,11 +216,89 @@ Exemples :
   return { id: data.id as string, systemPrompt: systemPromptContent }
 }
 
+async function recordTrialFingerprint(
+  userId: string,
+  phone: string | null,
+  ip: string,
+  email: string | null,
+): Promise<void> {
+  let phoneMatch: any = null
+  let ipMatch: any = null
+
+  if (phone) {
+    const { data } = await sb
+      .from('trial_fingerprints')
+      .select('id, user_id, email')
+      .eq('phone', phone)
+      .neq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+    phoneMatch = data
+  }
+
+  if (ip !== 'unknown') {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString()
+    const { data } = await sb
+      .from('trial_fingerprints')
+      .select('id, user_id, email')
+      .eq('ip_address', ip)
+      .gte('created_at', ninetyDaysAgo)
+      .neq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+    ipMatch = data
+  }
+
+  const isSuspicious = !!(phoneMatch || ipMatch)
+  const matchType = phoneMatch && ipMatch ? 'both' : phoneMatch ? 'phone' : ipMatch ? 'ip' : null
+
+  await sb.from('trial_fingerprints').upsert({
+    user_id: userId,
+    phone,
+    ip_address: ip,
+    email,
+    trial_started_at: new Date().toISOString(),
+    is_suspicious: isSuspicious,
+    suspicious_reason: matchType === 'both'
+      ? "Même téléphone et IP qu'un essai précédent"
+      : matchType === 'phone'
+      ? "Même téléphone qu'un essai précédent"
+      : matchType === 'ip'
+      ? "Même IP qu'un essai précédent (90j)"
+      : null,
+  }, { onConflict: 'user_id', ignoreDuplicates: false })
+
+  if (isSuspicious && matchType) {
+    const previous = phoneMatch ?? ipMatch
+    await sb.from('critical_alerts').insert({
+      alert_type: 'trial_abuse_suspected',
+      severity: 'warning',
+      message: `Possible abus d'essai gratuit — ${matchType === 'both' ? 'Téléphone + IP' : matchType === 'phone' ? 'Même téléphone' : 'Même IP (90j)'}`,
+      meta: {
+        new_user_id: userId,
+        new_email: email,
+        new_phone: phone,
+        ip_address: ip,
+        previous_user_id: previous.user_id,
+        previous_email: previous.email,
+        match_type: matchType,
+        detected_at: new Date().toISOString(),
+      },
+    })
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const startMs = Date.now()
+  // Rate limiting : 5 req/min par IP (les appels service-role internes sont exemptés)
   const authHeader = req.headers.get('Authorization') ?? ''
+  if (authHeader !== `Bearer ${SB_SERVICE}`) {
+    const ip = getClientIp(req)
+    if (!checkRateLimit(ip, 5, 60000)) return TOO_MANY_REQUESTS(corsHeaders)
+  }
+
+  const startMs = Date.now()
   let userId: string
 
   if (authHeader === `Bearer ${SB_SERVICE}`) {
@@ -228,7 +307,19 @@ Deno.serve(async (req) => {
     if (!userId) return new Response(JSON.stringify({ error: 'Missing user_id' }), { status: 400, headers: corsHeaders })
   } else {
     const { data: { user }, error: authErr } = await createClient(SB_URL, Deno.env.get('SUPABASE_ANON_KEY')!).auth.getUser(authHeader.replace('Bearer ', ''))
-    if (authErr || !user) return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    if (authErr || !user) {
+      // Logger les tentatives d'auth échouées
+      await sb.from('audit_log').insert({
+        user_id: null,
+        action: 'auth_failure',
+        details: {
+          ip: getClientIp(req),
+          endpoint: 'assign-number-from-pool',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch(() => {})
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    }
     userId = user.id
   }
 
@@ -251,9 +342,22 @@ Deno.serve(async (req) => {
     // 2. Récupérer le profil pour personnaliser l'assistant
     const { data: profileData } = await sb
       .from('profiles')
-      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id')
+      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id, phone')
       .eq('id', userId)
       .single()
+
+    // 2b. Fingerprinting anti-abus (non-bloquant)
+    try {
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        || req.headers.get('x-real-ip')
+        || 'unknown'
+      const { data: { user: authUser } } = await sb.auth.admin.getUserById(userId)
+      const email = authUser?.email ?? null
+      const phone = profileData?.phone ?? null
+      await recordTrialFingerprint(userId, phone, ip, email)
+    } catch (fpErr) {
+      console.warn('[assign-number-from-pool] fingerprint non-bloquant:', fpErr)
+    }
 
     // 3. Assistant Vapi — réutilise l'existant ou en crée un nouveau
     const existingAssistantId = profileData?.vapi_assistant_id ?? null
@@ -382,7 +486,8 @@ Deno.serve(async (req) => {
     await logEvent({ supabase: sb, eventType: 'number_assignment_failed',
       userId, resourceType: 'phone_number', resourceId: null,
       metadata: { error: err.message }, severity: 'warning' })
-    return new Response(JSON.stringify({ error: err.message }), {
+    const publicError = isPoolEmpty ? 'service_unavailable' : 'internal_server_error'
+    return new Response(JSON.stringify({ error: publicError }), {
       status: isPoolEmpty ? 503 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

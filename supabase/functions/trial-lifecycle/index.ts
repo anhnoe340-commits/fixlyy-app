@@ -111,6 +111,11 @@ async function handleExpire() {
       vapi_assistant_id: null,
     }).eq('id', u.id)
 
+    await sb.from('trial_fingerprints')
+      .update({ trial_ended_at: new Date().toISOString() })
+      .eq('user_id', u.id)
+      .is('trial_ended_at', null)
+
     const firstName = (u.full_name || '').split(' ')[0] || 'vous'
     if (u.phone) {
       await sendSms(u.phone,
@@ -187,6 +192,6 @@ Deno.serve(async (req) => {
       output_meta: {},
       error_message: err.message,
     })
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'internal_server_error' }), { status: 500 })
   }
 })

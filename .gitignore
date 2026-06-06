@@ -2,8 +2,10 @@ node_modules
 dist
 backups/
 .vercel/
-.env.local
 .env
+.env.local
+.env.production
+.env.staging
 *.local
 .DS_Store
 .parcel-cache
