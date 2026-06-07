@@ -1,11 +1,33 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
-)
+const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
+const TWILIO_TOKEN   = Deno.env.get('TWILIO_AUTH_TOKEN')!
+
+const supabase = createClient(SUPABASE_URL, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY')!
+
+// Validation signature Twilio (HMAC-SHA1) — points 09 + 13
+async function isTwilioRequest(req: Request, rawBody: string): Promise<boolean> {
+  const sig = req.headers.get('X-Twilio-Signature') || ''
+  if (!sig) return false
+
+  const url = `${SUPABASE_URL}/functions/v1/sms-inbound`
+  const p = new URLSearchParams(rawBody)
+  const sortedKeys = Array.from(p.keys()).sort()
+  let str = url
+  for (const key of sortedKeys) str += key + (p.get(key) ?? '')
+
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(TWILIO_TOKEN),
+    { name: 'HMAC', hash: 'SHA-1' },
+    false, ['sign']
+  )
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(str))
+  const computed = btoa(String.fromCharCode(...new Uint8Array(mac)))
+  return computed === sig
+}
 
 // Réponse TwiML pour Twilio
 function twiml(msg: string) {
@@ -48,8 +70,13 @@ function isAvailable(
 serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
-  // Twilio envoie du form-encoded
+  // Twilio envoie du form-encoded — lire le body en premier pour la validation signature
   const text = await req.text()
+
+  // Vérification signature Twilio (points 09 + 13)
+  const valid = await isTwilioRequest(req, text)
+  if (!valid) return new Response('Unauthorized', { status: 401 })
+
   const p = new URLSearchParams(text)
   const from = p.get('From') || ''
   const to   = p.get('To')   || ''
