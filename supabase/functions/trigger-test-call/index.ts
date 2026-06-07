@@ -75,11 +75,28 @@ serve(async (req) => {
       }),
     })
 
-    let vapiCallId: string | null = null
-    if (vapiRes.ok) {
-      const vapiData = await vapiRes.json()
-      vapiCallId = vapiData.id || null
+    // Bug A fix : si Vapi échoue, remonter l'erreur au client au lieu de cacher
+    if (!vapiRes.ok) {
+      const vapiError = await vapiRes.text().catch(() => 'unknown')
+      console.error('[trigger-test-call] Vapi error:', vapiRes.status, vapiError)
+      if (testCall?.id) {
+        await supabase.from('onboarding_test_calls').update({
+          completed_at: new Date().toISOString(),
+          success: false,
+          error_reason: `Vapi ${vapiRes.status}: ${vapiError.slice(0, 200)}`,
+        }).eq('id', testCall.id)
+      }
+      await logEvent({ supabase, eventType: 'test_call_failed',
+        userId: user.id, resourceType: 'vapi_call', resourceId: null,
+        metadata: { vapi_status: vapiRes.status, phone: profile.phone }, severity: 'warning' })
+      return new Response(JSON.stringify({ error: 'vapi_call_failed', vapi_status: vapiRes.status }), {
+        status: 502, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
     }
+
+    const vapiData = await vapiRes.json()
+    const vapiCallId: string | null = vapiData.id || null
+
     await logEvent({ supabase, eventType: 'test_call_triggered',
       userId: user.id, resourceType: 'vapi_call', resourceId: vapiCallId,
       metadata: { phone: profile.phone }, severity: 'info' })
@@ -90,7 +107,7 @@ serve(async (req) => {
     }
 
     // Marque le succès après 30s + déclenche le SMS trophée serveur-to-serveur
-    if (vapiRes.ok && testCall?.id) {
+    if (testCall?.id) {
       const userId = user.id
       setTimeout(async () => {
         await supabase.from('onboarding_test_calls').update({
@@ -135,7 +152,7 @@ serve(async (req) => {
     })
   } catch (e: any) {
     console.error('trigger-test-call error:', e.message)
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: 'internal_server_error' }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

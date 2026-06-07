@@ -20,20 +20,30 @@ export default function Step3TestCall({ userId, artisanPhone, onDone, onBackToSt
   const [status, setStatus] = useState<Status>('countdown')
   const [countdown, setCountdown] = useState(COUNTDOWN_START)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startedAt = useRef<number>(0)
 
-  useEffect(() => {
-    const timer = setInterval(() => {
+  // Bug C fix : countdown extrait en fonction pour pouvoir le redémarrer au retry
+  function startCountdown() {
+    if (countdownRef.current) clearInterval(countdownRef.current)
+    setCountdown(COUNTDOWN_START)
+    countdownRef.current = setInterval(() => {
       setCountdown(c => {
         if (c <= 1) {
-          clearInterval(timer)
+          clearInterval(countdownRef.current!)
           triggerCall()
           return 0
         }
         return c - 1
       })
     }, 1000)
-    return () => clearInterval(timer)
+  }
+
+  useEffect(() => {
+    startCountdown()
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current)
+    }
   }, [])
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
@@ -41,9 +51,13 @@ export default function Step3TestCall({ userId, artisanPhone, onDone, onBackToSt
   async function triggerCall() {
     setStatus('calling')
     startedAt.current = Date.now()
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      if (!session) {
+        setStatus('unreachable')
+        return
+      }
 
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/trigger-test-call`, {
         method: 'POST',
@@ -53,11 +67,17 @@ export default function Step3TestCall({ userId, artisanPhone, onDone, onBackToSt
         },
       })
 
-      if (res.status === 422) {
-        setStatus('no-number')
-        return
-      }
-    } catch { /* non-bloquant */ }
+      // Bug B fix : chaque code d'erreur a un comportement précis
+      if (res.status === 422) { setStatus('no-number'); return }
+      // Bug A fix : 502 = Vapi a refusé l'appel → traité comme no-answer pour retry
+      if (res.status === 502) { setStatus('no-answer'); return }
+      if (!res.ok) { setStatus('unreachable'); return }
+
+    } catch {
+      // Erreur réseau → on le signale, pas de polling fantôme
+      setStatus('unreachable')
+      return
+    }
 
     startPolling()
   }
@@ -97,7 +117,7 @@ export default function Step3TestCall({ userId, artisanPhone, onDone, onBackToSt
   async function retryCall() {
     if (pollRef.current) clearInterval(pollRef.current)
     setStatus('countdown')
-    setCountdown(COUNTDOWN_START)
+    startCountdown() // Bug C fix : relance le timer au lieu de geler à 5
   }
 
   // ── Countdown ────────────────────────────────────────────────────────────────
