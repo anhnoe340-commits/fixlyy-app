@@ -306,21 +306,21 @@ Deno.serve(async (req) => {
     userId = body?.user_id
     if (!userId) return new Response(JSON.stringify({ error: 'Missing user_id' }), { status: 400, headers: corsHeaders })
   } else {
-    const { data: { user }, error: authErr } = await createClient(SB_URL, Deno.env.get('SUPABASE_ANON_KEY')!).auth.getUser(authHeader.replace('Bearer ', ''))
-    if (authErr || !user) {
-      // Logger les tentatives d'auth échouées
-      await sb.from('audit_log').insert({
-        user_id: null,
-        action: 'auth_failure',
-        details: {
-          ip: getClientIp(req),
-          endpoint: 'assign-number-from-pool',
-          timestamp: new Date().toISOString(),
-        },
-      }).catch(() => {})
+    try {
+      const { data: { user }, error: authErr } = await createClient(SB_URL, Deno.env.get('SUPABASE_ANON_KEY')!).auth.getUser(authHeader.replace('Bearer ', ''))
+      if (authErr || !user) {
+        await sb.from('audit_log').insert({
+          event_type: 'auth_failure',
+          user_id: null,
+          metadata: { ip: getClientIp(req), endpoint: 'assign-number-from-pool' },
+          severity: 'warning',
+        }).catch(() => {})
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+      }
+      userId = user.id
+    } catch {
       return new Response('Unauthorized', { status: 401, headers: corsHeaders })
     }
-    userId = user.id
   }
 
   let assignedRow: any = null
