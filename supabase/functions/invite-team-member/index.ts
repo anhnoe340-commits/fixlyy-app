@@ -12,7 +12,7 @@ const TWILIO_AUTH  = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
 const APP_URL      = 'https://app.fixlyy.fr'
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 

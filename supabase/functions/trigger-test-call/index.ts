@@ -6,7 +6,7 @@ const SB_URL      = Deno.env.get('SUPABASE_URL')!
 const supabase    = createClient(SB_URL, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const VAPI_API_KEY = Deno.env.get('VAPI_API_KEY')!
 const CRON_SECRET = Deno.env.get('CRON_SECRET')!
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' }
+const cors = { 'Access-Control-Allow-Origin': 'https://app.fixlyy.fr', 'Access-Control-Allow-Headers': 'authorization, content-type' }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })

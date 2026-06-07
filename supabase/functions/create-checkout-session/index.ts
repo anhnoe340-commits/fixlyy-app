@@ -5,7 +5,7 @@ import Stripe from 'https://esm.sh/stripe@13?target=deno';
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!);
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' };
+const cors = { 'Access-Control-Allow-Origin': 'https://app.fixlyy.fr', 'Access-Control-Allow-Headers': 'authorization, content-type' };
 
 const PRICE_PER_USER_CENTS = 5000; // 50€
 

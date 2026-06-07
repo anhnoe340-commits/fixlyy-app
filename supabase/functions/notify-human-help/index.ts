@@ -8,7 +8,7 @@ const TWILIO_FROM = Deno.env.get('TWILIO_PHONE_NUMBER') || '+33939245471'
 const ALERT_PHONE = Deno.env.get('ALERT_PHONE')! // numéro de Noé
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const APP_URL = Deno.env.get('APP_URL') || 'https://app.fixlyy.fr'
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' }
+const cors = { 'Access-Control-Allow-Origin': 'https://app.fixlyy.fr', 'Access-Control-Allow-Headers': 'authorization, content-type' }
 
 function isBusinessHours(): boolean {
   const now = new Date()
