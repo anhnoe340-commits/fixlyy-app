@@ -70,9 +70,11 @@ serve(async (req) => {
   }
 
   // ── Récupérer le profil complet ─────────────────────────────────────────────
+  // email vient de auth.users (user.email déjà disponible depuis le JWT)
+  // stripe_customer_id / stripe_subscription_id sont dans la table subscriptions
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('id, stripe_customer_id, stripe_subscription_id, vapi_assistant_id, twilio_number, phone, email, company_name')
+    .select('id, vapi_assistant_id, twilio_number, phone, company_name')
     .eq('id', user_id)
     .single()
 
@@ -83,6 +85,13 @@ serve(async (req) => {
     )
   }
 
+  // Abonnement Stripe — champs dans la table subscriptions
+  const { data: subData } = await supabaseAdmin
+    .from('subscriptions')
+    .select('stripe_customer_id, stripe_subscription_id')
+    .eq('user_id', user_id)
+    .maybeSingle()
+
   // ── ÉTAPE 1 — LOG AUDIT INITIAL (avant toute suppression) ──────────────────
   await logEvent({
     supabase: supabaseAdmin,
@@ -91,9 +100,9 @@ serve(async (req) => {
     resourceType: 'account',
     resourceId: user_id,
     metadata: {
-      email:              profile.email,
+      email:              user.email,
       company_name:       profile.company_name,
-      stripe_customer_id: profile.stripe_customer_id,
+      stripe_customer_id: subData?.stripe_customer_id,
       vapi_assistant_id:  profile.vapi_assistant_id,
       twilio_number:      profile.twilio_number,
       initiated_at:       new Date().toISOString(),
@@ -111,10 +120,10 @@ serve(async (req) => {
   // En cas d'erreur Stripe : logger et CONTINUER (suppression des données prime)
   const stripeAuth = 'Basic ' + btoa(STRIPE_SECRET_KEY + ':')
 
-  if (profile.stripe_subscription_id) {
+  if (subData?.stripe_subscription_id) {
     try {
       const res = await fetch(
-        `https://api.stripe.com/v1/subscriptions/${profile.stripe_subscription_id}`,
+        `https://api.stripe.com/v1/subscriptions/${subData.stripe_subscription_id}`,
         { method: 'DELETE', headers: { Authorization: stripeAuth } },
       )
       if (!res.ok) {
@@ -126,10 +135,10 @@ serve(async (req) => {
     }
   }
 
-  if (profile.stripe_customer_id) {
+  if (subData?.stripe_customer_id) {
     try {
       const res = await fetch(
-        `https://api.stripe.com/v1/customers/${profile.stripe_customer_id}`,
+        `https://api.stripe.com/v1/customers/${subData.stripe_customer_id}`,
         { method: 'DELETE', headers: { Authorization: stripeAuth } },
       )
       if (res.ok) {
@@ -185,8 +194,8 @@ serve(async (req) => {
           )
           if (deleteRes.status === 204 || deleteRes.ok) {
             await supabaseAdmin
-              .from('phone_number_pool')
-              .update({ is_assigned: false, assigned_to: null, assigned_at: null })
+              .from('phone_numbers_pool')
+              .update({ status: 'available', assigned_to_user_id: null, assigned_at: null })
               .eq('phone_number', profile.twilio_number)
             results.twilio_released = true
           } else {
