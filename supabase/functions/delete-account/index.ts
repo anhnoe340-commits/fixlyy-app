@@ -173,42 +173,63 @@ serve(async (req) => {
     results.vapi_deleted = true
   }
 
-  // ── ÉTAPE 4 — TWILIO (libérer le numéro) ────────────────────────────────────
-  // Protection absolue : +33939247033 ne peut jamais être libéré
+  // ── ÉTAPE 4 — LIBÉRER le numéro dans le pool (P0 fix) ──────────────────────
+  // BUG corrigé : l'ancienne version faisait DELETE sur Twilio → numéro
+  // définitivement perdu, impossible à réassigner à un prochain artisan.
+  // Comportement correct :
+  //   a) PATCH Twilio VoiceUrl="" → désassigner Vapi du numéro
+  //   b) PATCH Vapi assistantId=null → jamais DELETE sur le mapping (CLAUDE.md)
+  //   c) Pool status='available', assigned_to_user_id=null
   if (profile.twilio_number && profile.twilio_number !== FIXLYY_MAIN_NUMBER) {
     const twilioAuth = 'Basic ' + btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`)
     try {
-      const searchUrl =
-        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers.json` +
-        `?PhoneNumber=${encodeURIComponent(profile.twilio_number)}`
+      // Récupérer twilio_sid et vapi_phone_number_id depuis le pool
+      const { data: poolRow } = await supabaseAdmin
+        .from('phone_numbers_pool')
+        .select('twilio_sid, vapi_phone_number_id')
+        .eq('phone_number', profile.twilio_number)
+        .maybeSingle()
 
-      const searchRes = await fetch(searchUrl, { headers: { Authorization: twilioAuth } })
-      if (searchRes.ok) {
-        const searchData = await searchRes.json()
-        const phoneSid = searchData?.incoming_phone_numbers?.[0]?.sid
-
-        if (phoneSid) {
-          const deleteRes = await fetch(
-            `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers/${phoneSid}.json`,
-            { method: 'DELETE', headers: { Authorization: twilioAuth } },
-          )
-          if (deleteRes.status === 204 || deleteRes.ok) {
-            await supabaseAdmin
-              .from('phone_numbers_pool')
-              .update({ status: 'available', assigned_to_user_id: null, assigned_at: null })
-              .eq('phone_number', profile.twilio_number)
-            results.twilio_released = true
-          } else {
-            console.error('[delete-account] Twilio phone delete failed:', deleteRes.status)
-          }
-        } else {
-          results.twilio_released = true // Numéro non trouvé dans Twilio, pool OK
+      // a. PATCH Twilio : effacer VoiceUrl → le numéro reste dans le compte Twilio
+      if (poolRow?.twilio_sid) {
+        const twilioRes = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/IncomingPhoneNumbers/${poolRow.twilio_sid}.json`,
+          {
+            method: 'POST',
+            headers: { Authorization: twilioAuth, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ VoiceUrl: '', VoiceMethod: 'POST' }),
+          },
+        )
+        if (!twilioRes.ok) {
+          console.error('[delete-account] Twilio PATCH failed:', twilioRes.status)
         }
+      }
+
+      // b. PATCH Vapi : désassigner l'assistant du numéro (jamais DELETE — règle CLAUDE.md)
+      if (poolRow?.vapi_phone_number_id) {
+        await fetch(`https://api.vapi.ai/phone-number/${poolRow.vapi_phone_number_id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${VAPI_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assistantId: null,
+            twilioAccountSid: TWILIO_ACCOUNT_SID,
+            twilioAuthToken: TWILIO_AUTH_TOKEN,
+          }),
+        }).catch(e => console.error('[delete-account] Vapi PATCH error:', e))
+      }
+
+      // c. Remettre le numéro disponible dans le pool
+      const { error: poolErr } = await supabaseAdmin
+        .from('phone_numbers_pool')
+        .update({ status: 'available', assigned_to_user_id: null, assigned_at: null })
+        .eq('phone_number', profile.twilio_number)
+      if (poolErr) {
+        console.error('[delete-account] pool update failed — numéro bloqué:', poolErr.message)
       } else {
-        console.error('[delete-account] Twilio search failed:', searchRes.status)
+        results.twilio_released = true
       }
     } catch (e) {
-      console.error('[delete-account] Twilio error:', e)
+      console.error('[delete-account] release error:', e)
     }
   } else {
     results.twilio_released = true
