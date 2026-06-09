@@ -513,6 +513,19 @@ serve(async (req) => {
       await logEvent({ supabase, eventType: 'call_summary_sms_sent',
         userId: profile.id, resourceType: 'call', resourceId: callId,
         metadata: { caller: callerNumber, duration_sec: durationSec }, severity: 'info' })
+
+      // ── SMS confirmation au client (appelant) ── GSM-7, 1 segment max ──────
+      const isValidCaller = callerNumber && callerNumber !== 'Inconnu' && /^\+[1-9]\d{7,14}$/.test(callerNumber)
+      if (isValidCaller) {
+        const company = (profile.company_name || 'votre artisan').slice(0, 60)
+        const clientSms = `Bonjour, votre demande a bien ete transmise a ${company}. Vous serez recontacte rapidement. - Fixlyy`
+        try {
+          await sendSms(profile.twilio_number, callerNumber, clientSms)
+          console.log('SMS client : OK')
+        } catch (e: any) {
+          console.log('SMS client echec :', e.message)
+        }
+      }
     } else {
       console.log(`SMS skipped — plan '${profile.subscription_plan}' n'inclut pas sms_confirmation`)
     }
