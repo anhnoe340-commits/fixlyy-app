@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { logEvent } from '../_shared/audit.ts'
+import { featureAllowed } from '../_shared/planGate.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
@@ -225,7 +226,7 @@ async function syncGoogleCalendar(artisanId: string, rdv: {
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(eventBody),
     })
-    if (!res.ok) console.error('Google Calendar event failed:', await res.text())
+    if (!res.ok) console.error('Google Calendar event failed: HTTP', res.status)
   } catch (e: any) {
     console.error('Google Calendar sync error (non-blocking):', e.message)
   }
@@ -277,7 +278,7 @@ serve(async (req) => {
       if (assistantId) {
         const { data: artisan } = await supabase
           .from('profiles')
-          .select('greeting_open, greeting_closed, hours, assistant_name, company_name, vapi_system_prompt')
+          .select('id, greeting_open, greeting_closed, hours, assistant_name, company_name, vapi_system_prompt')
           .eq('vapi_assistant_id', assistantId)
           .maybeSingle()
 
@@ -310,6 +311,27 @@ serve(async (req) => {
         }
       }
 
+      // Injection dynamique des motifs d'appel configurés par l'artisan
+      let reasonsBlock = ''
+      if (artisan?.id) {
+        try {
+          const { data: activeReasons } = await supabase
+            .from('inbound_reasons')
+            .select('label, reasons_catalog!reason_id(label)')
+            .eq('user_id', (artisan as any).id)
+            .eq('is_active', true)
+            .limit(20)
+          if (activeReasons && activeReasons.length > 0) {
+            const labels = (activeReasons as any[])
+              .map(r => r.reasons_catalog?.label || r.label)
+              .filter(Boolean)
+            if (labels.length > 0) {
+              reasonsBlock = `\n\n[MOTIFS D'APPEL — CLASSIFICATION OBLIGATOIRE]\nPour le champ "reason" du résumé structuré, utilise EXACTEMENT l'un de ces labels (copie-le tel quel) :\n${labels.map((l: string) => `- ${l}`).join('\n')}\nSi aucun ne correspond à l'appel : "Demande générale".`
+            }
+          }
+        } catch { /* non-bloquant */ }
+      }
+
       // Substitution des variables artisan dans le systemPrompt mis en cache
       let resolvedSystemPrompt: string | undefined
       const rawPrompt: string | null = (artisan as any)?.vapi_system_prompt ?? null
@@ -319,7 +341,7 @@ serve(async (req) => {
           .replaceAll('{{artisan_name}}', artisanName)
           .replaceAll('{{assistant_name}}', assistantName2)
           .replaceAll('{{company_name}}', artisanName)
-          + buildDateContext() + statusLine + planningBlock
+          + buildDateContext() + statusLine + planningBlock + reasonsBlock
       }
 
       const responseBody: Record<string, unknown> = {
@@ -327,7 +349,7 @@ serve(async (req) => {
           ...(firstMessage ? { firstMessage } : {}),
           model: resolvedSystemPrompt
             ? { messages: [{ role: 'system', content: resolvedSystemPrompt }] }
-            : { systemPromptSuffix: buildDateContext() + statusLine },
+            : { systemPromptSuffix: buildDateContext() + statusLine + reasonsBlock },
         },
       }
       if (assistantId) responseBody.assistantId = assistantId
@@ -372,7 +394,7 @@ serve(async (req) => {
     // Trouver l'artisan par vapi_assistant_id (maybeSingle pour éviter un crash si doublon résiduel)
     const { data: profiles, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, phone, twilio_number, assistant_name, company_name')
+      .select('id, phone, twilio_number, assistant_name, company_name, subscription_plan')
       .eq('vapi_assistant_id', assistantId)
       .limit(2)
 
@@ -409,7 +431,7 @@ serve(async (req) => {
 
     if (!profile?.phone || !profile?.twilio_number) {
       console.error('No phone or twilio_number for assistant:', assistantId)
-      return new Response('no profile', { headers: cors })
+      return new Response('no profile', { status: 404, headers: cors })
     }
 
     // Déduplication : ignorer les retries Vapi pour le même appel
@@ -486,11 +508,14 @@ serve(async (req) => {
     smsParts.push(`— ${profile.assistant_name || 'Mia'}, Fixlyy`)
     const smsText = smsParts.join('\n')
 
-    await sendSms(profile.twilio_number, profile.phone, smsText)
-
-    await logEvent({ supabase, eventType: 'call_summary_sms_sent',
-      userId: profile.id, resourceType: 'call', resourceId: callId,
-      metadata: { caller: callerNumber, duration_sec: durationSec }, severity: 'info' })
+    if (featureAllowed(profile.subscription_plan, 'sms_confirmation')) {
+      await sendSms(profile.twilio_number, profile.phone, smsText)
+      await logEvent({ supabase, eventType: 'call_summary_sms_sent',
+        userId: profile.id, resourceType: 'call', resourceId: callId,
+        metadata: { caller: callerNumber, duration_sec: durationSec }, severity: 'info' })
+    } else {
+      console.log(`SMS skipped — plan '${profile.subscription_plan}' n'inclut pas sms_confirmation`)
+    }
 
     // ── Sauvegarde en base ───────────────────────────────────────────────────
     await supabase.from('calls').insert({
@@ -543,7 +568,7 @@ serve(async (req) => {
     })
   } catch (e: any) {
     console.error('send-call-sms error:', e.message)
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: 'internal_server_error' }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

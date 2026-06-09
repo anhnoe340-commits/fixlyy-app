@@ -12,6 +12,14 @@ const supabase = createClient(
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 
+// Source de vérité des price IDs Stripe — créés le 2026-06-09
+// Overage (metered, non activé) : solo/pro price_1TgNiTBKWw2Sqpyku6QVuGor / price_1TgNiUBKWw2SqpykcRv08l7F · max price_1TgNiUBKWw2Sqpyk1QaaW9j2
+const PRICE_PLAN_MAP: Record<string, { plan: string; member_limit: number }> = {
+  'price_1TgNhNBKWw2SqpykxEkXTAma': { plan: 'solo', member_limit: 1 },
+  'price_1TgNhOBKWw2SqpykzY7j1ood': { plan: 'pro',  member_limit: 3 },
+  'price_1TgNhOBKWw2Sqpyku7Rk2ioO': { plan: 'max',  member_limit: 10 },
+}
+
 async function callProvision(uid: string): Promise<void> {
   const res = await fetch(`${SB_URL}/functions/v1/assign-number-from-pool`, {
     method: 'POST',
@@ -71,7 +79,10 @@ serve(async (req) => {
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription;
       const status = sub.status;
-      const planName = sub.items.data[0]?.price.nickname ?? null;
+      const priceId = sub.items.data[0]?.price.id ?? null;
+      const planMeta = priceId ? PRICE_PLAN_MAP[priceId] ?? null : null;
+      const planName = planMeta?.plan ?? null;
+      const memberLimit = planMeta?.member_limit ?? null;
       const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
 
       await supabase.from('subscriptions').upsert({
@@ -91,11 +102,12 @@ serve(async (req) => {
           subscription_status: status,
           subscription_trial_end: trialEnd,
           subscription_plan: planName,
+          ...(memberLimit !== null ? { member_limit: memberLimit } : {}),
         })
         .eq('stripe_customer_id', sub.customer as string);
       await logEvent({ supabase, eventType: 'subscription_created',
         userId: null, resourceType: 'subscription', resourceId: sub.id,
-        metadata: { status, plan: planName, customer: sub.customer }, severity: 'info' });
+        metadata: { status, plan: planName, price_id: priceId, customer: sub.customer }, severity: 'info' });
       break;
     }
 

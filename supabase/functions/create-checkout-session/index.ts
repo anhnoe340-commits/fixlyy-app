@@ -7,15 +7,6 @@ const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLY
 
 const cors = { 'Access-Control-Allow-Origin': 'https://app.fixlyy.fr', 'Access-Control-Allow-Headers': 'authorization, content-type' };
 
-const PRICE_PER_USER_CENTS = 5000; // 50€
-
-function getVolumeDiscount(count: number): number {
-  if (count >= 20) return 0.15;
-  if (count >= 10) return 0.10;
-  if (count >= 5)  return 0.05;
-  return 0;
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
@@ -34,38 +25,10 @@ serve(async (req) => {
       metadata: { supabase_uid: user.id, trade },
     });
 
-    // Construire les line_items selon le plan
-    let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
-
-    if (planId === 'expert') {
-      // Plan Équipe : prix dynamique par utilisateur avec réduction volume
-      const userCount = Math.max(2, associates_count || 2);
-      const volumeDiscount = getVolumeDiscount(userCount);
-      const annualDiscount = billing === 'annual' ? 0.20 : 0;
-      const totalDiscount = 1 - (1 - volumeDiscount) * (1 - annualDiscount);
-      const unitAmountCents = Math.round(PRICE_PER_USER_CENTS * (1 - totalDiscount));
-
-      const discountParts = [];
-      if (volumeDiscount > 0) discountParts.push(`−${Math.round(volumeDiscount * 100)}% volume`);
-      if (annualDiscount > 0) discountParts.push(`−20% annuel`);
-      const discountLabel = discountParts.length > 0 ? ` (${discountParts.join(', ')})` : '';
-
-      lineItems = [{
-        price_data: {
-          currency: 'eur',
-          unit_amount: unitAmountCents,
-          recurring: { interval: 'month' },
-          product_data: {
-            name: `Fixlyy Équipe${discountLabel}`,
-            description: `Par utilisateur/mois · ${userCount} utilisateur${userCount > 1 ? 's' : ''}`,
-          },
-        },
-        quantity: userCount,
-      }];
-    } else {
-      // Plans Solo et Pro : price ID fixe, quantité 1
-      lineItems = [{ price: priceId, quantity: 1 }];
-    }
+    // Tous les plans utilisent désormais un price ID fixe (Solo 97€, Pro 197€, Max 347€)
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+      { price: priceId, quantity: 1 },
+    ];
 
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,

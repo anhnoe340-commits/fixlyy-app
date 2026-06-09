@@ -4,6 +4,42 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
+import { canUseFeature, getPlanLimit, type PlanKey } from '@/config/plans'
+
+function resolvePlanKey(subscriptionPlan: string | null | undefined): PlanKey {
+  const s = (subscriptionPlan ?? '').toLowerCase()
+  if (s === 'pro') return 'pro'
+  if (s === 'max' || s.includes('équipe') || s.includes('equipe') || s.includes('expert') || s.includes('team')) return 'max'
+  return 'solo'
+}
+
+function UpgradeWall({ feature, requiredPlan, accent, onUpgrade }: {
+  feature: string
+  requiredPlan: string
+  accent: string
+  onUpgrade?: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center h-72 gap-4 text-center px-6">
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl" style={{ background: accent + '15' }}>
+        🔒
+      </div>
+      <div>
+        <p className="font-semibold text-gray-900 text-base">{feature}</p>
+        <p className="text-sm text-gray-400 mt-1">Disponible avec le plan <span className="font-semibold capitalize">{requiredPlan}</span></p>
+      </div>
+      {onUpgrade && (
+        <button
+          onClick={onUpgrade}
+          className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white transition-opacity hover:opacity-90"
+          style={{ background: accent }}
+        >
+          Passer au plan {requiredPlan} →
+        </button>
+      )}
+    </div>
+  )
+}
 
 type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
@@ -37,6 +73,7 @@ async function syncAssistant() {
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { profile, uploadLogo } = useProfile()
+  const userPlan = resolvePlanKey(profile?.subscription_plan)
   const [page, setPage] = useState<Page>('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -209,21 +246,33 @@ export default function Dashboard() {
         <main className="flex-1 p-4 md:p-6 overflow-y-auto overflow-x-hidden pb-20 md:pb-6">
           {page === 'today' && <TodayPage accent={accent} onNavigate={setPage} />}
           {page === 'calls' && <CallsPage accent={accent} />}
-          {page === 'contacts' && <ContactsPage accent={accent} />}
+          {page === 'contacts' && (
+            canUseFeature(userPlan, 'crm')
+              ? <ContactsPage accent={accent} />
+              : <UpgradeWall feature="Contacts & CRM" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
+          )}
           {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
-          {page === 'stats' && <StatsPage accent={accent} />}
+          {page === 'stats' && (
+            canUseFeature(userPlan, 'detailed_stats')
+              ? <StatsPage accent={accent} />
+              : <UpgradeWall feature="Statistiques détaillées" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
+          )}
           {page === 'messages' && <MessagesPage accent={accent} />}
           {page === 'greeting' && <GreetingPage accent={accent} />}
-          {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} />}
+          {page === 'inbound-reasons' && (
+            getPlanLimit(userPlan, 'call_reasons_limit') > 0
+              ? <InboundReasonsPage accent={accent} reasonsLimit={getPlanLimit(userPlan, 'call_reasons_limit')} />
+              : <UpgradeWall feature="Motifs d'appel" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
+          )}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
           {page === 'call-transfer' && <CallTransferPage accent={accent} />}
-          {page === 'post-processing' && <PostProcessingPage accent={accent} />}
+          {page === 'post-processing' && <PostProcessingPage accent={accent} onUpgrade={() => setPage('subscription')} />}
           {page === 'employees' && <EmployeesPage accent={accent} />}
           {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
           {page === 'hours' && <HoursPage accent={accent} />}
           {page === 'assistant' && <AssistantPage accent={accent} />}
           {page === 'webhooks' && <WebhooksPage accent={accent} />}
-          {page === 'integrations' && <IntegrationsPage accent={accent} />}
+          {page === 'integrations' && <IntegrationsPage accent={accent} onUpgrade={() => setPage('subscription')} />}
           {page === 'timezone' && <TimezonePage accent={accent} />}
           {page === 'subscription' && <SubscriptionPage accent={accent} />}
         </main>
@@ -1261,7 +1310,7 @@ type ActiveReason = {
 
 type EmergencyBehavior = 'transfer' | 'priority_message' | 'both' | null
 
-function InboundReasonsPage({ accent }: { accent: string }) {
+function InboundReasonsPage({ accent, reasonsLimit }: { accent: string; reasonsLimit: number }) {
   const { user } = useAuth()
 
   const [catalog, setCatalog] = useState<CatalogReason[]>([])
@@ -1319,6 +1368,10 @@ function InboundReasonsPage({ accent }: { accent: string }) {
   const handleToggle = async (reason: CatalogReason) => {
     if (!user) return
     const wasActive = activeMap.has(reason.id)
+    if (!wasActive && activeCount >= reasonsLimit) {
+      showToast(`Limite de ${reasonsLimit} motifs atteinte`, 'error')
+      return
+    }
     const snapshot = new Map(activeMap)
     const optimistic = new Map(activeMap)
     if (wasActive) {
@@ -1435,9 +1488,11 @@ function InboundReasonsPage({ accent }: { accent: string }) {
       <div className="flex items-end justify-between">
         <div>
           <SettingsHeader section="Répondre" title="Raisons entrantes" />
-          {activeCount > 0 && (
-            <p className="text-xs text-gray-400 -mt-3 mb-4 ml-0.5">{activeCount} raison{activeCount > 1 ? 's' : ''} active{activeCount > 1 ? 's' : ''}</p>
-          )}
+          <p className="text-xs text-gray-400 -mt-3 mb-4 ml-0.5">
+            <span className={activeCount >= reasonsLimit ? 'text-amber-500 font-semibold' : ''}>{activeCount}/{reasonsLimit}</span>
+            {' '}motif{activeCount > 1 ? 's' : ''} activé{activeCount > 1 ? 's' : ''}
+            {activeCount >= reasonsLimit && <span className="text-amber-500 ml-1">— limite atteinte</span>}
+          </p>
         </div>
         <button
           onClick={handleSync}
@@ -1558,12 +1613,14 @@ function InboundReasonsPage({ accent }: { accent: string }) {
                 const active = activeMap.get(reason.id)
                 const isChecked = !!active
                 const isEmergency = reason.is_emergency
+                const atLimit = !isChecked && activeCount >= reasonsLimit
                 return (
                   <div key={reason.id} className={`flex flex-col ${isChecked && isEmergency ? 'bg-red-50/40' : ''}`}>
-                    <label className="flex items-center gap-3 px-5 py-3.5 cursor-pointer">
+                    <label className={`flex items-center gap-3 px-5 py-3.5 ${atLimit ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                       <input
                         type="checkbox"
                         checked={isChecked}
+                        disabled={atLimit}
                         onChange={() => handleToggle(reason)}
                         style={{ accentColor: isEmergency ? '#ef4444' : accent }}
                         className="w-4 h-4 flex-shrink-0"
@@ -1945,8 +2002,9 @@ function CallTransferPage({ accent }: { accent: string }) {
 }
 
 // ── Post Processing Page ──────────────────────────────────────────────────────
-function PostProcessingPage({ accent }: { accent: string }) {
+function PostProcessingPage({ accent, onUpgrade }: { accent: string; onUpgrade?: () => void }) {
   const { profile, updateProfile } = useProfile()
+  const canWeeklyReport = canUseFeature(resolvePlanKey(profile?.subscription_plan), 'weekly_report')
   const [emailEnabled, setEmailEnabled] = useState(profile?.email_notifications_enabled ?? true)
   const [emailValue, setEmailValue] = useState(profile?.email || '')
   const [saving, setSaving] = useState(false)
@@ -1996,6 +2054,9 @@ function PostProcessingPage({ accent }: { accent: string }) {
     <div className="flex flex-col gap-4">
       <SettingsHeader section="Répondre" title="Post-traitement" />
 
+      {!canWeeklyReport ? (
+        <UpgradeWall feature="Rapport hebdomadaire" requiredPlan="Pro" accent={accent} onUpgrade={onUpgrade} />
+      ) : (
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0 pr-4">
@@ -2043,6 +2104,7 @@ function PostProcessingPage({ accent }: { accent: string }) {
         <ToggleRow label="Durée de l'appel" desc="Durée totale de la conversation" defaultOn={true} accent={accent} />
         <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
       </Card>
+      )}
 
       {toast && (
         <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-white text-sm font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-500' : 'bg-gray-900'}`}>
@@ -2070,7 +2132,7 @@ function EmployeesPage({ accent }: { accent: string }) {
   // Limite selon le plan
   const planStr = (profile?.subscription_plan ?? '').toLowerCase()
   const memberLimit =
-    planStr.includes('équipe') || planStr.includes('equipe') || planStr.includes('expert') || planStr.includes('team') ? 999
+    planStr.includes('max') || planStr.includes('équipe') || planStr.includes('equipe') || planStr.includes('expert') || planStr.includes('team') ? 999
     : planStr.includes('pro') ? 2
     : 0 // Solo / essai = patron seul
 
@@ -2937,8 +2999,9 @@ function WebhooksPage({ accent }: { accent: string }) {
 const SUPABASE_FUNCTIONS_URL = 'https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1'
 const GOOGLE_OAUTH_REDIRECT = `${SUPABASE_FUNCTIONS_URL}/google-calendar-callback`
 
-function IntegrationsPage({ accent }: { accent: string }) {
+function IntegrationsPage({ accent, onUpgrade }: { accent: string; onUpgrade?: () => void }) {
   const { profile, updateProfile } = useProfile()
+  const canGcal = canUseFeature(resolvePlanKey(profile?.subscription_plan), 'google_calendar')
   const { user } = useAuth()
   const [apiKey] = useState<string | null>(null)
   const [apiKeyGenerated, setApiKeyGenerated] = useState(false)
@@ -3147,8 +3210,10 @@ function IntegrationsPage({ accent }: { accent: string }) {
         </div>
       </Card>
 
-      {/* Google Calendar */}
-      <Card>
+      {/* Google Calendar — Pro/Max uniquement */}
+      <Card>{!canGcal ? (
+        <UpgradeWall feature="Google Calendar" requiredPlan="Pro" accent={accent} onUpgrade={onUpgrade} />
+      ) : (<>
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-2xl border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
@@ -3197,7 +3262,7 @@ function IntegrationsPage({ accent }: { accent: string }) {
             </div>
           )}
         </div>
-      </Card>
+      </> )}</Card>
     </div>
   )
 }
@@ -3374,29 +3439,22 @@ function SubscriptionPage({ accent }: { accent: string }) {
     })
   }, [user])
 
-  function getVolDiscount(n: number) { return n >= 20 ? 0.15 : n >= 10 ? 0.10 : n >= 5 ? 0.05 : 0 }
-  function calcEquipeUnit(n: number, bill: 'monthly'|'annual') {
-    const vol = getVolDiscount(n)
-    const ann = bill === 'annual' ? 0.20 : 0
-    return Math.round(50 * (1 - vol) * (1 - ann) * 100) / 100
-  }
-
   const plans = [
     { id: 0, planId: 'starter', name: 'Solo',
-      monthly: { price: 79,  priceId: 'price_1TSKJzBKWw2SqpykhIdwLhbJ' },
-      annual:  { price: 63,  priceId: 'price_1TSKK0BKWw2SqpykIzfui0ry' },
+      monthly: { price: 97,  priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
+      annual:  { price: 97,  priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
       desc: "Idéal pour l'artisan indépendant",
       features: ["Jusqu'à 150 appels/mois", 'Secrétaire IA 24h/24, 7j/7', 'SMS récap en 30 secondes', '1 utilisateur', 'Support par email', 'Mise en service gratuite'],
     },
     { id: 1, planId: 'pro', name: 'Pro', popular: true,
-      monthly: { price: 149, priceId: 'price_1TSKK0BKWw2Sqpyk74ohhi3D' },
-      annual:  { price: 119, priceId: 'price_1TSKK1BKWw2SqpykxJvVWoq0' },
+      monthly: { price: 197, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
+      annual:  { price: 197, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
       desc: 'Pour les artisans avec un bon volume',
       features: ['Appels illimités', 'Tout Solo inclus', 'Qualification des urgences', 'Planification des RDV', "Rapport d'appels hebdomadaire", 'Intégration Google Calendar', 'Statistiques détaillées', "Jusqu'à 3 utilisateurs", 'Support prioritaire par email', 'Numéro dédié'],
     },
-    { id: 2, planId: 'expert', name: 'Équipe',
-      monthly: { price: 50,  priceId: 'price_1TSKK1BKWw2Sqpykad4ASHaC' },
-      annual:  { price: 40,  priceId: 'price_1TSKK1BKWw2SqpykBejZA4Un' },
+    { id: 2, planId: 'max', name: 'Max',
+      monthly: { price: 347, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
+      annual:  { price: 347, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
       desc: 'Pour les TPE et petites équipes',
       features: ['Tout Pro inclus', 'Appels illimités multi-lignes', 'Utilisateurs illimités', 'Multi-numéros', 'Tableau de bord équipe', 'Reporting hebdomadaire', 'Support prioritaire dédié'],
     },
@@ -3417,7 +3475,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
         body: JSON.stringify({
           priceId: tier.priceId,
           planId: plan.planId,
-          associates_count: plan.planId === 'expert' ? associates : 1,
+          associates_count: 1,
           billing,
           trade: profile?.company_type ?? '',
           company: profile?.company_name ?? '',
@@ -3534,29 +3592,13 @@ function SubscriptionPage({ accent }: { accent: string }) {
         <p className="text-xs text-gray-400 mt-0.5">Sans engagement · annulation à tout moment</p>
       </div>
 
-      {/* ── Toggle mensuel / annuel ── */}
-      <div className="flex items-center justify-center gap-3">
-        <button onClick={() => setBilling('monthly')}
-          className="text-xs font-semibold px-4 py-1.5 rounded-full transition-all"
-          style={{ background: billing === 'monthly' ? accent : '#F3F4F6', color: billing === 'monthly' ? '#fff' : '#6B7280' }}>
-          Mensuel
-        </button>
-        <button onClick={() => setBilling('annual')}
-          className="text-xs font-semibold px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5"
-          style={{ background: billing === 'annual' ? accent : '#F3F4F6', color: billing === 'annual' ? '#fff' : '#6B7280' }}>
-          Annuel
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: billing === 'annual' ? 'rgba(255,255,255,0.25)' : '#DCFCE7', color: billing === 'annual' ? '#fff' : '#166534' }}>−20%</span>
-        </button>
-      </div>
+      {/* Toggle annuel désactivé — price IDs annuels non créés dans Stripe */}
 
       {/* ── Plans ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {plans.map((p) => {
           const isSelected = selected === p.id
           const tier = billing === 'annual' ? p.annual : p.monthly
-          const isEquipe = p.planId === 'expert'
-          const unitPrice = isEquipe ? calcEquipeUnit(associates, billing) : tier.price
-          const totalPrice = isEquipe ? Math.round(unitPrice * associates * 100) / 100 : tier.price
           return (
             <div key={p.id} onClick={() => setSelected(p.id)}
               className="bg-white rounded-2xl p-5 cursor-pointer transition-all relative overflow-hidden"
@@ -3571,35 +3613,9 @@ function SubscriptionPage({ accent }: { accent: string }) {
               )}
               <div className={p.popular ? 'pt-5' : ''}>
                 <p className="font-bold text-gray-900 mb-1">{p.name}</p>
-                {isEquipe ? (
-                  <>
-                    <p className="text-[22px] font-bold tracking-tight leading-none" style={{ color: accent }}>
-                      {unitPrice}€<span className="text-xs font-normal text-gray-400"> /utilisateur/mois</span>
-                    </p>
-                    <p className="text-sm font-semibold text-gray-700 mb-1">
-                      {associates} × {unitPrice}€ = <span style={{ color: accent }}>{totalPrice}€/mois</span>
-                    </p>
-                    {/* Compteur utilisateurs */}
-                    <div className="flex items-center gap-2 mb-3" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setAssociates(n => Math.max(2, n - 1))}
-                        className="w-6 h-6 rounded-full text-sm font-bold flex items-center justify-center transition-opacity hover:opacity-70"
-                        style={{ background: accent + '15', color: accent }}>−</button>
-                      <span className="text-xs font-semibold text-gray-700 w-20 text-center">{associates} utilisateur{associates > 1 ? 's' : ''}</span>
-                      <button onClick={() => setAssociates(n => Math.min(30, n + 1))}
-                        className="w-6 h-6 rounded-full text-sm font-bold flex items-center justify-center transition-opacity hover:opacity-70"
-                        style={{ background: accent + '15', color: accent }}>+</button>
-                    </div>
-                    {getVolDiscount(associates) > 0 && (
-                      <p className="text-[10px] font-semibold mb-3" style={{ color: accent }}>
-                        −{Math.round(getVolDiscount(associates) * 100)}% réduction volume{billing === 'annual' ? ' + −20% annuel' : ''}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
-                    {tier.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
-                  </p>
-                )}
+                <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
+                  {tier.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
+                </p>
                 <p className="text-xs text-gray-400 mb-4">{p.desc}</p>
                 <div className="flex flex-col gap-2">
                   {p.features.map((f, j) => (

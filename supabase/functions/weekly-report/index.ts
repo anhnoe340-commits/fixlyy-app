@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { featureAllowed } from '../_shared/planGate.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
@@ -171,14 +172,17 @@ serve(async (req) => {
   const { from, to, label: weekLabel } = weekRange()
 
   // Charger tous les artisans actifs avec un email
-  const { data: artisans, error } = await supabase
+  const { data: artisansRaw, error } = await supabase
     .from('profiles')
-    .select('id, email, company_name, assistant_name')
+    .select('id, email, company_name, assistant_name, subscription_plan')
     .in('subscription_status', ['active', 'trialing'])
     .not('email', 'is', null)
     .eq('email_notifications_enabled', true)
 
-  if (error || !artisans?.length) {
+  // Filtrer par plan — weekly_report est Pro/Max uniquement
+  const artisans = (artisansRaw ?? []).filter(a => featureAllowed(a.subscription_plan, 'weekly_report'))
+
+  if (error || !artisans.length) {
     console.error('No artisans or error:', error)
     return new Response(JSON.stringify({ ok: true, sent: 0 }), { headers: { ...cors, 'Content-Type': 'application/json' } })
   }

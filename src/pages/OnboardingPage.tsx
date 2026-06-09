@@ -69,8 +69,8 @@ const PLANS = [
       'Support par email',
       'Mise en service gratuite',
     ],
-    monthly: { price: '79€', priceId: 'price_1TSKJzBKWw2SqpykhIdwLhbJ' },
-    annual:  { price: '63€', priceId: 'price_1TSKK0BKWw2SqpykIzfui0ry', yearly: '756€' },
+    monthly: { price: '97€', priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
+    annual:  { price: '97€', priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma', yearly: '1 164€' },
   },
   {
     id: 'pro', name: 'Pro', calls: 'Appels illimités',
@@ -88,11 +88,11 @@ const PLANS = [
       'Numéro de téléphone dédié',
     ],
     popular: true,
-    monthly: { price: '149€', priceId: 'price_1TSKK0BKWw2Sqpyk74ohhi3D' },
-    annual:  { price: '119€', priceId: 'price_1TSKK1BKWw2SqpykxJvVWoq0', yearly: '1 428€' },
+    monthly: { price: '197€', priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
+    annual:  { price: '197€', priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood', yearly: '2 364€' },
   },
   {
-    id: 'expert', name: 'Équipe', calls: 'Illimité · utilisateurs illimités',
+    id: 'max', name: 'Max', calls: 'Illimité · jusqu\'à 10 utilisateurs',
     desc: 'Pour les TPE et petites équipes',
     features: [
       'Tout ce qui est inclus dans Pro',
@@ -103,28 +103,12 @@ const PLANS = [
       'Reporting hebdomadaire',
       'Support prioritaire dédié',
     ],
-    monthly: { price: '50€', priceId: 'price_1TSKK1BKWw2Sqpykad4ASHaC' },
-    annual:  { price: '40€', priceId: 'price_1TSKK1BKWw2SqpykBejZA4Un', yearly: 'Sur devis' },
+    monthly: { price: '347€', priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
+    annual:  { price: '347€', priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO', yearly: '4 164€' },
   },
 ]
 
-// ── Calcul prix Équipe ────────────────────────────────────────────────────────
-function getVolumeDiscount(count: number): number {
-  if (count >= 20) return 0.15;
-  if (count >= 10) return 0.10;
-  if (count >= 5)  return 0.05;
-  return 0;
-}
 
-function calcEquipePrice(count: number, annual: boolean): { unitPrice: number; total: number; discount: number } {
-  const baseUnit = 50;
-  const volumeDiscount = getVolumeDiscount(count);
-  const annualDiscount = annual ? 0.20 : 0;
-  const totalDiscount = 1 - (1 - volumeDiscount) * (1 - annualDiscount);
-  const unitPrice = Math.round(baseUnit * (1 - totalDiscount) * 100) / 100;
-  const total = Math.round(unitPrice * count * 100) / 100;
-  return { unitPrice, total, discount: totalDiscount };
-}
 
 interface Props { userEmail: string }
 
@@ -708,30 +692,13 @@ export default function OnboardingPage({ userEmail }: Props) {
               </div>
             </div>
 
-            {/* Toggle Mensuel / Annuel */}
-            <div className="flex items-center justify-center gap-3 mb-5">
-              <span className={`text-sm font-medium ${billing === 'monthly' ? 'text-gray-800' : 'text-gray-400'}`}>Mensuel</span>
-              <button
-                onClick={() => setBilling(b => b === 'monthly' ? 'annual' : 'monthly')}
-                className="relative w-11 h-6 rounded-full transition-colors flex-shrink-0"
-                style={{ background: billing === 'annual' ? BRAND : '#D1D5DB' }}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${billing === 'annual' ? 'translate-x-5' : 'translate-x-0'}`} />
-              </button>
-              <span className={`text-sm font-medium ${billing === 'annual' ? 'text-gray-800' : 'text-gray-400'}`}>
-                Annuel
-                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style={{ background: '#10b981' }}>
-                  −20%
-                </span>
-              </span>
-            </div>
+            {/* Toggle annuel désactivé — price IDs annuels non créés dans Stripe */}
 
             {/* Plans */}
             <div className="flex flex-col gap-3 mb-5">
               {PLANS.map(p => {
                 const pricing = billing === 'annual' ? p.annual : p.monthly
                 const isSelected = selectedPlan === p.id
-                const isEquipe = p.id === 'expert'
                 return (
                   <button key={p.id} onClick={() => setSelectedPlan(p.id)}
                     className={`relative p-4 rounded-xl border-2 text-left transition-all ${isSelected ? 'border-[#2850c8] bg-[#2850c8]/5' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -741,46 +708,14 @@ export default function OnboardingPage({ userEmail }: Props) {
                       </span>
                     )}
                     {/* Header */}
-                    {isEquipe ? (() => {
-                      const { unitPrice, total, discount } = calcEquipePrice(data.associates_count, billing === 'annual');
-                      const volumeDiscount = getVolumeDiscount(data.associates_count);
-                      return (
-                        <div className="mb-2">
-                          <div className="flex items-baseline gap-1.5 flex-wrap pr-16">
-                            <span className="text-xl font-black">{total}€</span>
-                            <span className="text-xs text-gray-400">/mois</span>
-                            <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-[11px] text-gray-500">
-                              {data.associates_count} utilisateur{data.associates_count > 1 ? 's' : ''} × {unitPrice}€
-                            </span>
-                            {volumeDiscount > 0 && (
-                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                                −{Math.round(volumeDiscount * 100)}% volume
-                              </span>
-                            )}
-                            {billing === 'annual' && (
-                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                                −20% annuel
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })() : (
-                      <>
-                        <div className="flex items-baseline gap-1.5 mb-0.5 flex-wrap pr-16">
-                          <span className="text-xl font-black">{pricing.price}</span>
-                          <span className="text-xs text-gray-400">/mois</span>
-                          <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
-                        </div>
-                        <p className="text-[11px] text-gray-400 mb-2">{p.desc}</p>
-                        {billing === 'annual' && (
-                          <p className="text-[10px] text-emerald-600 font-medium mb-2">−20% · 2 mois offerts</p>
-                        )}
-                      </>
-                    )}
+                    <>
+                      <div className="flex items-baseline gap-1.5 mb-0.5 flex-wrap pr-16">
+                        <span className="text-xl font-black">{pricing.price}</span>
+                        <span className="text-xs text-gray-400">/mois</span>
+                        <span className="text-sm font-bold ml-1" style={{ color: isSelected ? BRAND : '#374151' }}>{p.name}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mb-2">{p.desc}</p>
+                    </>
                     {/* Features */}
                     <div className="grid grid-cols-1 gap-1 mt-1">
                       {p.features.slice(0, isSelected ? p.features.length : 3).map((f, j) => (

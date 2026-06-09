@@ -349,7 +349,7 @@ const FULL_STRUCTURED_DATA_SCHEMA = {
     customerName:              { type: 'string', description: 'Prénom et nom du client' },
     customerPhone:             { type: 'string', description: 'Numéro de téléphone du client' },
     customerAddress:           { type: 'string', description: 'Adresse complète de l\'intervention' },
-    reason:                    { type: 'string', description: 'Raison de l\'appel en 1 phrase' },
+    reason:                    { type: 'string', description: "Motif de l'appel — si des motifs sont configurés, utilise EXACTEMENT l'un des labels de la liste (section MOTIFS D'APPEL PERTINENTS), sinon résumé en 1 phrase courte" },
     urgency:                   { type: 'string', enum: ['urgent', 'non_urgent'], description: 'Niveau d\'urgence' },
     appointmentDate:           { type: 'string', description: 'Date souhaitée si mentionnée' },
     appointmentTime:           { type: 'string', description: 'Heure souhaitée si mentionnée' },
@@ -703,7 +703,9 @@ serve(async (req) => {
           const sortedCats = [...byCategory.keys()].sort()
           const lines: string[] = [
             '## Motifs d\'appel pertinents pour cet artisan',
-            'L\'artisan traite les types de demandes suivants. Si le client mentionne l\'un de ces motifs, qualifie-le naturellement :',
+            'L\'artisan traite les types de demandes suivants. Quand le client mentionne l\'un de ces motifs, qualifie-le naturellement dans la conversation.',
+            '',
+            '**CLASSIFICATION OBLIGATOIRE :** À la fin de l\'appel, dans le champ `reason` du résumé structuré, indique EXACTEMENT l\'un des labels ci-dessous qui correspond le mieux à la demande. Ne reformule pas — copie le label tel quel. Si vraiment aucun ne correspond, écris "Demande générale".',
             '',
           ]
           for (const cat of sortedCats) {
