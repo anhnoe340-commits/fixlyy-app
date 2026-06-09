@@ -2057,6 +2057,7 @@ function PostProcessingPage({ accent, onUpgrade }: { accent: string; onUpgrade?:
       {!canWeeklyReport ? (
         <UpgradeWall feature="Rapport hebdomadaire" requiredPlan="Pro" accent={accent} onUpgrade={onUpgrade} />
       ) : (
+      <>
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0 pr-4">
@@ -2104,6 +2105,7 @@ function PostProcessingPage({ accent, onUpgrade }: { accent: string; onUpgrade?:
         <ToggleRow label="Durée de l'appel" desc="Durée totale de la conversation" defaultOn={true} accent={accent} />
         <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
       </Card>
+      </>
       )}
 
       {toast && (

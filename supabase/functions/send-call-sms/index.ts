@@ -474,7 +474,7 @@ serve(async (req) => {
       }
     }
 
-    // ── SMS structuré avec tous les champs collectés par Mia ────────────────
+    // ── SMS structuré GSM-7 (zero emoji — encodage UCS-2 evite) ─────────────
     const effectivePhone = callerPhone || (callerNumber !== 'Inconnu' ? callerNumber : null)
     const isUrgent = urgency === 'urgent'
     const bodyText = fullSummary || smsBody
@@ -483,29 +483,29 @@ serve(async (req) => {
 
     // Header
     smsParts.push(isUrgent
-      ? `🚨 URGENT — ${callerName || 'Client inconnu'}`
-      : `📞 APPEL — ${callerName || 'Client inconnu'}`)
+      ? `[URGENT] ${callerName || 'Client inconnu'}`
+      : `[APPEL] ${callerName || 'Client inconnu'}`)
 
-    // Contact (lignes conditionnelles)
-    if (effectivePhone) smsParts.push(`📱 ${effectivePhone}`)
-    if (callerAddress)  smsParts.push(`📍 ${callerAddress}`)
+    // Contact
+    if (effectivePhone) smsParts.push(`Tel : ${effectivePhone}`)
+    if (callerAddress)  smsParts.push(`Adresse : ${callerAddress}`)
+    if (reason)         smsParts.push(`Motif : ${reason}`)
+    smsParts.push(isUrgent ? 'Urgence : oui' : 'Urgence : non')
 
     // Corps
     smsParts.push('')
-    smsParts.push(`💬 ${bodyText}`)
+    smsParts.push(bodyText)
 
     // RDV
     smsParts.push('')
     if (appointmentDate) {
-      const rdvLabel = isUrgent ? 'RDV' : 'RDV souhaité'
-      const rdvTime = appointmentTime ? ` à ${appointmentTime}` : ''
-      smsParts.push(`🗓️ ${rdvLabel} : ${appointmentDate}${rdvTime}`)
+      const rdvTime = appointmentTime ? ` a ${appointmentTime}` : ''
+      smsParts.push(`Dispo : ${appointmentDate}${rdvTime}`)
     } else {
-      smsParts.push(`🗓️ Pas de RDV pris`)
+      smsParts.push('Dispo : non precise')
     }
 
-    smsParts.push('')
-    smsParts.push(`— ${profile.assistant_name || 'Mia'}, Fixlyy`)
+    smsParts.push(`-- ${profile.assistant_name || 'Mia'}, Fixlyy`)
     const smsText = smsParts.join('\n')
 
     if (featureAllowed(profile.subscription_plan, 'sms_confirmation')) {
