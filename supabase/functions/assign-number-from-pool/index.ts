@@ -9,6 +9,11 @@ const VAPI_WEBHOOK_SECRET = Deno.env.get('VAPI_WEBHOOK_SECRET') ?? undefined
 const SB_URL            = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE        = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 
+// ── LiveKit Cloud ─────────────────────────────────────────────────────────────
+const LK_URL    = (Deno.env.get('LIVEKIT_CLOUD_URL') ?? '').replace(/^wss?:\/\//, 'https://')
+const LK_KEY    = Deno.env.get('LIVEKIT_CLOUD_API_KEY') ?? ''
+const LK_SECRET = Deno.env.get('LIVEKIT_CLOUD_API_SECRET') ?? ''
+
 const WEBHOOK_URL = `${SB_URL}/functions/v1/send-call-sms`
 
 const VOICE_IDS: Record<string, string> = {
@@ -65,6 +70,68 @@ async function deleteVapiAssistant(assistantId: string) {
       headers: { Authorization: `Bearer ${VAPI_KEY}` },
     })
   } catch { /* non-bloquant */ }
+}
+
+// ── LiveKit helpers ───────────────────────────────────────────────────────────
+async function livekitAdminToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+  const enc = (obj: object) =>
+    btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  const head    = enc({ alg: 'HS256', typ: 'JWT' })
+  const payload = enc({ iss: LK_KEY, sub: 'sip-admin', iat: now, exp: now + 60, nbf: now, sip: { admin: true } })
+  const input   = `${head}.${payload}`
+  const key     = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(LK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig    = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  return `${input}.${sigB64}`
+}
+
+async function createLivekitSipTrunk(userId: string, phoneNumber: string): Promise<string> {
+  const token = await livekitAdminToken()
+  const res = await fetchWithTimeout(
+    `${LK_URL}/twirp/livekit.SIP/CreateSIPInboundTrunk`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trunk: { name: `artisan-${userId.slice(0, 8)}`, numbers: [phoneNumber] },
+      }),
+    },
+    12000,
+  )
+  if (!res.ok) throw new Error(`LiveKit CreateSIPInboundTrunk ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  const id = data?.trunk?.sipTrunkId ?? data?.trunk?.sip_trunk_id
+    ?? data?.sipTrunkId ?? data?.sip_trunk_id
+  if (!id) throw new Error(`LiveKit trunk: sip_trunk_id absent dans la réponse: ${JSON.stringify(data)}`)
+  return id as string
+}
+
+async function createLivekitDispatchRule(userId: string, trunkId: string): Promise<string> {
+  const token = await livekitAdminToken()
+  const res = await fetchWithTimeout(
+    `${LK_URL}/twirp/livekit.SIP/CreateSIPDispatchRule`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        trunkIds: [trunkId],
+        rule: { dispatchRuleDirect: { roomName: `artisan-${userId}`, pin: '' } },
+        name: `artisan-${userId.slice(0, 8)}-rule`,
+      }),
+    },
+    12000,
+  )
+  if (!res.ok) throw new Error(`LiveKit CreateSIPDispatchRule ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  const id = data?.rule?.sipDispatchRuleId ?? data?.rule?.sip_dispatch_rule_id
+    ?? data?.sipDispatchRuleId ?? data?.sip_dispatch_rule_id
+  if (!id) throw new Error(`LiveKit dispatch rule: id absent dans la réponse: ${JSON.stringify(data)}`)
+  return id as string
 }
 
 async function createDedicatedAssistant(profile: {
@@ -342,7 +409,7 @@ Deno.serve(async (req) => {
     // 2. Récupérer le profil pour personnaliser l'assistant
     const { data: profileData } = await sb
       .from('profiles')
-      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id, phone')
+      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id, phone, livekit_trunk_id')
       .eq('id', userId)
       .single()
 
@@ -449,6 +516,28 @@ Deno.serve(async (req) => {
     await logEvent({ supabase: sb, eventType: 'number_assigned',
       userId, resourceType: 'phone_number', resourceId: phone_number,
       metadata: { vapi_assistant_id: assistantIdToUse }, severity: 'info' })
+
+    // 7. LiveKit SIP trunk + dispatch rule (non-bloquant — infrastructure pour migration Vapi→LiveKit)
+    if (LK_KEY && LK_SECRET && !profileData?.livekit_trunk_id) {
+      try {
+        const trunkId       = await createLivekitSipTrunk(userId, phone_number)
+        const dispatchRuleId = await createLivekitDispatchRule(userId, trunkId)
+        await sb.from('profiles').update({
+          livekit_trunk_id:          trunkId,
+          livekit_dispatch_rule_id:  dispatchRuleId,
+        }).eq('id', userId)
+        await logEvent({ supabase: sb, eventType: 'livekit_sip_trunk_created',
+          userId, resourceType: 'livekit_trunk', resourceId: trunkId,
+          metadata: { phone_number, dispatch_rule_id: dispatchRuleId }, severity: 'info' })
+        console.log(`[LiveKit] trunk=${trunkId} rule=${dispatchRuleId} OK`)
+      } catch (lkErr: any) {
+        console.error('[LiveKit] setup non-bloquant échoué:', lkErr.message)
+        await logEvent({ supabase: sb, eventType: 'livekit_sip_trunk_failed',
+          userId, resourceType: 'livekit_trunk', resourceId: null,
+          metadata: { error: lkErr.message, phone_number }, severity: 'warning' })
+      }
+    }
+
     return new Response(JSON.stringify({ phone_number }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
