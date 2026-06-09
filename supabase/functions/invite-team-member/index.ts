@@ -2,38 +2,20 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { logEvent } from '../_shared/audit.ts'
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
-)
-const TWILIO_SID   = Deno.env.get('TWILIO_ACCOUNT_SID')!
-const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
-const TWILIO_AUTH  = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
-const APP_URL      = 'https://app.fixlyy.fr'
+const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
+const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
+const APP_URL = 'https://app.fixlyy.fr'
 
 const CORS = {
   'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 
-function normalizePhone(p: string): string {
-  const digits = p.replace(/[\s\-\.\(\)]/g, '')
-  if (digits.startsWith('+')) return digits
-  if (digits.startsWith('00')) return '+' + digits.slice(2)
-  if (digits.startsWith('0')) return '+33' + digits.slice(1)
-  return '+33' + digits
-}
-
-async function sendSms(from: string, to: string, body: string) {
-  const res = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Basic ${TWILIO_AUTH}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ From: from, To: to, Body: body }).toString(),
-    }
-  )
-  if (!res.ok) throw new Error((await res.json()).message || 'SMS failed')
+function planLimit(plan: string): number {
+  const p = plan.toLowerCase()
+  if (p.includes('max') || p.includes('team') || p.includes('equipe')) return 10
+  if (p.includes('pro')) return 3
+  return 1
 }
 
 serve(async (req) => {
@@ -41,115 +23,124 @@ serve(async (req) => {
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) return new Response('Unauthorized', { status: 401, headers: CORS })
-
-  const { data: { user }, error: authError } = await supabase.auth.getUser(
-    authHeader.replace('Bearer ', '')
-  )
+  const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
   if (authError || !user) return new Response('Unauthorized', { status: 401, headers: CORS })
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('company_name, twilio_number')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.twilio_number) {
-    return new Response(JSON.stringify({ error: 'Numéro Twilio non configuré.' }), {
-      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
-
-  let body: { first_name: string; phone: string; suggested_skills?: string[]; resend_id?: string }
+  let body: { email: string; role?: 'admin' | 'member' }
   try { body = await req.json() } catch {
     return new Response('Invalid JSON', { status: 400, headers: CORS })
   }
-
-  const { first_name, phone, suggested_skills = [], resend_id } = body
-  if (!first_name?.trim() || !phone?.trim()) {
-    return new Response(JSON.stringify({ error: 'Prénom et téléphone requis.' }), {
-      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
+  const { email, role = 'member' } = body
+  if (!email?.trim()) {
+    return new Response(JSON.stringify({ error: 'Email requis.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
   }
 
-  const normalizedPhone = normalizePhone(phone)
+  const emailNorm = email.trim().toLowerCase()
+  if (emailNorm === user.email?.toLowerCase()) {
+    return new Response(JSON.stringify({ error: 'Vous ne pouvez pas vous inviter vous-même.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
+  }
 
-  let invitation: { id: string; token: string; first_name: string; phone: string; expires_at: string } | null = null
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('company_name, subscription_plan')
+    .eq('id', user.id)
+    .single()
 
-  if (resend_id) {
-    // Mode renvoi — on remet à zéro le token et l'expiry de l'invitation existante
+  const limit = planLimit(profile?.subscription_plan ?? 'solo')
+  const { count: currentCount } = await supabase
+    .from('team_members')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_user_id', user.id)
+    .in('status', ['pending', 'active'])
+
+  if ((currentCount ?? 0) >= limit) {
+    return new Response(
+      JSON.stringify({ error: `Limite de ${limit} membre${limit > 1 ? 's' : ''} atteinte.` }),
+      { status: 403, headers: { ...CORS, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  const { data: existing } = await supabase
+    .from('team_members')
+    .select('id, status')
+    .eq('owner_user_id', user.id)
+    .eq('email', emailNorm)
+    .maybeSingle()
+
+  if (existing && existing.status !== 'removed') {
+    return new Response(
+      JSON.stringify({ error: "Cet email est déjà dans l'équipe." }),
+      { status: 409, headers: { ...CORS, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  let memberId: string
+  let inviteToken: string
+
+  if (existing?.status === 'removed') {
+    const newToken = crypto.randomUUID()
     const newExpiry = new Date(Date.now() + 7 * 86400000).toISOString()
-    const { data, error } = await supabase
-      .from('team_invitations')
-      .update({ status: 'pending', expires_at: newExpiry, is_active: false, accepted_at: null })
-      .eq('id', resend_id)
-      .eq('owner_id', user.id)
-      .select('id, token, first_name, phone, expires_at')
-      .single()
-    if (error || !data) {
-      return new Response(JSON.stringify({ error: 'Invitation introuvable.' }), {
-        status: 404, headers: { ...CORS, 'Content-Type': 'application/json' },
-      })
-    }
-    invitation = data
+    await supabase.from('team_members').update({
+      status: 'pending', role, invitation_token: newToken, invitation_expires_at: newExpiry,
+      joined_at: null, member_user_id: null,
+    }).eq('id', existing.id)
+    memberId = existing.id
+    inviteToken = newToken
   } else {
-    // Vérifier qu'il n'y a pas déjà une invitation pending pour ce numéro
-    const { data: existing } = await supabase
-      .from('team_invitations')
-      .select('id')
-      .eq('owner_id', user.id)
-      .eq('phone', normalizedPhone)
-      .eq('status', 'pending')
-      .maybeSingle()
-
-    if (existing) {
-      return new Response(JSON.stringify({ error: 'Une invitation est déjà en attente pour ce numéro.' }), {
-        status: 409, headers: { ...CORS, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Créer l'invitation (token auto-généré par la DB)
-    const { data, error: insertError } = await supabase
-      .from('team_invitations')
-      .insert({
-        owner_id: user.id,
-        first_name: first_name.trim(),
-        phone: normalizedPhone,
-        suggested_skills,
-      })
-      .select('id, token, first_name, phone, expires_at')
+    const { data: inserted, error: insertError } = await supabase
+      .from('team_members')
+      .insert({ owner_user_id: user.id, email: emailNorm, role })
+      .select('id, invitation_token')
       .single()
-
-    if (insertError || !data) {
-      console.error('Insert error:', insertError)
-      return new Response(JSON.stringify({ error: "Erreur lors de la création de l'invitation." }), {
-        status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
-      })
+    if (insertError || !inserted) {
+      console.error('[invite] insert error:', insertError)
+      return new Response(
+        JSON.stringify({ error: "Erreur lors de la création de l'invitation." }),
+        { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } }
+      )
     }
-    invitation = data
+    memberId = inserted.id
+    inviteToken = inserted.invitation_token
   }
 
-  // Envoyer le SMS
-  const companyName = profile.company_name || 'votre artisan'
-  const smsBody = [
-    `Bonjour ${invitation.first_name}, ${companyName} vous a ajouté à son équipe Fixlyy.`,
-    ``,
-    `Pour activer votre profil et recevoir vos appels qualifiés, complétez votre profil ici (90s) :`,
-    `${APP_URL}/join/${invitation.token}`,
-    ``,
-    `— Mia · Fixlyy`,
-  ].join('\n')
+  const companyName = profile?.company_name || 'un artisan'
+  const joinUrl = `${APP_URL}/join?token=${inviteToken}`
+  const roleLabel = role === 'admin' ? 'Administrateur' : 'Membre'
 
-  try {
-    await sendSms(profile.twilio_number, normalizedPhone, smsBody)
-    await logEvent({ supabase, eventType: 'team_member_invited',
-      userId: user.id, resourceType: 'team_invitation', resourceId: invitation.id,
-      metadata: { invitee_phone: normalizedPhone }, severity: 'info' })
-  } catch (e: any) {
-    console.error('SMS send failed:', e.message)
-    // L'invitation est créée même si le SMS échoue — le patron peut renvoyer
-  }
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Fixlyy <noreply@fixlyy.fr>',
+      to: [emailNorm],
+      subject: `${companyName} vous invite sur Fixlyy`,
+      html: `
+<div style="font-family:-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:40px 24px;color:#111827">
+  <p style="font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;margin:0 0 24px">Invitation Fixlyy</p>
+  <h1 style="font-size:22px;font-weight:700;margin:0 0 12px">Vous êtes invité(e) sur Fixlyy</h1>
+  <p style="font-size:15px;color:#374151;margin:0 0 8px">
+    <strong>${companyName}</strong> vous invite à accéder à son dashboard Fixlyy en tant que <strong>${roleLabel}</strong>.
+  </p>
+  <p style="font-size:14px;color:#6B7280;margin:0 0 28px">
+    Vous pourrez suivre les appels, gérer les clients et consulter les rendez-vous en temps réel.
+  </p>
+  <a href="${joinUrl}"
+     style="display:inline-block;background:#2850c8;color:#ffffff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;font-size:15px">
+    Accepter l'invitation
+  </a>
+  <p style="font-size:12px;color:#9CA3AF;margin:24px 0 0">
+    Ce lien expire dans 7 jours. Si vous n'attendiez pas cette invitation, ignorez cet email.
+  </p>
+  <p style="font-size:12px;color:#D1D5DB;margin:8px 0 0">— Mia · Fixlyy</p>
+</div>`,
+    }),
+  }).catch(e => console.error('[invite] resend error:', e.message))
 
-  return new Response(JSON.stringify({ ok: true, invitation }), {
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+  await logEvent({
+    supabase, eventType: 'team_member_invited', userId: user.id,
+    resourceType: 'team_member', resourceId: memberId,
+    metadata: { invitee_email: emailNorm, role }, severity: 'info',
   })
+
+  return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
 })

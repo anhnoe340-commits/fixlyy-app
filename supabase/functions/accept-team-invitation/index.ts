@@ -1,82 +1,105 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { logEvent } from '../_shared/audit.ts'
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
-)
+const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 
-// GET /accept-team-invitation?token=xxxx
-// Public endpoint — le token EST l'authentification
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
-  const url = new URL(req.url)
-  const token = url.searchParams.get('token')
+  // ── GET ?token=xxx — valider le token (endpoint public) ─────────────────────
+  if (req.method === 'GET') {
+    const token = new URL(req.url).searchParams.get('token')
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Token manquant.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    }
 
-  if (!token) {
-    return new Response(JSON.stringify({ error: 'Token manquant.' }), {
-      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
+    const { data: invite } = await supabase
+      .from('team_members')
+      .select('id, owner_user_id, email, status, invitation_expires_at')
+      .eq('invitation_token', token)
+      .maybeSingle()
+
+    if (!invite) return new Response(JSON.stringify({ error: 'Invitation introuvable.' }), { status: 404, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    if (invite.status === 'active') return new Response(JSON.stringify({ error: 'Cette invitation est déjà acceptée.' }), { status: 409, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    if (invite.status === 'removed') return new Response(JSON.stringify({ error: 'Cette invitation a été annulée.' }), { status: 410, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    if (new Date(invite.invitation_expires_at) < new Date()) {
+      return new Response(JSON.stringify({ error: 'Cette invitation a expiré. Demandez à votre administrateur de vous en envoyer une nouvelle.' }), { status: 410, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    }
+
+    const { data: ownerProfile } = await supabase
+      .from('profiles')
+      .select('company_name')
+      .eq('id', invite.owner_user_id)
+      .single()
+
+    return new Response(JSON.stringify({
+      ok: true,
+      email: invite.email,
+      company: ownerProfile?.company_name || 'votre entreprise',
+    }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
   }
 
-  // Récupérer l'invitation
-  const { data: invitation } = await supabase
-    .from('team_invitations')
-    .select('id, owner_id, first_name, phone, suggested_skills, status, expires_at, is_active')
-    .eq('token', token)
-    .maybeSingle()
+  // ── POST { token } + JWT Bearer — lier le compte au team_member ─────────────
+  if (req.method === 'POST') {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return new Response('Unauthorized', { status: 401, headers: CORS })
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
+    if (authError || !user) return new Response('Unauthorized', { status: 401, headers: CORS })
 
-  if (!invitation) {
-    return new Response(JSON.stringify({ error: 'Invitation introuvable.' }), {
-      status: 404, headers: { ...CORS, 'Content-Type': 'application/json' },
+    let body: { token: string }
+    try { body = await req.json() } catch {
+      return new Response('Invalid JSON', { status: 400, headers: CORS })
+    }
+    const { token } = body
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Token requis.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    }
+
+    const { data: invite } = await supabase
+      .from('team_members')
+      .select('id, owner_user_id, email, status, invitation_expires_at, role')
+      .eq('invitation_token', token)
+      .maybeSingle()
+
+    if (!invite) return new Response(JSON.stringify({ error: 'Invitation introuvable.' }), { status: 404, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    if (invite.status === 'active') return new Response(JSON.stringify({ error: 'Invitation déjà acceptée.' }), { status: 409, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    if (invite.status === 'removed') return new Response(JSON.stringify({ error: 'Invitation annulée.' }), { status: 410, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    if (new Date(invite.invitation_expires_at) < new Date()) {
+      return new Response(JSON.stringify({ error: 'Invitation expirée.' }), { status: 410, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    }
+
+    const { error: updateError } = await supabase.from('team_members').update({
+      member_user_id: user.id,
+      status: 'active',
+      joined_at: new Date().toISOString(),
+    }).eq('id', invite.id)
+
+    if (updateError) {
+      console.error('[accept] update error:', updateError)
+      return new Response(JSON.stringify({ error: "Erreur lors de l'activation." }), { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } })
+    }
+
+    await supabase.from('team_activity_log').insert({
+      owner_user_id: invite.owner_user_id,
+      member_user_id: user.id,
+      member_email: invite.email,
+      action: 'viewed_dashboard',
+    }).catch(e => console.error('[accept] log error:', e.message))
+
+    await logEvent({
+      supabase, eventType: 'team_member_joined', userId: invite.owner_user_id,
+      resourceType: 'team_member', resourceId: invite.id,
+      metadata: { member_id: user.id, member_email: invite.email, role: invite.role }, severity: 'info',
     })
+
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
   }
 
-  if (invitation.status === 'revoked') {
-    return new Response(JSON.stringify({ error: 'Cette invitation a été annulée. Demandez à votre patron de vous renvoyer une invitation.' }), {
-      status: 410, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
-
-  if (invitation.status === 'accepted' || invitation.is_active) {
-    return new Response(JSON.stringify({ error: 'Ce profil est déjà activé.' }), {
-      status: 409, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
-
-  if (new Date(invitation.expires_at) < new Date()) {
-    await supabase.from('team_invitations').update({ status: 'expired' }).eq('id', invitation.id)
-    return new Response(JSON.stringify({ error: 'Cette invitation a expiré. Demandez à votre patron de vous renvoyer une invitation.' }), {
-      status: 410, headers: { ...CORS, 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Récupérer les infos de l'entreprise (patron)
-  const { data: ownerProfile } = await supabase
-    .from('profiles')
-    .select('company_name, company_type')
-    .eq('id', invitation.owner_id)
-    .single()
-
-  return new Response(JSON.stringify({
-    ok: true,
-    invitation: {
-      id: invitation.id,
-      first_name: invitation.first_name,
-      phone: invitation.phone,
-      suggested_skills: invitation.suggested_skills,
-    },
-    company: {
-      name: ownerProfile?.company_name || 'votre entreprise',
-      type: ownerProfile?.company_type || '',
-    },
-  }), {
-    headers: { ...CORS, 'Content-Type': 'application/json' },
-  })
+  return new Response('Method not allowed', { status: 405, headers: CORS })
 })

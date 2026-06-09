@@ -7,6 +7,7 @@ import AdminPage from '@/pages/AdminPage'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
+import JoinDashboard from '@/pages/JoinDashboard'
 import ResumePage from '@/pages/ResumePage'
 import { supabase } from '@/lib/supabase'
 
@@ -96,6 +97,7 @@ function AppContent() {
 export default function App() {
   if (window.location.pathname === '/accept') return <AcceptQuotePage />
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
+  if (window.location.pathname === '/join' && new URLSearchParams(window.location.search).has('token')) return <JoinDashboard />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
   if (window.location.pathname.startsWith('/r/')) return <ResumePage />
   if (window.location.pathname === '/admin') return <AuthProvider><AdminGuard /></AuthProvider>

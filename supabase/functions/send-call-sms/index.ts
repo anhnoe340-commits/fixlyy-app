@@ -563,6 +563,32 @@ serve(async (req) => {
         userId: profile.id, resourceType: 'call', resourceId: callId,
         metadata: { caller: callerNumber, duration_sec: durationSec }, severity: 'info' })
 
+      // ── Relay SMS recap aux membres actifs avec receive_sms_recap = true ────
+      try {
+        const { data: teamMembers } = await supabase
+          .from('team_members')
+          .select('member_user_id')
+          .eq('owner_user_id', profile.id)
+          .eq('status', 'active')
+          .eq('receive_sms_recap', true)
+        if (teamMembers && teamMembers.length > 0) {
+          const memberIds = teamMembers.map(m => m.member_user_id).filter(Boolean)
+          if (memberIds.length > 0) {
+            const { data: memberProfiles } = await supabase
+              .from('profiles').select('phone').in('id', memberIds)
+            for (const mp of (memberProfiles || [])) {
+              if (mp.phone && /^\+[1-9]\d{7,14}$/.test(mp.phone)) {
+                await sendSms(profile.twilio_number, mp.phone, smsText).catch(e =>
+                  console.error('SMS relay member failed:', e.message)
+                )
+              }
+            }
+          }
+        }
+      } catch (e: any) {
+        console.error('SMS team relay failed (non-blocking):', e.message)
+      }
+
       // ── SMS confirmation au client (appelant) ── GSM-7, 1 segment max ──────
       const isValidCaller = callerNumber && callerNumber !== 'Inconnu' && /^\+[1-9]\d{7,14}$/.test(callerNumber)
       if (isValidCaller) {

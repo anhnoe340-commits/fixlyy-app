@@ -43,6 +43,7 @@ interface ProfileContextType {
   loading: boolean
   updateProfile: (updates: Partial<Profile>) => Promise<void>
   uploadLogo: (file: File) => Promise<string | null>
+  memberRole: 'admin' | 'member' | null  // null = owner, 'admin'/'member' = team member
 }
 
 const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
@@ -85,14 +86,38 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [memberRole, setMemberRole] = useState<'admin' | 'member' | null>(null)
 
   useEffect(() => {
-    if (!user) { setProfile(null); setLoading(false); return }
+    if (!user) { setProfile(null); setMemberRole(null); setLoading(false); return }
     loadProfile()
   }, [user])
 
   async function loadProfile() {
     setLoading(true)
+
+    // Vérifier si l'utilisateur est membre d'une équipe
+    const { data: membership } = await supabase
+      .from('team_members')
+      .select('owner_user_id, role')
+      .eq('member_user_id', user!.id)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (membership) {
+      // Charger le profil du propriétaire du workspace
+      const { data: ownerProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', membership.owner_user_id)
+        .single()
+      setProfile(ownerProfile as Profile)
+      setMemberRole(membership.role as 'admin' | 'member')
+      setLoading(false)
+      return
+    }
+
+    // Utilisateur propriétaire
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -100,27 +125,29 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       .single()
 
     if (error || !data) {
-      // Create profile on first login
       const newProfile = { ...DEFAULT_PROFILE, id: user!.id, email: user!.email! }
       const { data: created } = await supabase.from('profiles').insert(newProfile).select().single()
       setProfile(created as Profile)
     } else {
       setProfile(data as Profile)
     }
+    setMemberRole(null)
     setLoading(false)
   }
 
   async function updateProfile(updates: Partial<Profile>) {
     if (!user || !profile) return
+    if (memberRole === 'member') return  // membres simples ne peuvent pas modifier le profil
     const updated = { ...profile, ...updates }
     setProfile(updated)
-    await supabase.from('profiles').update(updates).eq('id', user.id)
+    await supabase.from('profiles').update(updates).eq('id', profile.id)  // profile.id = owner's id
   }
 
   async function uploadLogo(file: File): Promise<string | null> {
-    if (!user) return null
+    if (!user || !profile) return null
+    if (memberRole === 'member') return null
     const ext = file.name.split('.').pop()
-    const path = `${user.id}/logo.${ext}`
+    const path = `${profile.id}/logo.${ext}`
     const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true })
     if (error) return null
     const { data } = supabase.storage.from('logos').getPublicUrl(path)
@@ -129,7 +156,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <ProfileContext.Provider value={{ profile, loading, updateProfile, uploadLogo }}>
+    <ProfileContext.Provider value={{ profile, loading, updateProfile, uploadLogo, memberRole }}>
       {children}
     </ProfileContext.Provider>
   )

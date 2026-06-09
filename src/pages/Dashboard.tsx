@@ -72,7 +72,7 @@ async function syncAssistant() {
 
 export default function Dashboard() {
   const { user, signOut } = useAuth()
-  const { profile, uploadLogo } = useProfile()
+  const { profile, uploadLogo, memberRole } = useProfile()
   const userPlan = resolvePlanKey(profile?.subscription_plan)
   const [page, setPage] = useState<Page>('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -135,35 +135,41 @@ export default function Dashboard() {
             <NavItem icon={<SmsIcon />} label="Messages" active={page === 'messages'} onClick={() => setPage('messages')} accent={accent} />
           </div>
 
-          {/* Mia */}
-          <div className="px-2 mt-5 space-y-0.5">
-            <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">{profile.assistant_name || 'Mia'}</p>
-            <NavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
-            <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} />
-            <NavItem icon={<PhoneInIcon />} label="Raisons d'appel" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} />
-            <NavItem icon={<PriceTagIcon />} label="Mes tarifs" active={page === 'pricing'} onClick={() => setPage('pricing')} accent={accent} />
-            <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} />
-          </div>
+          {/* Mia — masqué pour les membres simples */}
+          {memberRole !== 'member' && (
+            <div className="px-2 mt-5 space-y-0.5">
+              <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">{profile.assistant_name || 'Mia'}</p>
+              <NavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
+              <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} />
+              <NavItem icon={<PhoneInIcon />} label="Raisons d'appel" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} />
+              <NavItem icon={<PriceTagIcon />} label="Mes tarifs" active={page === 'pricing'} onClick={() => setPage('pricing')} accent={accent} />
+              <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} />
+            </div>
+          )}
 
-          {/* Compte */}
-          <div className="px-2 mt-5 space-y-0.5">
-            <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">Compte</p>
-            <NavItem icon={<BuildingIcon />} label="Entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} accent={accent} />
-            <NavItem icon={<TeamIcon />} label="Employés" active={page === 'employees'} onClick={() => setPage('employees')} accent={accent} />
-            <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} />
-            <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} />
-          </div>
+          {/* Compte — masqué pour les membres simples */}
+          {memberRole !== 'member' && (
+            <div className="px-2 mt-5 space-y-0.5">
+              <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-600 uppercase tracking-[0.12em]">Compte</p>
+              <NavItem icon={<BuildingIcon />} label="Entreprise" active={page === 'business-details'} onClick={() => setPage('business-details')} accent={accent} />
+              <NavItem icon={<TeamIcon />} label="Équipe" active={page === 'employees'} onClick={() => setPage('employees')} accent={accent} />
+              <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} />
+              <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} />
+            </div>
+          )}
 
-          {/* Avancé — replié par défaut */}
-          <div className="px-2 mt-5">
-            <SidebarGroup label="Avancé" defaultOpen={['outbound-reasons','call-transfer','post-processing','webhooks','timezone'].includes(page)}>
-              <NavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} accent={accent} />
-              <NavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} accent={accent} />
-              <NavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} accent={accent} />
-              <NavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} accent={accent} />
-              <NavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} accent={accent} />
-            </SidebarGroup>
-          </div>
+          {/* Avancé — masqué pour les membres */}
+          {memberRole !== 'member' && (
+            <div className="px-2 mt-5">
+              <SidebarGroup label="Avancé" defaultOpen={['outbound-reasons','call-transfer','post-processing','webhooks','timezone'].includes(page)}>
+                <NavItem icon={<PhoneOutIcon />} label="Raisons sortantes" active={page === 'outbound-reasons'} onClick={() => setPage('outbound-reasons')} accent={accent} />
+                <NavItem icon={<TransferIcon />} label="Transfert d'appel" active={page === 'call-transfer'} onClick={() => setPage('call-transfer')} accent={accent} />
+                <NavItem icon={<MailIcon />} label="Post-traitement" active={page === 'post-processing'} onClick={() => setPage('post-processing')} accent={accent} />
+                <NavItem icon={<WebhookIcon />} label="Webhooks" active={page === 'webhooks'} onClick={() => setPage('webhooks')} accent={accent} />
+                <NavItem icon={<GlobeIcon />} label="Fuseau horaire" active={page === 'timezone'} onClick={() => setPage('timezone')} accent={accent} />
+              </SidebarGroup>
+            </div>
+          )}
         </nav>
 
           {/* Admin — visible uniquement pour Noé */}
@@ -273,7 +279,13 @@ export default function Dashboard() {
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
           {page === 'call-transfer' && <CallTransferPage accent={accent} />}
           {page === 'post-processing' && <PostProcessingPage accent={accent} onUpgrade={() => setPage('subscription')} />}
-          {page === 'employees' && <EmployeesPage accent={accent} />}
+          {page === 'employees' && (
+            memberRole === 'member'
+              ? <UpgradeWall feature="Équipe" requiredPlan="administrateur" accent={accent} />
+              : canUseFeature(userPlan, 'team')
+                ? <TeamPage accent={accent} />
+                : <UpgradeWall feature="Gestion d'équipe" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
+          )}
           {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
           {page === 'hours' && <HoursPage accent={accent} />}
           {page === 'assistant' && <AssistantPage accent={accent} />}
@@ -300,7 +312,7 @@ const PAGE_LABELS: Record<Page, string> = {
   'outbound-reasons': "Raisons d'appel sortantes",
   'call-transfer': "Transfert d'appel",
   'post-processing': 'Post-traitement',
-  employees: 'Employés',
+  employees: 'Équipe',
   'business-details': "Détails de l'entreprise",
   hours: "Horaires d'ouverture",
   assistant: "Paramètres de l'assistante",
@@ -350,26 +362,27 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !profile) return
+    const ownerId = profile.id
 
     const loadCalls = () =>
-      supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(100)
+      supabase.from('calls').select('*').eq('artisan_id', ownerId).order('created_at', { ascending: false }).limit(100)
         .then(({ data }) => { setCalls(data || []); setLoading(false) })
 
     loadCalls()
 
     const channel = supabase
       .channel('today-calls')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${ownerId}` },
         (payload) => { setCalls(prev => [payload.new as CallRow, ...prev]) }
       )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls', filter: `artisan_id=eq.${ownerId}` },
         (payload) => { setCalls(prev => prev.map(c => c.id === (payload.new as CallRow).id ? payload.new as CallRow : c)) }
       )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [user])
+  }, [user, profile?.id])
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir'
@@ -750,19 +763,20 @@ function CallsPage({ accent }: { accent: string }) {
   const [selectedCall, setSelectedCall] = useState<CallRow | null>(null)
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !profile) return
+    const ownerId = profile.id
     setLoading(true)
-    supabase.from('calls').select('*').eq('artisan_id', user.id).order('created_at', { ascending: false }).limit(50)
+    supabase.from('calls').select('*').eq('artisan_id', ownerId).order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => { setCalls(data || []); setLoading(false) })
 
     const sub = supabase.channel('calls-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${user.id}` },
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls', filter: `artisan_id=eq.${ownerId}` },
         payload => { setCalls(prev => [payload.new as CallRow, ...prev]) }
       )
       .subscribe()
 
     return () => { supabase.removeChannel(sub) }
-  }, [user])
+  }, [user, profile?.id])
 
   const updateStatus = async (id: string, status: string) => {
     setCalls(prev => prev.map(c => c.id === id ? { ...c, status } : c))
@@ -1028,17 +1042,18 @@ function PricingPage({ accent }: { accent: string }) {
   const [editAmount, setEditAmount] = useState('')
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !profile) return
+    const ownerId = profile.id
     supabase.from('service_pricing')
       .select('id, label, price_type, price_amount, position')
-      .eq('user_id', user.id)
+      .eq('user_id', ownerId)
       .order('position')
       .then(async ({ data }) => {
         const rows = (data as ServiceRow[]) || []
         if (rows.length === 0 && profile?.company_type) {
           const defaults = getDefaultServices(profile.company_type)
           if (defaults.length > 0) {
-            const toInsert = defaults.map(d => ({ ...d, user_id: user.id }))
+            const toInsert = defaults.map(d => ({ ...d, user_id: ownerId }))
             const { data: inserted } = await supabase.from('service_pricing').insert(toInsert).select('id, label, price_type, price_amount, position')
             setServices((inserted as ServiceRow[]) || [])
           } else {
@@ -1052,11 +1067,11 @@ function PricingPage({ accent }: { accent: string }) {
   }, [user])
 
   const handleAdd = async () => {
-    if (!user || !newLabel.trim()) return
+    if (!user || !profile || !newLabel.trim()) return
     setAdding(true)
     const newPos = services.length
     const { data, error } = await supabase.from('service_pricing').insert({
-      user_id: user.id, label: newLabel.trim(), price_type: newType,
+      user_id: profile.id, label: newLabel.trim(), price_type: newType,
       price_amount: newType !== 'quote' && newAmount ? parseInt(newAmount) : null,
       position: newPos,
     }).select('id, label, price_type, price_amount, position').single()
@@ -1337,6 +1352,7 @@ function parseVcf(text: string): { name: string; phone: string | null; email: st
 
 function ContactsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
+  const { profile } = useProfile()
   const [contacts, setContacts] = useState<ContactRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -1347,10 +1363,10 @@ function ContactsPage({ accent }: { accent: string }) {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
   useEffect(() => {
-    if (!user) return
+    if (!user || !profile) return
     Promise.all([
       supabase.rpc('get_contacts'),
-      supabase.from('calls').select('caller_phone, summary, created_at').eq('artisan_id', user.id).order('created_at', { ascending: false })
+      supabase.from('calls').select('caller_phone, summary, created_at').eq('artisan_id', profile.id).order('created_at', { ascending: false })
     ]).then(([{ data: contactsData }, { data: callsData }]) => {
       const cts = (contactsData as ContactRow[]) || []
       const calls = callsData || []
@@ -2801,6 +2817,239 @@ function EmployeesPage({ accent }: { accent: string }) {
           </div>
         )}
       </Card>
+    </div>
+  )
+}
+
+// ── Team Page (dashboard access sharing) ─────────────────────────────────────
+type TeamMemberRow = {
+  id: string
+  email: string
+  role: 'admin' | 'member'
+  status: 'pending' | 'active' | 'removed'
+  receive_sms_recap: boolean
+  joined_at: string | null
+  invited_at: string
+  invitation_expires_at: string
+}
+
+type ActivityLogRow = {
+  id: string
+  member_email: string
+  action: string
+  entity_type: string | null
+  created_at: string
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  viewed_dashboard: 'A accédé au dashboard',
+  viewed_call: 'A consulté un appel',
+  edited_contact: 'A modifié un contact',
+  viewed_contacts: 'A consulté les contacts',
+  viewed_stats: 'A consulté les statistiques',
+}
+
+function TeamPage({ accent }: { accent: string }) {
+  const { user } = useAuth()
+  const { profile } = useProfile()
+  const [members, setMembers] = useState<TeamMemberRow[]>([])
+  const [logs, setLogs] = useState<ActivityLogRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member')
+  const [inviting, setInviting] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const planStr = (profile?.subscription_plan ?? '').toLowerCase()
+  const memberLimit = planStr.includes('max') || planStr.includes('team') || planStr.includes('equipe') ? 10 : 3
+
+  const load = async () => {
+    if (!user) return
+    setLoading(true)
+    const [{ data: mData }, { data: lData }] = await Promise.all([
+      supabase.from('team_members').select('id,email,role,status,receive_sms_recap,joined_at,invited_at,invitation_expires_at')
+        .eq('owner_user_id', user.id).neq('status', 'removed').order('invited_at', { ascending: false }),
+      supabase.from('team_activity_log').select('id,member_email,action,entity_type,created_at')
+        .eq('owner_user_id', user.id).order('created_at', { ascending: false }).limit(20),
+    ])
+    setMembers((mData as TeamMemberRow[]) ?? [])
+    setLogs((lData as ActivityLogRow[]) ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    load()
+    const ch = supabase.channel('team-members-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members', filter: `owner_user_id=eq.${user?.id}` }, load)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [user?.id])
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3500) }
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return
+    setInviting(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) { setInviting(false); return }
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-team-member`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+    })
+    const d = await res.json()
+    if (!res.ok) { showToast(`Erreur : ${d.error || "Invitation non envoyée"}`); setInviting(false); return }
+    showToast(`Invitation envoyée à ${inviteEmail.trim()}`)
+    setInviteEmail('')
+    setTimeout(load, 800)
+    setInviting(false)
+  }
+
+  const handleToggleSms = async (id: string, current: boolean) => {
+    setMembers(prev => prev.map(m => m.id === id ? { ...m, receive_sms_recap: !current } : m))
+    await supabase.from('team_members').update({ receive_sms_recap: !current }).eq('id', id)
+  }
+
+  const handleRemove = async (id: string, email: string) => {
+    if (!confirm(`Retirer ${email} de l'équipe ?`)) return
+    await supabase.from('team_members').update({ status: 'removed' }).eq('id', id)
+    setMembers(prev => prev.filter(m => m.id !== id))
+    showToast(`${email} retiré(e) de l'équipe`)
+  }
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' })
+  const active = members.filter(m => m.status === 'active')
+  const pending = members.filter(m => m.status === 'pending')
+  const atLimit = (active.length + pending.length) >= memberLimit
+
+  return (
+    <div className="flex flex-col gap-4">
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg z-50">{toast}</div>
+      )}
+
+      <SettingsHeader section="Compte" title="Équipe" />
+
+      {/* Section A — Membres actifs et en attente */}
+      <Card>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-700">Accès dashboard</p>
+          <span className="text-xs text-gray-400">{active.length + pending.length}/{memberLimit} membres</span>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${accent}40`, borderTopColor: accent }} />
+          </div>
+        ) : members.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <p className="text-sm text-gray-400">Aucun membre invité</p>
+            <p className="text-xs text-gray-300 mt-1">Invitez votre comptable, assistant(e) ou associé(e) ci-dessous.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-50">
+            {[...active, ...pending].map(m => (
+              <div key={m.id} className="flex items-center gap-3 py-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                  style={{ background: m.status === 'active' ? accent + '15' : '#FFF7ED', color: m.status === 'active' ? accent : '#F97316' }}>
+                  {m.email[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{m.email}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${m.role === 'admin' ? 'bg-blue-50 text-blue-500' : 'bg-gray-50 text-gray-400'}`}>
+                      {m.role === 'admin' ? 'Admin' : 'Membre'}
+                    </span>
+                    {m.status === 'active' && m.joined_at && (
+                      <span className="text-[10px] text-gray-300">Rejoint le {fmtDate(m.joined_at)}</span>
+                    )}
+                    {m.status === 'pending' && (
+                      <span className="text-[10px] text-orange-400">Invitation en attente</span>
+                    )}
+                  </div>
+                </div>
+                {/* Toggle SMS récap */}
+                <button
+                  onClick={() => handleToggleSms(m.id, m.receive_sms_recap)}
+                  title={m.receive_sms_recap ? 'Désactiver le SMS récap' : 'Activer le SMS récap'}
+                  className={`w-8 h-4 rounded-full transition-colors relative flex-shrink-0 ${m.receive_sms_recap ? 'bg-green-400' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${m.receive_sms_recap ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </button>
+                <span className="text-[10px] text-gray-300 flex-shrink-0 hidden sm:block">SMS</span>
+                <button
+                  onClick={() => handleRemove(m.id, m.email)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Section B — Inviter un membre */}
+      <Card>
+        <p className="text-sm font-semibold text-gray-700 mb-3">Inviter un membre</p>
+        {atLimit && (
+          <p className="text-xs text-orange-500 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 mb-3">
+            Limite de {memberLimit} membres atteinte.
+          </p>
+        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} type="email"
+            placeholder="email@exemple.com"
+            disabled={atLimit}
+            onKeyDown={e => e.key === 'Enter' && handleInvite()}
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-50"
+          />
+          <select
+            value={inviteRole} onChange={e => setInviteRole(e.target.value as 'admin' | 'member')}
+            disabled={atLimit}
+            className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:opacity-50 bg-white"
+          >
+            <option value="member">Membre</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button
+            onClick={handleInvite} disabled={inviting || atLimit || !inviteEmail.trim()}
+            className="flex items-center justify-center gap-1.5 text-sm font-semibold px-4 py-2.5 rounded-xl text-white disabled:opacity-40 transition-opacity"
+            style={{ background: accent }}
+          >
+            {inviting && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            Inviter
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-300 mt-2">
+          <strong>Admin</strong> — accès complet en lecture et modification.
+          &nbsp;·&nbsp;<strong>Membre</strong> — accès lectures seules (appels, contacts, stats).
+        </p>
+      </Card>
+
+      {/* Section C — Journal d'activité */}
+      {logs.length > 0 && (
+        <Card>
+          <p className="text-sm font-semibold text-gray-700 mb-3">Journal d'activité</p>
+          <div className="flex flex-col gap-1.5">
+            {logs.map(l => (
+              <div key={l.id} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-0">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-shrink-0 mt-px" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-gray-600 font-medium">{l.member_email}</span>
+                  <span className="text-xs text-gray-400 ml-1.5">{ACTION_LABELS[l.action] || l.action}</span>
+                </div>
+                <span className="text-[10px] text-gray-300 flex-shrink-0">
+                  {new Date(l.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
@@ -4538,6 +4787,7 @@ function AgendaPage({ accent, onGoToIntegrations }: { accent: string; onGoToInte
 // ── Stats Page ────────────────────────────────────────────────────────────────
 function StatsPage({ accent }: { accent: string }) {
   const { user } = useAuth()
+  const { profile } = useProfile()
   const [calls, setCalls] = useState<{
     created_at: string
     status: string
@@ -4552,14 +4802,15 @@ function StatsPage({ accent }: { accent: string }) {
   const [period, setPeriod] = useState<'7d' | '30d' | 'all'>('30d')
 
   useEffect(() => {
-    if (!user) return
+    if (!user || !profile) return
+    const ownerId = profile.id
     Promise.all([
       supabase.from('calls')
         .select('created_at, status, duration_seconds, conversation_quality_score, client_tone, reason')
-        .eq('artisan_id', user.id)
+        .eq('artisan_id', ownerId)
         .order('created_at', { ascending: false }),
-      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
-      supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('artisan_id', user.id),
+      supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', ownerId),
+      supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('artisan_id', ownerId),
     ]).then(([{ data: callsData }, { count: cCount }, { count: aCount }]) => {
       setCalls(callsData || [])
       setContacts(cCount || 0)
