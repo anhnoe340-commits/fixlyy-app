@@ -20,6 +20,49 @@ const PRICE_PLAN_MAP: Record<string, { plan: string; member_limit: number }> = {
   'price_1TgNhOBKWw2Sqpyku7Rk2ioO': { plan: 'max',  member_limit: 10 },
 }
 
+function getDefaultServicesForTrade(trade: string): { label: string; price_type: string; price_amount: number | null }[] {
+  const t = trade.toLowerCase()
+  const isPlombier    = t.includes('plomb')
+  const isElectricien = t.includes('élect') || t.includes('elect')
+  const isSerrurier   = t.includes('serrur')
+  const isChauffagiste = t.includes('chauf') || t.includes('clim')
+  const isMenuisier   = t.includes('menuis') || t.includes('charpen')
+
+  const list: [string, string, number | null][] = isPlombier ? [
+    ['Débouchage évier', 'fixed', 80], ['Débouchage WC', 'fixed', 90], ['Fuite robinet', 'fixed', 90],
+    ['Fuite tuyauterie', 'from', 120], ['Chauffe-eau panne', 'quote', null], ['Chauffe-eau remplacement', 'from', 800],
+    ["Fuite chasse d'eau", 'fixed', 85], ['Installation lavabo', 'from', 150], ['Installation douche', 'from', 400],
+    ['Détartrage', 'fixed', 120], ['Recherche de fuite', 'from', 150], ['Raccordement électroménager', 'fixed', 80],
+    ['Installation baignoire', 'from', 500], ["Dégât des eaux", 'quote', null], ['Urgence nuit/week-end', 'from', 150],
+  ] : isElectricien ? [
+    ['Panne générale', 'fixed', 90], ['Remplacement tableau électrique', 'from', 800], ['Ajout prise électrique', 'fixed', 80],
+    ['Ajout interrupteur', 'fixed', 75], ['Installation luminaire', 'fixed', 85], ['Mise aux normes', 'quote', null],
+    ['Diagnostic électrique', 'fixed', 90], ['Installation VMC', 'from', 300], ['Câblage cuisine', 'from', 200],
+    ['Borne recharge véhicule', 'from', 900], ['Installation store électrique', 'from', 200], ['Urgence panne', 'from', 120],
+    ['Révision tableau', 'fixed', 150], ['Installation portail électrique', 'from', 500], ['Domotique', 'quote', null],
+  ] : isSerrurier ? [
+    ['Ouverture porte claquée', 'from', 90], ['Ouverture porte blindée', 'from', 150], ['Changement serrure', 'from', 150],
+    ['Installation serrure 3 points', 'from', 250], ['Reproduction clé', 'fixed', 25], ['Installation verrou', 'fixed', 80],
+    ['Blindage porte', 'from', 600], ['Ouverture coffre', 'from', 200], ['Urgence nuit', 'from', 150],
+    ['Installation digicode', 'from', 200], ['Installation interphone', 'from', 250], ['Remplacement cylindre', 'from', 90],
+    ['Installation judas', 'fixed', 80], ['Sécurisation après effraction', 'quote', null], ['Devis sécurité', 'quote', null],
+  ] : isChauffagiste ? [
+    ['Panne chaudière', 'from', 90], ['Entretien chaudière', 'fixed', 120], ['Remplacement chaudière', 'from', 2000],
+    ['Installation radiateur', 'from', 200], ['Purge radiateur', 'fixed', 80], ['Fuite chauffage', 'from', 100],
+    ['Installation plancher chauffant', 'quote', null], ['Dépannage climatisation', 'from', 90], ['Installation climatisation', 'from', 800],
+    ['Entretien climatisation', 'fixed', 100], ['Installation pompe à chaleur', 'from', 5000], ['Remplacement vanne', 'fixed', 120],
+    ['Diagnostic chauffage', 'fixed', 90], ['Installation thermostat', 'from', 150], ['Urgence panne chauffage', 'from', 120],
+  ] : isMenuisier ? [
+    ['Pose de porte intérieure', 'from', 200], ["Pose de porte d'entrée", 'from', 400], ['Installation fenêtre', 'from', 300],
+    ['Installation double vitrage', 'from', 250], ['Pose de parquet', 'from', 25], ['Pose de carrelage', 'from', 30],
+    ['Installation cuisine', 'from', 1500], ['Installation dressing', 'from', 800], ['Réparation meuble', 'from', 80],
+    ['Pose de volet', 'from', 200], ['Installation escalier', 'from', 2000], ['Pose de lambris', 'from', 20],
+    ['Réparation porte', 'fixed', 90], ['Installation verrière', 'from', 1500], ['Devis travaux menuiserie', 'quote', null],
+  ] : []
+
+  return list.map(([label, price_type, price_amount]) => ({ label, price_type, price_amount }))
+}
+
 async function callProvision(uid: string): Promise<void> {
   const res = await fetch(`${SB_URL}/functions/v1/assign-number-from-pool`, {
     method: 'POST',
@@ -61,14 +104,28 @@ serve(async (req) => {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
       const uid = session.metadata?.supabase_uid;
+      const trade = session.metadata?.trade ?? ''
 
       if (uid) {
         await supabase.from('profiles').upsert({
           id: uid,
           stripe_customer_id: session.customer as string,
           ...(session.metadata?.company ? { company_name: session.metadata.company } : {}),
-          ...(session.metadata?.trade ? { company_type: session.metadata.trade } : {}),
+          ...(trade ? { company_type: trade } : {}),
         }, { onConflict: 'id', ignoreDuplicates: false })
+
+        // Pré-remplissage des prestations par défaut selon le métier
+        if (trade) {
+          const defaults = getDefaultServicesForTrade(trade)
+          if (defaults.length > 0) {
+            const { count } = await supabase.from('service_pricing').select('id', { count: 'exact', head: true }).eq('user_id', uid)
+            if (!count || count === 0) {
+              await supabase.from('service_pricing').insert(
+                defaults.map((d, i) => ({ ...d, user_id: uid, position: i, is_default: true }))
+              )
+            }
+          }
+        }
 
         callProvision(uid).catch(err => handleProvisioningFailure(uid, err.message))
       }

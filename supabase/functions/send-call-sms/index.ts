@@ -332,6 +332,55 @@ serve(async (req) => {
         } catch { /* non-bloquant */ }
       }
 
+      // Injection dynamique des tarifs artisan
+      let pricingBlock = ''
+      if (artisan?.id) {
+        try {
+          const [{ data: pricingRows }, { data: pricingProfile }] = await Promise.all([
+            supabase.from('service_pricing')
+              .select('label, price_type, price_amount')
+              .eq('user_id', (artisan as any).id)
+              .order('position')
+              .limit(25),
+            supabase.from('profiles')
+              .select('pricing_display, pricing_tax, intervention_hours, intervention_zone, intervention_delay, travel_fee')
+              .eq('id', (artisan as any).id)
+              .single(),
+          ])
+
+          if (pricingRows && pricingRows.length > 0 && pricingProfile) {
+            const taxLabel = pricingProfile.pricing_tax === 'ht' ? 'HT' : 'TTC'
+            const isExplicit = pricingProfile.pricing_display !== 'quote_only'
+
+            const priceLines = (pricingRows as { label: string; price_type: string; price_amount: number | null }[])
+              .map(r => {
+                if (r.price_type === 'quote') return `- ${r.label} : sur devis`
+                if (!r.price_amount) return `- ${r.label}`
+                const pfx = r.price_type === 'from' ? 'à partir de ' : ''
+                return `- ${r.label} : ${pfx}${r.price_amount}€ ${taxLabel}`
+              })
+              .join('\n')
+
+            const extras = [
+              pricingProfile.travel_fee && `Frais de déplacement : ${pricingProfile.travel_fee}€`,
+              pricingProfile.intervention_hours && `Horaires : ${pricingProfile.intervention_hours}`,
+              pricingProfile.intervention_zone && `Zone : ${pricingProfile.intervention_zone}`,
+              pricingProfile.intervention_delay && `Délai : ${pricingProfile.intervention_delay}`,
+            ].filter(Boolean).join('\n')
+
+            if (isExplicit) {
+              pricingBlock = `\n\n[TARIFS DE L'ARTISAN — à communiquer si demandé]\n${priceLines}\n${extras}\nSi le client demande un prix, donne-lui l'information exacte ci-dessus. Ne communique que les tarifs qui correspondent à sa demande.`
+            } else {
+              const minPrice = (pricingRows as { price_type: string; price_amount: number | null }[])
+                .filter(r => r.price_amount != null)
+                .reduce<number | null>((min, r) => (min === null || r.price_amount! < min) ? r.price_amount! : min, null)
+              const minStr = minPrice ? `à partir de ${minPrice}€` : ''
+              pricingBlock = `\n\n[TARIFS DE L'ARTISAN — usage interne uniquement]\n${priceLines}\n${extras}\nSi le client demande un prix, réponds : "L'artisan établira un devis précis sur place après évaluation.${minStr ? ` Les tarifs débutent ${minStr} pour ce type d'intervention.` : ''}" Ne communique pas les prix directement.`
+            }
+          }
+        } catch { /* non-bloquant */ }
+      }
+
       // Substitution des variables artisan dans le systemPrompt mis en cache
       let resolvedSystemPrompt: string | undefined
       const rawPrompt: string | null = (artisan as any)?.vapi_system_prompt ?? null
@@ -341,7 +390,7 @@ serve(async (req) => {
           .replaceAll('{{artisan_name}}', artisanName)
           .replaceAll('{{assistant_name}}', assistantName2)
           .replaceAll('{{company_name}}', artisanName)
-          + buildDateContext() + statusLine + planningBlock + reasonsBlock
+          + buildDateContext() + statusLine + planningBlock + reasonsBlock + pricingBlock
       }
 
       const responseBody: Record<string, unknown> = {
@@ -349,7 +398,7 @@ serve(async (req) => {
           ...(firstMessage ? { firstMessage } : {}),
           model: resolvedSystemPrompt
             ? { messages: [{ role: 'system', content: resolvedSystemPrompt }] }
-            : { systemPromptSuffix: buildDateContext() + statusLine + reasonsBlock },
+            : { systemPromptSuffix: buildDateContext() + statusLine + reasonsBlock + pricingBlock },
         },
       }
       if (assistantId) responseBody.assistantId = assistantId

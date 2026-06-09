@@ -45,7 +45,7 @@ type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
-  | 'subscription'
+  | 'subscription' | 'pricing'
 
 const BRAND = '#2850c8'
 
@@ -141,6 +141,7 @@ export default function Dashboard() {
             <NavItem icon={<BotIcon />} label="Mon assistante" active={page === 'assistant'} onClick={() => setPage('assistant')} accent={accent} />
             <NavItem icon={<MessageIcon />} label="Salutation" active={page === 'greeting'} onClick={() => setPage('greeting')} accent={accent} />
             <NavItem icon={<PhoneInIcon />} label="Raisons d'appel" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} />
+            <NavItem icon={<PriceTagIcon />} label="Mes tarifs" active={page === 'pricing'} onClick={() => setPage('pricing')} accent={accent} />
             <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} />
           </div>
 
@@ -264,6 +265,11 @@ export default function Dashboard() {
               ? <InboundReasonsPage accent={accent} reasonsLimit={getPlanLimit(userPlan, 'call_reasons_limit')} />
               : <UpgradeWall feature="Motifs d'appel" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
           )}
+          {page === 'pricing' && (
+            canUseFeature(userPlan, 'pricing')
+              ? <PricingPage accent={accent} />
+              : <UpgradeWall feature="Tarifs & informations d'intervention" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
+          )}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
           {page === 'call-transfer' && <CallTransferPage accent={accent} />}
           {page === 'post-processing' && <PostProcessingPage accent={accent} onUpgrade={() => setPage('subscription')} />}
@@ -302,6 +308,7 @@ const PAGE_LABELS: Record<Page, string> = {
   integrations: 'Intégrations',
   timezone: 'Fuseau horaire',
   subscription: 'Abonnement',
+  pricing: 'Mes tarifs',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
@@ -424,6 +431,36 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
           ))}
         </div>
       )}
+
+      {/* ── Bannière tarifs ── */}
+      {!profile?.pricing_configured && (() => {
+        const plan = resolvePlanKey(profile?.subscription_plan)
+        const hasPricing = canUseFeature(plan, 'pricing')
+        return (
+          <div className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 border ${hasPricing ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ background: hasPricing ? '#EFF6FF' : '#F3F4F6' }}>
+                <svg className="w-4 h-4" style={{ color: hasPricing ? '#3B82F6' : '#9CA3AF' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M7 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1-4l-3 3m0 0l-3-3m3 3V4" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}/>
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-gray-800 truncate">
+                  {hasPricing ? 'Configurez vos tarifs' : 'Tarifs disponibles avec Pro'}
+                </p>
+                <p className="text-[11px] text-gray-500 truncate">
+                  {hasPricing ? 'Mia pourra répondre aux questions de prix de vos clients' : 'Mia répond aux questions de prix de vos clients'}
+                </p>
+              </div>
+            </div>
+            <button onClick={() => onNavigate(hasPricing ? 'pricing' : 'subscription')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl flex-shrink-0 text-white"
+              style={{ background: hasPricing ? '#3B82F6' : '#6B7280' }}>
+              {hasPricing ? 'Configurer' : 'Passer au Pro'}
+            </button>
+          </div>
+        )
+      })()}
 
       {/* ── Urgent alert ── */}
       {urgentCalls.length > 0 && (
@@ -921,6 +958,327 @@ function CallsPage({ accent }: { accent: string }) {
           accent={accent}
         />
       )}
+    </div>
+  )
+}
+
+// ── Pricing Page ──────────────────────────────────────────────────────────────
+type ServiceRow = { id: string; label: string; price_type: 'fixed' | 'from' | 'quote'; price_amount: number | null; position: number }
+
+const PRICE_TYPE_LABELS: Record<string, string> = { fixed: 'Prix fixe', from: 'À partir de', quote: 'Devis' }
+
+function getDefaultServices(trade: string): Omit<ServiceRow, 'id'>[] {
+  const t = trade.toLowerCase()
+  const isPlombier    = t.includes('plomb')
+  const isElectricien = t.includes('élect') || t.includes('elect')
+  const isSerrurier   = t.includes('serrur')
+  const isChauffagiste = t.includes('chauf') || t.includes('clim')
+  const isMenuisier   = t.includes('menuis') || t.includes('charpen')
+
+  const list: [string, 'fixed' | 'from' | 'quote', number | null][] = isPlombier ? [
+    ['Débouchage évier', 'fixed', 80], ['Débouchage WC', 'fixed', 90], ['Fuite robinet', 'fixed', 90],
+    ['Fuite tuyauterie', 'from', 120], ['Chauffe-eau panne', 'quote', null], ['Chauffe-eau remplacement', 'from', 800],
+    ['Fuite chasse d\'eau', 'fixed', 85], ['Installation lavabo', 'from', 150], ['Installation douche', 'from', 400],
+    ['Détartrage', 'fixed', 120], ['Recherche de fuite', 'from', 150], ['Raccordement électroménager', 'fixed', 80],
+    ['Installation baignoire', 'from', 500], ['Dégât des eaux', 'quote', null], ['Urgence nuit/week-end', 'from', 150],
+  ] : isElectricien ? [
+    ['Panne générale', 'fixed', 90], ['Remplacement tableau électrique', 'from', 800], ['Ajout prise électrique', 'fixed', 80],
+    ['Ajout interrupteur', 'fixed', 75], ['Installation luminaire', 'fixed', 85], ['Mise aux normes', 'quote', null],
+    ['Diagnostic électrique', 'fixed', 90], ['Installation VMC', 'from', 300], ['Câblage cuisine', 'from', 200],
+    ['Borne recharge véhicule', 'from', 900], ['Installation store électrique', 'from', 200], ['Urgence panne', 'from', 120],
+    ['Révision tableau', 'fixed', 150], ['Installation portail électrique', 'from', 500], ['Domotique', 'quote', null],
+  ] : isSerrurier ? [
+    ['Ouverture porte claquée', 'from', 90], ['Ouverture porte blindée', 'from', 150], ['Changement serrure', 'from', 150],
+    ['Installation serrure 3 points', 'from', 250], ['Reproduction clé', 'fixed', 25], ['Installation verrou', 'fixed', 80],
+    ['Blindage porte', 'from', 600], ['Ouverture coffre', 'from', 200], ['Urgence nuit', 'from', 150],
+    ['Installation digicode', 'from', 200], ['Installation interphone', 'from', 250], ['Remplacement cylindre', 'from', 90],
+    ['Installation judas', 'fixed', 80], ['Sécurisation après effraction', 'quote', null], ['Devis sécurité', 'quote', null],
+  ] : isChauffagiste ? [
+    ['Panne chaudière', 'from', 90], ['Entretien chaudière', 'fixed', 120], ['Remplacement chaudière', 'from', 2000],
+    ['Installation radiateur', 'from', 200], ['Purge radiateur', 'fixed', 80], ['Fuite chauffage', 'from', 100],
+    ['Installation plancher chauffant', 'quote', null], ['Dépannage climatisation', 'from', 90], ['Installation climatisation', 'from', 800],
+    ['Entretien climatisation', 'fixed', 100], ['Installation pompe à chaleur', 'from', 5000], ['Remplacement vanne', 'fixed', 120],
+    ['Diagnostic chauffage', 'fixed', 90], ['Installation thermostat', 'from', 150], ['Urgence panne chauffage', 'from', 120],
+  ] : isMenuisier ? [
+    ['Pose de porte intérieure', 'from', 200], ['Pose de porte d\'entrée', 'from', 400], ['Installation fenêtre', 'from', 300],
+    ['Installation double vitrage', 'from', 250], ['Pose de parquet', 'from', 25], ['Pose de carrelage', 'from', 30],
+    ['Installation cuisine', 'from', 1500], ['Installation dressing', 'from', 800], ['Réparation meuble', 'from', 80],
+    ['Pose de volet', 'from', 200], ['Installation escalier', 'from', 2000], ['Pose de lambris', 'from', 20],
+    ['Réparation porte', 'fixed', 90], ['Installation verrière', 'from', 1500], ['Devis travaux menuiserie', 'quote', null],
+  ] : []
+
+  return list.map(([label, price_type, price_amount], i) => ({ label, price_type, price_amount, position: i, is_default: true } as Omit<ServiceRow, 'id'>))
+}
+
+function PricingPage({ accent }: { accent: string }) {
+  const { user } = useAuth()
+  const { profile, updateProfile } = useProfile()
+
+  const [services, setServices] = useState<ServiceRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+  const [newType, setNewType] = useState<'fixed' | 'from' | 'quote'>('fixed')
+  const [newAmount, setNewAmount] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editType, setEditType] = useState<'fixed' | 'from' | 'quote'>('fixed')
+  const [editAmount, setEditAmount] = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('service_pricing')
+      .select('id, label, price_type, price_amount, position')
+      .eq('user_id', user.id)
+      .order('position')
+      .then(async ({ data }) => {
+        const rows = (data as ServiceRow[]) || []
+        if (rows.length === 0 && profile?.company_type) {
+          const defaults = getDefaultServices(profile.company_type)
+          if (defaults.length > 0) {
+            const toInsert = defaults.map(d => ({ ...d, user_id: user.id }))
+            const { data: inserted } = await supabase.from('service_pricing').insert(toInsert).select('id, label, price_type, price_amount, position')
+            setServices((inserted as ServiceRow[]) || [])
+          } else {
+            setServices([])
+          }
+        } else {
+          setServices(rows)
+        }
+        setLoading(false)
+      })
+  }, [user])
+
+  const handleAdd = async () => {
+    if (!user || !newLabel.trim()) return
+    setAdding(true)
+    const newPos = services.length
+    const { data, error } = await supabase.from('service_pricing').insert({
+      user_id: user.id, label: newLabel.trim(), price_type: newType,
+      price_amount: newType !== 'quote' && newAmount ? parseInt(newAmount) : null,
+      position: newPos,
+    }).select('id, label, price_type, price_amount, position').single()
+    if (!error && data) {
+      setServices(prev => [...prev, data as ServiceRow])
+      setNewLabel(''); setNewAmount('')
+      if (!profile?.pricing_configured) updateProfile({ pricing_configured: true })
+    }
+    setAdding(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    setServices(prev => prev.filter(s => s.id !== id))
+    await supabase.from('service_pricing').delete().eq('id', id)
+  }
+
+  const handleStartEdit = (s: ServiceRow) => {
+    setEditId(s.id); setEditLabel(s.label); setEditType(s.price_type)
+    setEditAmount(s.price_amount != null ? String(s.price_amount) : '')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editId || !editLabel.trim()) return
+    const updated = { label: editLabel.trim(), price_type: editType, price_amount: editType !== 'quote' && editAmount ? parseInt(editAmount) : null }
+    await supabase.from('service_pricing').update(updated).eq('id', editId)
+    setServices(prev => prev.map(s => s.id === editId ? { ...s, ...updated } : s))
+    setEditId(null)
+  }
+
+  const handleSaveInfo = async () => {
+    setSaving(true)
+    await updateProfile({
+      intervention_hours: profile?.intervention_hours,
+      intervention_zone: profile?.intervention_zone,
+      intervention_delay: profile?.intervention_delay,
+      travel_fee: profile?.travel_fee,
+      pricing_display: profile?.pricing_display,
+      pricing_tax: profile?.pricing_tax,
+      pricing_configured: true,
+    })
+    setSaving(false); setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  if (!profile) return null
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Mia</p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Mes tarifs</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Enregistré</span>}
+          <button onClick={handleSaveInfo} disabled={saving}
+            className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+            style={{ background: accent }}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
+
+      {/* Section A — Prestations */}
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm font-semibold">Prestations</p>
+            <p className="text-xs text-gray-400 mt-0.5">{services.length} prestation{services.length !== 1 ? 's' : ''} configurée{services.length !== 1 ? 's' : ''} — Mia peut répondre aux questions de prix</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <div className="w-4 h-4 border-2 border-gray-200 border-t-transparent rounded-full animate-spin" style={{ borderTopColor: accent }} />
+          </div>
+        ) : (
+          <>
+            {services.length > 0 && (
+              <div className="border border-gray-100 rounded-xl overflow-hidden mb-4">
+                <div className="grid grid-cols-[1fr_120px_90px_32px] text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span>Prestation</span><span>Prix</span><span>Type</span><span />
+                </div>
+                {services.map(s => (
+                  <div key={s.id} className="grid grid-cols-[1fr_120px_90px_32px] items-center px-3 py-2.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50/50 transition-colors">
+                    {editId === s.id ? (
+                      <>
+                        <input value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(); if (e.key === 'Escape') setEditId(null) }}
+                          className="border border-blue-300 rounded px-2 py-1 text-xs outline-none mr-2" />
+                        <div>
+                          {editType !== 'quote' && (
+                            <input value={editAmount} onChange={e => setEditAmount(e.target.value)} type="number"
+                              placeholder="€" className="w-20 border border-blue-300 rounded px-2 py-1 text-xs outline-none" />
+                          )}
+                        </div>
+                        <select value={editType} onChange={e => setEditType(e.target.value as 'fixed' | 'from' | 'quote')}
+                          className="border border-blue-300 rounded px-1 py-1 text-xs outline-none">
+                          <option value="fixed">Fixe</option>
+                          <option value="from">À partir</option>
+                          <option value="quote">Devis</option>
+                        </select>
+                        <button onClick={handleSaveEdit} className="w-7 h-7 flex items-center justify-center rounded text-emerald-600 hover:bg-emerald-50">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span onClick={() => handleStartEdit(s)} className="text-[13px] text-gray-800 truncate cursor-pointer hover:text-blue-600 transition-colors pr-2">{s.label}</span>
+                        <span onClick={() => handleStartEdit(s)} className="text-[12px] text-gray-600 cursor-pointer hover:text-blue-600">
+                          {s.price_type === 'quote' ? <span className="text-gray-400">Devis</span>
+                            : s.price_amount ? (s.price_type === 'from' ? `À partir de ${s.price_amount}€` : `${s.price_amount}€`) : '—'}
+                        </span>
+                        <span onClick={() => handleStartEdit(s)} className="text-[11px] text-gray-400 cursor-pointer">{PRICE_TYPE_LABELS[s.price_type]}</span>
+                        <button onClick={() => handleDelete(s.id)} className="w-7 h-7 flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="Nom de la prestation…"
+                onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
+              <select value={newType} onChange={e => setNewType(e.target.value as 'fixed' | 'from' | 'quote')}
+                className="border border-gray-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-blue-400">
+                <option value="fixed">Prix fixe</option>
+                <option value="from">À partir de</option>
+                <option value="quote">Devis</option>
+              </select>
+              {newType !== 'quote' && (
+                <div className="flex items-center gap-1">
+                  <input value={newAmount} onChange={e => setNewAmount(e.target.value)} type="number" placeholder="Montant"
+                    className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
+                  <span className="text-sm text-gray-400">€</span>
+                </div>
+              )}
+              <button onClick={handleAdd} disabled={adding || !newLabel.trim()}
+                className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg text-white disabled:opacity-50 transition-opacity"
+                style={{ background: accent }}>
+                {adding ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>}
+                Ajouter
+              </button>
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* Section B — Informations d'intervention */}
+      <Card>
+        <p className="text-sm font-semibold mb-4">Informations d'intervention</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Horaires">
+            <input value={profile.intervention_hours || ''} onChange={e => updateProfile({ intervention_hours: e.target.value })}
+              placeholder="Lundi-Vendredi 8h-18h" className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+          </Field>
+          <Field label="Zone d'intervention">
+            <input value={profile.intervention_zone || ''} onChange={e => updateProfile({ intervention_zone: e.target.value })}
+              placeholder="Paris et Île-de-France" className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+          </Field>
+          <Field label="Délai d'intervention">
+            <input value={profile.intervention_delay || ''} onChange={e => updateProfile({ intervention_delay: e.target.value })}
+              placeholder="Sous 48h, urgences sous 4h" className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+          </Field>
+          <Field label="Frais de déplacement">
+            <div className="flex items-center gap-2">
+              <input value={profile.travel_fee || ''} onChange={e => updateProfile({ travel_fee: e.target.value })} type="number" placeholder="50"
+                className="flex-1 border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+              <span className="text-sm text-gray-400 flex-shrink-0">€</span>
+            </div>
+          </Field>
+        </div>
+      </Card>
+
+      {/* Section C — Paramètres d'affichage */}
+      <Card>
+        <p className="text-sm font-semibold mb-4">Comment Mia annonce les prix</p>
+        <div className="flex flex-col gap-3">
+          {([
+            { val: 'explicit', label: 'Mia annonce les prix explicitement', desc: 'Ex : "Le débouchage coûte 80€ TTC"' },
+            { val: 'quote_only', label: 'Mia oriente vers un devis', desc: 'Ex : "L\'artisan établira un devis sur place"' },
+          ] as { val: string; label: string; desc: string }[]).map(opt => (
+            <label key={opt.val} onClick={() => updateProfile({ pricing_display: opt.val })}
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${profile.pricing_display === opt.val ? 'border-blue-300 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'}`}>
+              <div className="mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center" style={{ borderColor: profile.pricing_display === opt.val ? accent : '#d1d5db' }}>
+                {profile.pricing_display === opt.val && <div className="w-2 h-2 rounded-full" style={{ background: accent }} />}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{opt.label}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-50">
+          <p className="text-sm font-semibold mb-3">Affichage des prix</p>
+          <div className="flex gap-3">
+            {([
+              { val: 'ttc', label: 'TTC', desc: 'Particuliers' },
+              { val: 'ht', label: 'HT', desc: 'Professionnels' },
+            ] as { val: string; label: string; desc: string }[]).map(opt => (
+              <label key={opt.val} onClick={() => updateProfile({ pricing_tax: opt.val })}
+                className={`flex-1 flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${profile.pricing_tax === opt.val ? 'border-blue-300 bg-blue-50/50' : 'border-gray-100 hover:border-gray-200'}`}>
+                <div className="w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center" style={{ borderColor: profile.pricing_tax === opt.val ? accent : '#d1d5db' }}>
+                  {profile.pricing_tax === opt.val && <div className="w-2 h-2 rounded-full" style={{ background: accent }} />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{opt.label}</p>
+                  <p className="text-[10px] text-gray-400">{opt.desc}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <p className="text-[11px] text-gray-400 text-center px-4">
+        Mia utilise ces informations pour répondre aux questions de vos clients pendant les appels.
+      </p>
     </div>
   )
 }
@@ -4699,4 +5057,5 @@ const ChartIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 12V7M6 
 const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.2"/><circle cx="5.5" cy="10" r="1" fill="currentColor"/><circle cx="8" cy="10" r="1" fill="currentColor"/><circle cx="10.5" cy="10" r="1" fill="currentColor"/></svg>
 const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10.5 11l3-3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+const PriceTagIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 2h6l5.5 5.5a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L2 8V2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor"/></svg>
 const SmsIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6l-3 2.5V11H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8" cy="6.5" r="0.8" fill="currentColor"/><circle cx="10.5" cy="6.5" r="0.8" fill="currentColor"/></svg>

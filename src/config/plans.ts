@@ -15,6 +15,7 @@ export const PLANS = {
     multilingual: false,
     monthly_reports: false,
     multi_numbers: false,
+    pricing: false,
   },
   pro: {
     name: 'Pro',
@@ -32,6 +33,7 @@ export const PLANS = {
     multilingual: false,
     monthly_reports: false,
     multi_numbers: false,
+    pricing: true,
   },
   max: {
     name: 'Max',
@@ -49,6 +51,7 @@ export const PLANS = {
     multilingual: true,
     monthly_reports: true,
     multi_numbers: true,
+    pricing: true,
   },
 } as const
 

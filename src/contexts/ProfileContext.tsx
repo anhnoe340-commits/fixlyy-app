@@ -29,6 +29,13 @@ export interface Profile {
   hours: string | null                     // JSON DaySlot[] — horaires d'ouverture
   email_notifications_enabled: boolean    // Email post-appel activé/désactivé
   timezone: string                         // Fuseau horaire IANA (ex: Europe/Paris)
+  intervention_hours: string
+  intervention_zone: string
+  intervention_delay: string
+  travel_fee: string
+  pricing_display: string                  // 'explicit' | 'quote_only'
+  pricing_tax: string                      // 'ttc' | 'ht'
+  pricing_configured: boolean
 }
 
 interface ProfileContextType {
@@ -63,6 +70,13 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   hours: null,
   email_notifications_enabled: true,
   timezone: 'Europe/Paris',
+  intervention_hours: 'Lundi-Vendredi 8h-18h',
+  intervention_zone: 'Paris et Île-de-France',
+  intervention_delay: 'Sous 48h, urgences sous 4h',
+  travel_fee: '50',
+  pricing_display: 'explicit',
+  pricing_tax: 'ttc',
+  pricing_configured: false,
 }
 
 const ProfileContext = createContext<ProfileContextType | null>(null)
