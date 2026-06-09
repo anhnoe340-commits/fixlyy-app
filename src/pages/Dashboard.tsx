@@ -926,7 +926,8 @@ function CallsPage({ accent }: { accent: string }) {
 }
 
 // ── Contacts Page ─────────────────────────────────────────────────────────────
-type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; created_at: string; lastCallSummary?: string | null; lastCallDate?: string | null }
+type ContactRow = { id: string; name: string; phone: string | null; email: string | null; address: string | null; notes: string | null; created_at: string; lastCallSummary?: string | null; lastCallDate?: string | null }
+type ContactCallRow = { id: string; created_at: string; summary: string | null; reason: string | null; caller_name: string | null }
 
 // Parseur CSV contacts (supporte : name/nom, phone/tel/téléphone, email/mail, address/adresse)
 function parseCsv(text: string): { name: string; phone: string | null; email: string | null; address: string | null }[] {
@@ -1030,6 +1031,40 @@ function ContactsPage({ accent }: { accent: string }) {
   }
 
   const [importingCsv, setImportingCsv] = useState(false)
+  const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [contactCalls, setContactCalls] = useState<ContactCallRow[]>([])
+  const [loadingCalls, setLoadingCalls] = useState(false)
+  const [savingDetail, setSavingDetail] = useState(false)
+
+  const handleOpenDetail = async (contact: ContactRow) => {
+    setSelectedContact(contact)
+    setEditName(contact.name)
+    setEditNotes(contact.notes || '')
+    setContactCalls([])
+    if (contact.phone && user) {
+      setLoadingCalls(true)
+      const { data } = await supabase
+        .from('calls')
+        .select('id, created_at, summary, reason, caller_name')
+        .eq('artisan_id', user.id)
+        .eq('caller_phone', contact.phone)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      setContactCalls((data as ContactCallRow[]) || [])
+      setLoadingCalls(false)
+    }
+  }
+
+  const handleSaveDetail = async () => {
+    if (!selectedContact) return
+    setSavingDetail(true)
+    await supabase.from('contacts').update({ name: editName.trim() || selectedContact.name, notes: editNotes || null }).eq('id', selectedContact.id)
+    setContacts(prev => prev.map(c => c.id === selectedContact.id ? { ...c, name: editName.trim() || c.name, notes: editNotes || null } : c))
+    setSavingDetail(false)
+    setSelectedContact(null)
+  }
 
   const importContacts = async (list: { name: string; phone: string | null; email: string | null; address?: string | null }[]) => {
     let added = 0
@@ -1124,7 +1159,7 @@ function ContactsPage({ accent }: { accent: string }) {
       ) : (
         <div className="flex flex-col gap-2">
           {filtered.map(c => (
-            <div key={c.id} className="group flex items-center gap-3 bg-white border border-gray-100 rounded-2xl px-4 py-3.5 shadow-sm transition-all hover:border-gray-200">
+            <div key={c.id} onClick={() => handleOpenDetail(c)} className="group flex items-center gap-3 bg-white border border-gray-100 rounded-2xl px-4 py-3.5 shadow-sm transition-all hover:border-gray-200 cursor-pointer">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[12px] font-bold flex-shrink-0"
                 style={{ background: accent + '15', color: accent }}>
                 {initials(c.name)}
@@ -1133,14 +1168,106 @@ function ContactsPage({ accent }: { accent: string }) {
                 <p className="font-semibold text-[13px] text-gray-900 truncate">{c.name}</p>
                 <p className="text-[11px] text-gray-400 mt-0.5 truncate">{[c.phone, c.email].filter(Boolean).join(' · ') || 'Aucune info'}</p>
               </div>
-              <p className="text-[10px] text-gray-300 flex-shrink-0 hidden sm:block">{new Date(c.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</p>
-              <button onClick={() => handleDelete(c.id)}
+              {c.lastCallDate && (
+                <p className="text-[10px] text-gray-300 flex-shrink-0 hidden sm:block">
+                  Dernier appel {new Date(c.lastCallDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                </p>
+              )}
+              <button onClick={e => { e.stopPropagation(); handleDelete(c.id) }}
                 className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all flex-shrink-0 text-lg leading-none">
                 ×
               </button>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Panneau détail contact */}
+      {selectedContact && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-30" onClick={() => setSelectedContact(null)} />
+          <div className="fixed right-0 top-0 h-full w-full md:w-[420px] bg-white shadow-2xl z-40 flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <p className="text-sm font-semibold">Fiche contact</p>
+              <button onClick={() => setSelectedContact(null)} className="text-gray-400 hover:text-gray-700 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
+              {/* Champs éditables */}
+              <div className="flex flex-col gap-4">
+                <Field label="Nom">
+                  <input value={editName} onChange={e => setEditName(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400" />
+                </Field>
+                {selectedContact.phone && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Téléphone</p>
+                    <p className="text-sm text-gray-700 px-3 py-2.5 bg-gray-50 rounded-lg">{selectedContact.phone}</p>
+                  </div>
+                )}
+                {selectedContact.email && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Email</p>
+                    <p className="text-sm text-gray-700 px-3 py-2.5 bg-gray-50 rounded-lg">{selectedContact.email}</p>
+                  </div>
+                )}
+                {selectedContact.address && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1.5">Adresse</p>
+                    <p className="text-sm text-gray-700 px-3 py-2.5 bg-gray-50 rounded-lg">{selectedContact.address}</p>
+                  </div>
+                )}
+                <Field label="Notes">
+                  <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={3}
+                    placeholder="Préférences, contexte, informations utiles…"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 resize-none" />
+                </Field>
+              </div>
+
+              {/* Historique d'appels */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Historique des appels</p>
+                {loadingCalls ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="w-4 h-4 border-2 border-gray-200 border-t-transparent rounded-full animate-spin" style={{ borderTopColor: accent }} />
+                  </div>
+                ) : !selectedContact.phone ? (
+                  <p className="text-xs text-gray-400 text-center py-4">Aucun numéro associé</p>
+                ) : contactCalls.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">Aucun appel enregistré</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {contactCalls.map(call => (
+                      <div key={call.id} className="bg-gray-50 rounded-xl px-3 py-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[11px] font-semibold text-gray-600">
+                            {new Date(call.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            {' '}
+                            <span className="font-normal text-gray-400">{new Date(call.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </p>
+                          {call.reason && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500 font-medium truncate max-w-[120px]">{call.reason}</span>
+                          )}
+                        </div>
+                        {call.summary && <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-3">{call.summary}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-3">
+              <button onClick={() => setSelectedContact(null)} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Annuler</button>
+              <button onClick={handleSaveDetail} disabled={savingDetail || !editName.trim()}
+                className="flex-1 py-2.5 rounded-lg text-white text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ background: accent }}>
+                {savingDetail && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Panneau nouveau contact */}
