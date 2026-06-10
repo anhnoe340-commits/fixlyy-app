@@ -33,7 +33,8 @@ serve(async (req) => {
   const normalized = to.startsWith('+') ? to : `+${to.replace(/^00/, '')}`
 
   const sipUri = `sip:${normalized}@${LIVEKIT_SIP_DOMAIN}`
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Sip>${sipUri}</Sip></Connect></Response>`
+  // <Connect><Sip> n'est pas disponible sur tous les comptes Twilio — <Dial><Sip> est le TwiML standard
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Dial><Sip>${sipUri}</Sip></Dial></Response>`
 
   console.log(`[twilio-sip-router] ${normalized} → ${sipUri}`)
 
