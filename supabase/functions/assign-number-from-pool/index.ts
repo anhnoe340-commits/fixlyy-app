@@ -443,27 +443,14 @@ Deno.serve(async (req) => {
       assistantIdToUse    = created.id
     }
 
-    // 4. PATCH Twilio voiceUrl → Vapi
+    // 4. PATCH Twilio voiceUrl → LiveKit SIP router
+    // Note : on fait ce PATCH APRÈS l'éventuel PATCH Vapi (étape 5) pour garantir
+    // que notre URL n'est pas écrasée par Vapi lors d'un nouveau provisioning.
     twilioAlreadyConfigured = !!assignedRow.vapi_phone_number_id
-    const twilioRes = await fetchWithTimeout(
-      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers/${twilio_sid}.json`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: 'Basic ' + btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          VoiceUrl: 'https://api.vapi.ai/call/phone',
-          VoiceMethod: 'POST',
-        }),
-      }
-    )
-    if (!twilioRes.ok) throw new Error(`Twilio PATCH failed: ${twilioRes.status}`)
-    twilioPatched = true
 
-    // 5. Mapping Vapi phone-number → assistant (PATCH si existant, POST sinon)
-    let vapiPhoneNumberId: string
+    // 5. Mapping Vapi — PATCH uniquement si déjà existant (évite que Vapi
+    // écrase le VoiceUrl LiveKit avec https://api.vapi.ai/call/phone)
+    let vapiPhoneNumberId: string | null = assignedRow.vapi_phone_number_id ?? null
     if (assignedRow.vapi_phone_number_id) {
       const vapiRes = await fetchWithTimeout(`https://api.vapi.ai/phone-number/${assignedRow.vapi_phone_number_id}`, {
         method: 'PATCH',
@@ -475,30 +462,32 @@ Deno.serve(async (req) => {
         }),
       })
       if (!vapiRes.ok) throw new Error(`Vapi PATCH phone-number failed: ${vapiRes.status} ${await vapiRes.text()}`)
-      vapiPhoneNumberId = assignedRow.vapi_phone_number_id
-    } else {
-      const vapiRes = await fetchWithTimeout('https://api.vapi.ai/phone-number', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: 'twilio',
-          number: phone_number,
-          twilioAccountSid: TWILIO_SID,
-          twilioAuthToken: TWILIO_TOKEN,
-          assistantId: assistantIdToUse,
-          name: `fixlyy-${userId.slice(0, 8)}`,
-        }),
-      })
-      if (!vapiRes.ok) throw new Error(`Vapi POST phone-number failed: ${vapiRes.status} ${await vapiRes.text()}`)
-      const vapiData = await vapiRes.json()
-      vapiPhoneNumberId = vapiData.id
     }
+    // Nouveau provisioning : pas de POST Vapi/phone-number (évite écrasement VoiceUrl)
+
+    // 4 (suite). PATCH Twilio VoiceUrl → SIP router (après Vapi pour avoir le dernier mot)
+    const twilioRes = await fetchWithTimeout(
+      `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers/${twilio_sid}.json`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: 'Basic ' + btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          VoiceUrl:    `${SB_URL}/functions/v1/twilio-sip-router`,
+          VoiceMethod: 'POST',
+        }),
+      }
+    )
+    if (!twilioRes.ok) throw new Error(`Twilio PATCH failed: ${twilioRes.status}`)
+    twilioPatched = true
 
     // 6. Finalise en base
     await sb.from('phone_numbers_pool').update({
       status: 'assigned',
       assigned_at: new Date().toISOString(),
-      vapi_phone_number_id: vapiPhoneNumberId,
+      ...(vapiPhoneNumberId ? { vapi_phone_number_id: vapiPhoneNumberId } : {}),
     }).eq('id', phone_number_id)
 
     await sb.from('profiles').update({
