@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
 import UsageMeter from '@/components/UsageMeter'
+import { CallsEvolutionChart, HourlyChart, ReasonsChart, type DayPoint, type ReasonPoint, type HourPoint } from '@/components/StatsCharts'
 import { canUseFeature, getPlanLimit, type PlanKey } from '@/config/plans'
 
 function resolvePlanKey(subscriptionPlan: string | null | undefined): PlanKey {
@@ -4864,7 +4865,7 @@ function StatsPage({ accent }: { accent: string }) {
 
   // Graphique sur la période choisie (max 30 jours)
   const chartDays = Math.min(periodDays, 30)
-  const daysN: { label: string; count: number; date: string }[] = []
+  const daysN: (DayPoint & { date: string })[] = []
   for (let i = chartDays - 1; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i)
     const ds = d.toDateString()
@@ -4872,9 +4873,24 @@ function StatsPage({ accent }: { accent: string }) {
       ? d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' })
       : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
     const count = calls.filter(c => new Date(c.created_at).toDateString() === ds).length
-    daysN.push({ label, count, date: ds })
+    const urgent = calls.filter(c => new Date(c.created_at).toDateString() === ds && c.status === 'urgent').length
+    daysN.push({ label, count, urgent, date: ds })
   }
-  const maxDay = Math.max(...daysN.map(d => d.count), 1)
+
+  const hourlyMap: Record<number, number> = {}
+  for (let h = 0; h < 24; h++) hourlyMap[h] = 0
+  filteredCalls.forEach(c => { hourlyMap[new Date(c.created_at).getHours()]++ })
+  const hourlyData: HourPoint[] = Array.from({ length: 24 }, (_, h) => ({
+    hour: `${String(h).padStart(2, '0')}h`,
+    count: hourlyMap[h],
+  }))
+
+  const reasonMap: Record<string, number> = {}
+  filteredCalls.forEach(c => { if (c.reason) reasonMap[c.reason] = (reasonMap[c.reason] || 0) + 1 })
+  const reasonsData: ReasonPoint[] = Object.entries(reasonMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, count]) => ({ name, count }))
 
   const statuses = [
     { label: 'Nouveaux', key: 'new', color: '#3B82F6' },
@@ -4981,30 +4997,34 @@ function StatsPage({ accent }: { accent: string }) {
         </div>
       </div>
 
+      {/* Évolution + Distribution horaire */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Graphique N jours */}
         <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
-          <p className="text-sm font-semibold mb-4">{period === 'all' ? '30 derniers jours' : `${chartDays} derniers jours`}</p>
-          <div className="flex items-end justify-around h-28 gap-0.5 overflow-hidden">
-            {daysN.map((d, i) => {
-              const pct = d.count / maxDay
-              const isToday = d.date === today
-              const showLabel = chartDays <= 7 || i % 5 === 0 || isToday
-              return (
-                <div key={i} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
-                  {d.count > 0 && <span className="text-[9px] text-gray-500 font-semibold">{d.count}</span>}
-                  <div className="w-full rounded-t transition-all" style={{
-                    height: `${Math.max(pct * 88, d.count > 0 ? 6 : 2)}px`,
-                    background: isToday ? accent : accent + '40',
-                  }} />
-                  {showLabel && (
-                    <span className={`text-[8px] text-center leading-tight truncate w-full ${isToday ? 'font-semibold' : 'text-gray-400'}`}
-                      style={isToday ? { color: accent } : {}}>{d.label}</span>
-                  )}
-                </div>
-              )
-            })}
+          <p className="text-sm font-semibold mb-0.5">{period === 'all' ? '30 derniers jours' : `${chartDays} derniers jours`}</p>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-[11px] text-gray-400 flex items-center gap-1">
+              <span className="inline-block w-2 h-1.5 rounded-sm" style={{ background: accent }} /> Appels
+            </span>
+            <span className="text-[11px] text-gray-400 flex items-center gap-1">
+              <span className="inline-block w-2 h-1.5 rounded-sm bg-red-400" /> Urgents
+            </span>
           </div>
+          <CallsEvolutionChart data={daysN} accent={accent} />
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <p className="text-sm font-semibold mb-0.5">Distribution horaire</p>
+          <p className="text-[11px] text-gray-400 mb-3">Appels reçus par heure de la journée</p>
+          <HourlyChart data={hourlyData} accent={accent} />
+        </div>
+      </div>
+
+      {/* Motifs d'appel + Tonalités clients */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+          <p className="text-sm font-semibold mb-0.5">Motifs d'appel</p>
+          <p className="text-[11px] text-gray-400 mb-3">Répartition des demandes sur la période</p>
+          <ReasonsChart data={reasonsData} />
         </div>
 
         {/* Tonalités clients */}
