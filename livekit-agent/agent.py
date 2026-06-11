@@ -21,6 +21,46 @@ DEFAULT_GREETING = (
     "Comment puis-je vous aider ?"
 )
 
+# Profils fictifs pour les appels démo (room name: demo-{metier}-{uuid})
+_DEMO_COMPANY_NAMES = {
+    "plombier":     "Plomberie Martin",
+    "chauffagiste": "Chauffage & Plomberie Martin",
+    "electricien":  "Électricité Dupont",
+    "serrurier":    "Serrurerie Express",
+    "menuisier":    "Menuiserie Lebrun",
+    "peintre":      "Peinture & Déco Moreau",
+    "autre":        "Artisan Services",
+}
+_DEMO_COMPANY_TYPES = {
+    "plombier":     "plombier / chauffagiste",
+    "chauffagiste": "plombier / chauffagiste",
+    "electricien":  "électricien",
+    "serrurier":    "serrurier",
+    "menuisier":    "menuisier",
+    "peintre":      "peintre / plâtrier",
+    "autre":        "artisan",
+}
+_DEMO_GREETINGS = {
+    "plombier":     "Plomberie Martin, bonjour ! Comment puis-je vous aider ?",
+    "chauffagiste": "Chauffage et Plomberie Martin, bonjour ! Comment puis-je vous aider ?",
+    "electricien":  "Électricité Dupont, bonjour ! Comment puis-je vous aider ?",
+    "serrurier":    "Serrurerie Express, bonjour ! Comment puis-je vous aider ?",
+    "menuisier":    "Menuiserie Lebrun, bonjour ! Comment puis-je vous aider ?",
+    "peintre":      "Peinture et Déco Moreau, bonjour ! Comment puis-je vous aider ?",
+    "autre":        "Artisan Services, bonjour ! Comment puis-je vous aider ?",
+}
+
+
+def _build_demo_profile(metier: str) -> dict:
+    return {
+        "company_name":      _DEMO_COMPANY_NAMES.get(metier, "Artisan Services"),
+        "company_type":      _DEMO_COMPANY_TYPES.get(metier, "artisan"),
+        "assistant_name":    "Mia",
+        "greeting_open":     _DEMO_GREETINGS.get(metier, DEFAULT_GREETING),
+        "subscription_plan": "pro",
+        "demo_mode":         True,
+    }
+
 SUMMARY_USER_PROMPT = """\
 Transcript d'un appel téléphonique entre Mia (réceptionniste) et un client :
 
@@ -203,6 +243,7 @@ def build_instructions(
     company_type: str,
     pricing: list | None = None,
     is_multilingual: bool = False,
+    demo_mode: bool = False,
 ) -> str:
     if is_multilingual:
         lang_rule = (
@@ -251,6 +292,15 @@ def build_instructions(
                 + " — Le tarif définitif sera confirmé par l’artisan après diagnostic."
             )
 
+    if demo_mode:
+        base += (
+            " Si l’interlocuteur te demande ce qu’est ce service, comment ça fonctionne"
+            " ou ce qu’est Fixlyy : ‘Je suis Mia, une réceptionniste virtuelle fournie par"
+            " Fixlyy — je prends les appels pour l’artisan quand il n’est pas disponible."
+            " Si ça vous intéresse pour votre entreprise, visitez fixlyy.fr.’"
+            " Sinon, réponds exactement comme tu le ferais pour n’importe quel appel client."
+        )
+
     return base
 
 
@@ -265,9 +315,10 @@ class MiaAgent(Agent):
         company_type   = profile.get("company_type")   or "artisan"
         assistant_name = profile.get("assistant_name") or "Mia"
         greeting       = profile.get("greeting_open")  or DEFAULT_GREETING
+        demo_mode      = bool(profile.get("demo_mode", False))
 
         super().__init__(
-            instructions=build_instructions(assistant_name, company_name, company_type, pricing, multilingual),
+            instructions=build_instructions(assistant_name, company_name, company_type, pricing, multilingual, demo_mode),
             turn_handling={
                 "endpointing": {"min_delay": 0.3},
                 "interruption": {
@@ -312,6 +363,12 @@ async def entrypoint(ctx: JobContext):
             )
         else:
             logger.warning("[mia] profile not found — using defaults")
+    elif room_name.startswith("demo-"):
+        # Room name : demo-{metier}-{uuid}  (ex: demo-plombier-abc123)
+        parts  = room_name.split("-")
+        metier = parts[1] if len(parts) > 1 else "autre"
+        profile = _build_demo_profile(metier)
+        logger.info(f"[mia] demo room — metier={metier!r} company={profile['company_name']!r}")
     else:
         logger.info("[mia] test room — using default profile")
 
