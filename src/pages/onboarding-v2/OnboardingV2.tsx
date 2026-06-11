@@ -1,16 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Step1Account from './Step1Account'
 import Step2Forwarding from './Step2Forwarding'
-import Step3TestCall from './Step3TestCall'
 
 const BRAND = '#2850c8'
 
-const STEPS = ['Compte', 'Renvoi', 'Test']
+const STEPS = ['Compte', 'Renvoi']
 
 interface OnboardingState {
   userId: string | null
-  artisanPhone: string | null
   fixlyyNumber: string | null
   step: number
 }
@@ -22,38 +20,31 @@ interface Props {
 export default function OnboardingV2({ onDone }: Props) {
   const [state, setState] = useState<OnboardingState>({
     userId: null,
-    artisanPhone: null,
     fixlyyNumber: null,
     step: 1,
   })
 
   function handleStep1Done(userId: string) {
     setState(s => ({ ...s, userId, step: 2 }))
-    // Charger le profil pour récupérer téléphone + numéro Fixlyy
-    supabase.from('profiles').select('phone, twilio_number').eq('id', userId).single().then(({ data }) => {
-      setState(s => ({
-        ...s,
-        artisanPhone: data?.phone || null,
-        fixlyyNumber: data?.twilio_number || null,
-      }))
+    supabase.from('profiles').select('twilio_number').eq('id', userId).single().then(({ data }) => {
+      setState(s => ({ ...s, fixlyyNumber: data?.twilio_number || null }))
     })
     // Déclenche l'assignation du numéro en background
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return
-      const headers = { Authorization: `Bearer ${session.access_token}` }
       fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/assign-number-from-pool`, {
-        method: 'POST', headers,
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
       }).catch(() => {})
     })
   }
 
   function handleStep2Done() {
-    setState(s => ({ ...s, step: 3 }))
-    supabase.from('profiles').update({ onboarding_step: 3 }).eq('id', state.userId!).then(() => {})
-  }
-
-  function handleStep3Done() {
-    supabase.from('profiles').update({ onboarding_step: 4, onboarding_completed: true }).eq('id', state.userId!).then(() => {})
+    // onboarding_step: 4 = terminé — l'étape 3 (appel test) a été retirée, on saute intentionnellement le 3
+    supabase.from('profiles')
+      .update({ onboarding_step: 4, onboarding_completed: true })
+      .eq('id', state.userId!)
+      .then(() => {})
     onDone()
   }
 
@@ -68,7 +59,7 @@ export default function OnboardingV2({ onDone }: Props) {
           <Step1Account onDone={handleStep1Done} />
         </div>
       ) : (
-        /* Étapes 2 & 3 — layout étroit centré */
+        /* Étape 2 — layout étroit centré */
         <div className="w-full max-w-sm">
 
           {/* Logo */}
@@ -98,21 +89,11 @@ export default function OnboardingV2({ onDone }: Props) {
 
           {/* Card */}
           <div className="glass-light rounded-2xl p-6">
-            {state.step === 2 && (
-              <Step2Forwarding
-                userId={state.userId!}
-                fixlyyNumber={state.fixlyyNumber}
-                onDone={handleStep2Done}
-              />
-            )}
-            {state.step === 3 && state.userId && state.artisanPhone && (
-              <Step3TestCall
-                userId={state.userId}
-                artisanPhone={state.artisanPhone}
-                onDone={handleStep3Done}
-                onBackToStep2={() => setState(s => ({ ...s, step: 2 }))}
-              />
-            )}
+            <Step2Forwarding
+              userId={state.userId!}
+              fixlyyNumber={state.fixlyyNumber}
+              onDone={handleStep2Done}
+            />
           </div>
 
           <p className="text-[11px] text-gray-400 text-center mt-4">

@@ -47,8 +47,10 @@ export default function Step3Plan({ userId, onDone }: Props) {
 
   async function handleContinue() {
     setLoading(true)
+    const planLabel = selected === 'max' ? 'Max' : selected === 'pro' ? 'Pro' : 'Solo'
     await supabase.from('profiles').update({
       selected_plan: selected,
+      subscription_plan: planLabel,   // lève les feature gates dès le trial (Stripe écrase au paiement)
       onboarding_step: 4,
     }).eq('id', userId)
     onDone(selected)
