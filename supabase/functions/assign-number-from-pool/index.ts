@@ -134,6 +134,44 @@ async function createLivekitDispatchRule(userId: string, trunkId: string): Promi
   return id as string
 }
 
+async function updateLivekitSipTrunk(trunkId: string, userId: string, phoneNumber: string): Promise<void> {
+  const token = await livekitAdminToken()
+  const res = await fetchWithTimeout(
+    `${LK_URL}/twirp/livekit.SIP/UpdateSIPInboundTrunk`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sipTrunkId: trunkId,
+        replace: { name: `artisan-${userId.slice(0, 8)}`, numbers: [phoneNumber] },
+      }),
+    },
+    12000,
+  )
+  if (!res.ok) throw new Error(`LiveKit UpdateSIPInboundTrunk ${res.status}: ${await res.text()}`)
+}
+
+async function updateLivekitDispatchRule(ruleId: string, trunkId: string, userId: string): Promise<void> {
+  const token = await livekitAdminToken()
+  const res = await fetchWithTimeout(
+    `${LK_URL}/twirp/livekit.SIP/UpdateSIPDispatchRule`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sipDispatchRuleId: ruleId,
+        replace: {
+          trunkIds: [trunkId],
+          rule: { dispatchRuleDirect: { roomName: `artisan-${userId}`, pin: '' } },
+          name: `artisan-${userId.slice(0, 8)}-rule`,
+        },
+      }),
+    },
+    12000,
+  )
+  if (!res.ok) throw new Error(`LiveKit UpdateSIPDispatchRule ${res.status}: ${await res.text()}`)
+}
+
 async function createDedicatedAssistant(profile: {
   company_name: string | null
   company_type: string | null
@@ -409,7 +447,7 @@ Deno.serve(async (req) => {
     // 2. Récupérer le profil pour personnaliser l'assistant
     const { data: profileData } = await sb
       .from('profiles')
-      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id, phone, livekit_trunk_id')
+      .select('company_name, company_type, assistant_name, assistant_voice, greeting_open, vapi_assistant_id, phone, livekit_trunk_id, livekit_dispatch_rule_id')
       .eq('id', userId)
       .single()
 
@@ -506,19 +544,36 @@ Deno.serve(async (req) => {
       userId, resourceType: 'phone_number', resourceId: phone_number,
       metadata: { vapi_assistant_id: assistantIdToUse }, severity: 'info' })
 
-    // 7. LiveKit SIP trunk + dispatch rule (non-bloquant — infrastructure pour migration Vapi→LiveKit)
-    if (LK_KEY && LK_SECRET && !profileData?.livekit_trunk_id) {
+    // 7. LiveKit SIP trunk + dispatch rule (upsert — create si absent, update si numéro change)
+    if (LK_KEY && LK_SECRET) {
       try {
-        const trunkId       = await createLivekitSipTrunk(userId, phone_number)
-        const dispatchRuleId = await createLivekitDispatchRule(userId, trunkId)
-        await sb.from('profiles').update({
-          livekit_trunk_id:          trunkId,
-          livekit_dispatch_rule_id:  dispatchRuleId,
-        }).eq('id', userId)
-        await logEvent({ supabase: sb, eventType: 'livekit_sip_trunk_created',
+        let trunkId       = profileData?.livekit_trunk_id        as string | undefined
+        let dispatchRuleId = profileData?.livekit_dispatch_rule_id as string | undefined
+        let action: 'created' | 'updated'
+
+        if (trunkId) {
+          await updateLivekitSipTrunk(trunkId, userId, phone_number)
+          if (dispatchRuleId) {
+            await updateLivekitDispatchRule(dispatchRuleId, trunkId, userId)
+          } else {
+            dispatchRuleId = await createLivekitDispatchRule(userId, trunkId)
+            await sb.from('profiles').update({ livekit_dispatch_rule_id: dispatchRuleId }).eq('id', userId)
+          }
+          action = 'updated'
+        } else {
+          trunkId        = await createLivekitSipTrunk(userId, phone_number)
+          dispatchRuleId = await createLivekitDispatchRule(userId, trunkId)
+          await sb.from('profiles').update({
+            livekit_trunk_id:         trunkId,
+            livekit_dispatch_rule_id: dispatchRuleId,
+          }).eq('id', userId)
+          action = 'created'
+        }
+
+        await logEvent({ supabase: sb, eventType: `livekit_sip_trunk_${action}`,
           userId, resourceType: 'livekit_trunk', resourceId: trunkId,
           metadata: { phone_number, dispatch_rule_id: dispatchRuleId }, severity: 'info' })
-        console.log(`[LiveKit] trunk=${trunkId} rule=${dispatchRuleId} OK`)
+        console.log(`[LiveKit] trunk=${trunkId} rule=${dispatchRuleId} ${action} OK`)
       } catch (lkErr: any) {
         console.error('[LiveKit] setup non-bloquant échoué:', lkErr.message)
         await logEvent({ supabase: sb, eventType: 'livekit_sip_trunk_failed',
