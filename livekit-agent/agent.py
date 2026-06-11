@@ -66,6 +66,29 @@ async def fetch_artisan_profile(user_id: str) -> dict:
         return {}
 
 
+async def fetch_service_pricing(user_id: str) -> list:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return []
+    url = f"{SUPABASE_URL}/rest/v1/service_pricing"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+    params = {
+        "user_id": f"eq.{user_id}",
+        "select": "label,price_type,price_amount",
+        "order": "position",
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params=params, timeout=3.0)
+            resp.raise_for_status()
+            return resp.json() or []
+    except Exception as e:
+        logger.warning(f"[mia] fetch_service_pricing failed (non-bloquant): {e}")
+        return []
+
+
 async def generate_summary(transcript: str) -> dict:
     if not transcript.strip() or not GROQ_API_KEY:
         return {}
@@ -172,35 +195,57 @@ async def handle_call_ended(
 
 # ── Agent ─────────────────────────────────────────────────────────────────────
 
-def build_instructions(assistant_name: str, company_name: str, company_type: str) -> str:
-    return (
+def build_instructions(assistant_name: str, company_name: str, company_type: str, pricing: list | None = None) -> str:
+    base = (
         f"Tu es {assistant_name}, la réceptionniste téléphonique de {company_name} ({company_type}). "
         "Tu réponds en français, de façon naturelle et professionnelle. "
         "Phrases courtes, max 20 mots, adaptées au téléphone. "
-        "Commence par un marqueur naturel : 'D'accord', 'Très bien', 'Je note'. "
+        "Commence par un marqueur naturel : 'D’accord', 'Très bien', 'Je note'. "
         "Réagis aux émotions avant de poser ta question suivante. "
         "Reformule ce que dit le client pour montrer que tu écoutes. "
         "Ne dis jamais deux fois la même formule. "
-        "Objectif : collecter naturellement le nom, le téléphone, l'adresse, le problème, l'urgence et les disponibilités. "
+        "Objectif : collecter naturellement le nom, le téléphone, l’adresse, le problème, l’urgence et les disponibilités. "
         "Ne dis JAMAIS 'Je dois vous poser quelques questions'. "
-        "Demande TOUJOURS l'adresse avant de raccrocher — sans adresse l'artisan ne peut pas intervenir. "
-        "Pose aussi une question de contexte : 'Ça dure depuis quand ?' ou 'Quelqu'un est déjà intervenu ?'. "
+        "Demande TOUJOURS l’adresse avant de raccrocher — sans adresse l’artisan ne peut pas intervenir. "
+        "Pose aussi une question de contexte : 'Ça dure depuis quand ?' ou 'Quelqu’un est déjà intervenu ?'. "
         "Termine par un récapitulatif : 'Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
-        "On vous rappelle [délai]. C'est bien ça ?' puis 'Merci, à très vite !'. "
-        f"Si on te demande si tu es une IA : 'Je suis l'assistante de {company_name}, je transmets votre demande à l'artisan.' "
+        "On vous rappelle [délai]. C’est bien ça ?' puis 'Merci, à très vite !'. "
+        f"Si on te demande si tu es une IA : 'Je suis l’assistante de {company_name}, je transmets votre demande à l’artisan.' "
         "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
     )
 
+    if pricing:
+        lines = []
+        for p in pricing:
+            label  = p.get("label", "")
+            ptype  = p.get("price_type", "quote")
+            amount = p.get("price_amount")
+            if ptype == "fixed" and amount:
+                lines.append(f"- {label} : {amount}€")
+            elif ptype == "from" and amount:
+                lines.append(f"- {label} : à partir de {amount}€")
+            else:
+                lines.append(f"- {label} : sur devis")
+        if lines:
+            pricing_text = (
+                " Tarifs indicatifs (donne cette info si le client demande le prix d’une prestation) : "
+                + " | ".join(lines[:15])  # max 15 pour ne pas surcharger le contexte
+                + " — Précise toujours que le tarif définitif sera confirmé après diagnostic."
+            )
+            base += pricing_text
+
+    return base
+
 
 class MiaAgent(Agent):
-    def __init__(self, profile: dict):
+    def __init__(self, profile: dict, pricing: list | None = None):
         company_name   = profile.get("company_name")   or "votre artisan"
         company_type   = profile.get("company_type")   or "artisan"
         assistant_name = profile.get("assistant_name") or "Mia"
         greeting       = profile.get("greeting_open")  or DEFAULT_GREETING
 
         super().__init__(
-            instructions=build_instructions(assistant_name, company_name, company_type),
+            instructions=build_instructions(assistant_name, company_name, company_type, pricing),
             turn_handling={
                 "endpointing": {"min_delay": 0.3},
                 "interruption": {
@@ -227,12 +272,16 @@ async def entrypoint(ctx: JobContext):
     profile: dict = {}
     user_id: str = ""
 
+    pricing: list = []
     if room_name.startswith("artisan-"):
         user_id = room_name[len("artisan-"):]
         logger.info(f"[mia] fetching profile for user_id={user_id}")
-        profile = await fetch_artisan_profile(user_id)
+        profile, pricing = await asyncio.gather(
+            fetch_artisan_profile(user_id),
+            fetch_service_pricing(user_id),
+        )
         if profile:
-            logger.info(f"[mia] profile loaded — company={profile.get('company_name')!r}")
+            logger.info(f"[mia] profile loaded — company={profile.get('company_name')!r} pricing={len(pricing)} items")
         else:
             logger.warning("[mia] profile not found — using defaults")
     else:
@@ -299,7 +348,7 @@ async def entrypoint(ctx: JobContext):
                     start_time=start_time,
                 ))
 
-    await session.start(MiaAgent(profile), room=ctx.room)
+    await session.start(MiaAgent(profile, pricing), room=ctx.room)
     logger.info("[mia] session started")
 
 
