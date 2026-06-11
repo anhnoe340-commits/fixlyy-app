@@ -4,6 +4,7 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
+import UsageMeter from '@/components/UsageMeter'
 import { canUseFeature, getPlanLimit, type PlanKey } from '@/config/plans'
 
 function resolvePlanKey(subscriptionPlan: string | null | undefined): PlanKey {
@@ -444,6 +445,13 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
           ))}
         </div>
       )}
+
+      {/* ── Utilisation minutes ── */}
+      <UsageMeter
+        accent={accent}
+        userPlan={resolvePlanKey(profile?.subscription_plan)}
+        onUpgrade={() => onNavigate('subscription')}
+      />
 
       {/* ── Bannière tarifs ── */}
       {!profile?.pricing_configured && (() => {
@@ -4901,6 +4909,13 @@ function StatsPage({ accent }: { accent: string }) {
           ))}
         </div>
       </div>
+
+      {/* ── Utilisation minutes ── */}
+      <UsageMeter
+        accent={accent}
+        userPlan={resolvePlanKey(profile?.subscription_plan)}
+        compact
+      />
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
