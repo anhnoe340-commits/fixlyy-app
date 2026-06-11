@@ -37,7 +37,9 @@ Extrais ces informations en JSON strict (aucun texte autour, aucun commentaire) 
   "appointment_time": "heure si mentionnée ou null",
   "full_summary": "résumé en 4 points : (1) raison/problème principal, (2) contexte — tentatives ou durée du problème, (3) nom + adresse + téléphone + détail technique, (4) URGENT/NORMAL/PEUT ATTENDRE + action concrète pour l'artisan",
   "sms_body": "accroche max 80 chars : problème précis + action immédiate"
-}}"""
+}}
+IMPORTANT : full_summary et sms_body doivent TOUJOURS être rédigés en français,
+quelle que soit la langue parlée pendant la conversation."""
 
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────
@@ -52,7 +54,7 @@ async def fetch_artisan_profile(user_id: str) -> dict:
     }
     params = {
         "id": f"eq.{user_id}",
-        "select": "company_name,company_type,assistant_name,greeting_open",
+        "select": "company_name,company_type,assistant_name,greeting_open,subscription_plan",
         "limit": "1",
     }
     try:
@@ -195,23 +197,39 @@ async def handle_call_ended(
 
 # ── Agent ─────────────────────────────────────────────────────────────────────
 
-def build_instructions(assistant_name: str, company_name: str, company_type: str, pricing: list | None = None) -> str:
+def build_instructions(
+    assistant_name: str,
+    company_name: str,
+    company_type: str,
+    pricing: list | None = None,
+    is_multilingual: bool = False,
+) -> str:
+    if is_multilingual:
+        lang_rule = (
+            "Détecte la langue du client dès sa première phrase et réponds dans cette langue. "
+            "Langues supportées : français, anglais, arabe, espagnol, portugais. "
+            "Pour toute autre langue, réponds en français. "
+            "Le contexte métier de l’artisan reste le même quelle que soit la langue. "
+        )
+    else:
+        lang_rule = "Tu réponds en français, de façon naturelle et professionnelle. "
+
     base = (
         f"Tu es {assistant_name}, la réceptionniste téléphonique de {company_name} ({company_type}). "
-        "Tu réponds en français, de façon naturelle et professionnelle. "
-        "Phrases courtes, max 20 mots, adaptées au téléphone. "
-        "Commence par un marqueur naturel : 'D’accord', 'Très bien', 'Je note'. "
-        "Réagis aux émotions avant de poser ta question suivante. "
-        "Reformule ce que dit le client pour montrer que tu écoutes. "
-        "Ne dis jamais deux fois la même formule. "
-        "Objectif : collecter naturellement le nom, le téléphone, l’adresse, le problème, l’urgence et les disponibilités. "
-        "Ne dis JAMAIS 'Je dois vous poser quelques questions'. "
-        "Demande TOUJOURS l’adresse avant de raccrocher — sans adresse l’artisan ne peut pas intervenir. "
-        "Pose aussi une question de contexte : 'Ça dure depuis quand ?' ou 'Quelqu’un est déjà intervenu ?'. "
-        "Termine par un récapitulatif : 'Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
-        "On vous rappelle [délai]. C’est bien ça ?' puis 'Merci, à très vite !'. "
-        f"Si on te demande si tu es une IA : 'Je suis l’assistante de {company_name}, je transmets votre demande à l’artisan.' "
-        "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
+        + lang_rule
+        + "Phrases courtes, max 20 mots, adaptées au téléphone. "
+        + "Commence par un marqueur naturel : ‘D’accord’, ‘Très bien’, ‘Je note’. "
+        + "Réagis aux émotions avant de poser ta question suivante. "
+        + "Reformule ce que dit le client pour montrer que tu écoutes. "
+        + "Ne dis jamais deux fois la même formule. "
+        + "Objectif : collecter naturellement le nom, le téléphone, l’adresse, le problème, l’urgence et les disponibilités. "
+        + "Ne dis JAMAIS ‘Je dois vous poser quelques questions’. "
+        + "Demande TOUJOURS l’adresse avant de raccrocher — sans adresse l’artisan ne peut pas intervenir. "
+        + "Pose aussi une question de contexte : ‘Ça dure depuis quand ?’ ou ‘Quelqu’un est déjà intervenu ?’. "
+        + "Termine par un récapitulatif : ‘Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
+        + "On vous rappelle [délai]. C’est bien ça ?’ puis ‘Merci, à très vite !’. "
+        + f"Si on te demande si tu es une IA : ‘Je suis l’assistante de {company_name}, je transmets votre demande à l’artisan.’ "
+        + "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
     )
 
     if pricing:
@@ -221,31 +239,35 @@ def build_instructions(assistant_name: str, company_name: str, company_type: str
             ptype  = p.get("price_type", "quote")
             amount = p.get("price_amount")
             if ptype == "fixed" and amount:
-                lines.append(f"- {label} : {amount}€")
+                lines.append(f"{label} : {amount}€")
             elif ptype == "from" and amount:
-                lines.append(f"- {label} : à partir de {amount}€")
+                lines.append(f"{label} : à partir de {amount}€")
             else:
-                lines.append(f"- {label} : sur devis")
+                lines.append(f"{label} : sur devis")
         if lines:
-            pricing_text = (
-                " Tarifs indicatifs (donne cette info si le client demande le prix d’une prestation) : "
-                + " | ".join(lines[:15])  # max 15 pour ne pas surcharger le contexte
-                + " — Précise toujours que le tarif définitif sera confirmé après diagnostic."
+            base += (
+                " Tarifs indicatifs (communique-les si le client demande le prix) : "
+                + " | ".join(lines[:15])
+                + " — Le tarif définitif sera confirmé par l’artisan après diagnostic."
             )
-            base += pricing_text
 
     return base
 
 
+def is_max_plan(raw: str | None) -> bool:
+    s = (raw or "").lower()
+    return s in ("max",) or any(k in s for k in ("equipe", "équipe", "expert", "team"))
+
+
 class MiaAgent(Agent):
-    def __init__(self, profile: dict, pricing: list | None = None):
+    def __init__(self, profile: dict, pricing: list | None = None, multilingual: bool = False):
         company_name   = profile.get("company_name")   or "votre artisan"
         company_type   = profile.get("company_type")   or "artisan"
         assistant_name = profile.get("assistant_name") or "Mia"
         greeting       = profile.get("greeting_open")  or DEFAULT_GREETING
 
         super().__init__(
-            instructions=build_instructions(assistant_name, company_name, company_type, pricing),
+            instructions=build_instructions(assistant_name, company_name, company_type, pricing, multilingual),
             turn_handling={
                 "endpointing": {"min_delay": 0.3},
                 "interruption": {
@@ -273,6 +295,7 @@ async def entrypoint(ctx: JobContext):
     user_id: str = ""
 
     pricing: list = []
+    multilingual: bool = False
     if room_name.startswith("artisan-"):
         user_id = room_name[len("artisan-"):]
         logger.info(f"[mia] fetching profile for user_id={user_id}")
@@ -280,8 +303,13 @@ async def entrypoint(ctx: JobContext):
             fetch_artisan_profile(user_id),
             fetch_service_pricing(user_id),
         )
+        multilingual = is_max_plan(profile.get("subscription_plan"))
         if profile:
-            logger.info(f"[mia] profile loaded — company={profile.get('company_name')!r} pricing={len(pricing)} items")
+            logger.info(
+                f"[mia] profile loaded — company={profile.get('company_name')!r} "
+                f"plan={profile.get('subscription_plan')!r} multilingual={multilingual} "
+                f"pricing={len(pricing)} items"
+            )
         else:
             logger.warning("[mia] profile not found — using defaults")
     else:
@@ -290,22 +318,26 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("[mia] connected")
 
+    # STT : détection auto de langue pour Max, français forcé pour Solo/Pro
+    if multilingual:
+        stt = deepgram.STT(model="nova-3", detect_language=True)
+        logger.info("[mia] STT: detect_language=True (Max plan)")
+    else:
+        stt = deepgram.STT(model="nova-3", language="fr")
+
     session = AgentSession(
         vad=silero.VAD.load(
-            min_silence_duration=1.2,      # 0.8→1.2 : moins de coupures sur bruits courts
-            min_speech_duration=0.15,      # 0.05→0.15 : ignore bursts <150ms
-            activation_threshold=0.6,      # 0.5→0.6 : plus strict pour détecter la parole
-            deactivation_threshold=0.45,   # désactiver plus tôt (moins coller au bruit)
+            min_silence_duration=1.2,
+            min_speech_duration=0.15,
+            activation_threshold=0.6,
+            deactivation_threshold=0.45,
         ),
-        stt=deepgram.STT(
-            model="nova-3",
-            language="fr",
-        ),
+        stt=stt,
         llm=groq.LLM(model="llama-3.3-70b-versatile"),
         tts=elevenlabs.TTS(language="fr"),
         aec_warmup_duration=5.0,
-        min_interruption_duration=1.5,     # bruit ambiant <1.5s n'interrompt pas Mia
-        min_interruption_words=3,          # au moins 3 mots pour une vraie interruption
+        min_interruption_duration=1.5,
+        min_interruption_words=3,
     )
 
     conversation_items: list = []
@@ -348,7 +380,7 @@ async def entrypoint(ctx: JobContext):
                     start_time=start_time,
                 ))
 
-    await session.start(MiaAgent(profile, pricing), room=ctx.room)
+    await session.start(MiaAgent(profile, pricing, multilingual), room=ctx.room)
     logger.info("[mia] session started")
 
 
