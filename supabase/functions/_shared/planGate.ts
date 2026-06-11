@@ -6,6 +6,16 @@ type BooleanFeature =
   | 'weekly_report' | 'google_calendar' | 'detailed_stats'
   | 'multilingual' | 'monthly_reports' | 'multi_numbers'
 
+export const PLAN_INCLUDED_MINUTES: Record<string, number> = {
+  solo: 300,
+  pro:  500,
+  max:  1000,
+}
+
+export function getIncludedMinutes(plan: string | null | undefined): number {
+  return PLAN_INCLUDED_MINUTES[normalizePlan(plan)] ?? 300
+}
+
 const FEATURES: Record<string, Partial<Record<BooleanFeature, boolean>>> = {
   solo: {
     sms_confirmation: false, appointment_booking: false, crm: false,

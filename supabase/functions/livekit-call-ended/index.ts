@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { logEvent } from '../_shared/audit.ts'
-import { featureAllowed } from '../_shared/planGate.ts'
+import { featureAllowed, getIncludedMinutes } from '../_shared/planGate.ts'
 
 const SB_URL      = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE  = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
@@ -97,6 +97,81 @@ Deno.serve(async (req) => {
       transcript,
     })
 
+    // 3. Compteur de minutes mensuel — alertes quota plan
+    try {
+      const startOfMonth = new Date()
+      startOfMonth.setDate(1)
+      startOfMonth.setHours(0, 0, 0, 0)
+
+      const { data: monthCalls } = await supabase
+        .from('calls')
+        .select('duration_seconds')
+        .eq('artisan_id', profile.id)
+        .gte('created_at', startOfMonth.toISOString())
+
+      const totalSeconds = (monthCalls ?? []).reduce(
+        (sum: number, c: { duration_seconds: number | null }) => sum + (c.duration_seconds ?? 0), 0
+      )
+      const totalMinutes = Math.ceil(totalSeconds / 60)
+      const includedMinutes = getIncludedMinutes(profile.subscription_plan)
+      const pct = Math.round((totalMinutes / includedMinutes) * 100)
+
+      console.log(`[livekit-call-ended] quota: ${totalMinutes}/${includedMinutes} min (${pct}%)`)
+
+      // Alerte 80% : SMS unique ce mois (on vérifie si déjà alerté)
+      if (pct >= 80 && pct < 100) {
+        const { count } = await supabase
+          .from('critical_alerts')
+          .select('id', { count: 'exact', head: true })
+          .eq('alert_type', 'quota_80pct')
+          .eq('meta->>user_id', profile.id)
+          .gte('created_at', startOfMonth.toISOString())
+
+        if ((count ?? 0) === 0) {
+          await supabase.from('critical_alerts').insert({
+            alert_type: 'quota_80pct',
+            severity: 'warning',
+            message: `${profile.company_name || profile.id} a consomme ${totalMinutes}/${includedMinutes} min (${pct}%) ce mois`,
+            meta: { user_id: profile.id, total_minutes: totalMinutes, included_minutes: includedMinutes, pct },
+          })
+          // SMS à l'artisan si numéro disponible
+          if (profile.phone && profile.twilio_number) {
+            const alertSms = `[Fixlyy] Attention : vous avez utilise ${totalMinutes} min sur ${includedMinutes} incluses ce mois (${pct}%). Au-dela, chaque minute est facturee 0,25 EUR.`
+            await sendSms(profile.twilio_number, profile.phone, alertSms).catch(e =>
+              console.error('SMS quota_80pct failed:', e.message)
+            )
+          }
+        }
+      }
+
+      // Alerte 100% : SMS + critical_alert
+      if (pct >= 100) {
+        const { count } = await supabase
+          .from('critical_alerts')
+          .select('id', { count: 'exact', head: true })
+          .eq('alert_type', 'quota_exceeded')
+          .eq('meta->>user_id', profile.id)
+          .gte('created_at', startOfMonth.toISOString())
+
+        if ((count ?? 0) === 0) {
+          await supabase.from('critical_alerts').insert({
+            alert_type: 'quota_exceeded',
+            severity: 'high',
+            message: `${profile.company_name || profile.id} a depasse son quota : ${totalMinutes}/${includedMinutes} min`,
+            meta: { user_id: profile.id, total_minutes: totalMinutes, included_minutes: includedMinutes, pct },
+          })
+          if (profile.phone && profile.twilio_number) {
+            const overSms = `[Fixlyy] Quota depasse : ${totalMinutes} min utilisees ce mois (inclus : ${includedMinutes}). Les minutes supplementaires sont facturees 0,25 EUR/min. Passez au plan superieur pour plus de minutes.`
+            await sendSms(profile.twilio_number, profile.phone, overSms).catch(e =>
+              console.error('SMS quota_exceeded failed:', e.message)
+            )
+          }
+        }
+      }
+    } catch (qe: any) {
+      console.error('[livekit-call-ended] quota check failed (non-blocking):', qe.message)
+    }
+
     await logEvent({
       supabase,
       eventType:    'livekit_call_ended',
@@ -107,7 +182,7 @@ Deno.serve(async (req) => {
       severity:     'info',
     })
 
-    // 3. RDV si date collectée
+    // 4. RDV si date collectée
     if (apptDate) {
       await supabase.from('appointments').insert({
         artisan_id:       profile.id,
@@ -120,7 +195,7 @@ Deno.serve(async (req) => {
       }).catch(e => console.error('appointments insert failed:', e.message))
     }
 
-    // 4. SMS artisan — seulement si téléphone + numéro Twilio configurés
+    // 5. SMS artisan — seulement si téléphone + numéro Twilio configurés
     if (!profile.phone || !profile.twilio_number) {
       console.log('[livekit-call-ended] no phone/twilio_number — SMS skipped')
       return new Response(JSON.stringify({ ok: true, sms: false }), {
