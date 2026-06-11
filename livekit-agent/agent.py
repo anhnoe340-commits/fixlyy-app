@@ -205,8 +205,8 @@ class MiaAgent(Agent):
                 "endpointing": {"min_delay": 0.3},
                 "interruption": {
                     "mode": "adaptive",
-                    "min_duration": 0.8,
-                    "min_words": 2,
+                    "min_duration": 1.5,
+                    "min_words": 3,
                     "resume_false_interruption": True,
                 },
             },
@@ -243,8 +243,10 @@ async def entrypoint(ctx: JobContext):
 
     session = AgentSession(
         vad=silero.VAD.load(
-            min_silence_duration=0.8,
-            activation_threshold=0.5,
+            min_silence_duration=1.2,      # 0.8→1.2 : moins de coupures sur bruits courts
+            min_speech_duration=0.15,      # 0.05→0.15 : ignore bursts <150ms
+            activation_threshold=0.6,      # 0.5→0.6 : plus strict pour détecter la parole
+            deactivation_threshold=0.45,   # désactiver plus tôt (moins coller au bruit)
         ),
         stt=deepgram.STT(
             model="nova-3",
@@ -253,6 +255,8 @@ async def entrypoint(ctx: JobContext):
         llm=groq.LLM(model="llama-3.3-70b-versatile"),
         tts=elevenlabs.TTS(language="fr"),
         aec_warmup_duration=5.0,
+        min_interruption_duration=1.5,     # bruit ambiant <1.5s n'interrompt pas Mia
+        min_interruption_words=3,          # au moins 3 mots pour une vraie interruption
     )
 
     conversation_items: list = []
