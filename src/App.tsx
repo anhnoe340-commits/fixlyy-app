@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ProfileProvider } from '@/contexts/ProfileContext'
 import OnboardingV2 from '@/pages/onboarding-v2/OnboardingV2'
+import OnboardingV3 from '@/pages/onboarding-v3/OnboardingV3'
 import Dashboard from '@/pages/Dashboard'
 import AdminPage from '@/pages/AdminPage'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
@@ -34,6 +35,27 @@ function Spinner() {
       <div className="w-8 h-8 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin"/>
     </div>
   )
+}
+
+// Route /commencer → OnboardingV3, sauf si déjà provisionné
+function OnboardingV3Entry() {
+  const { user, loading } = useAuth()
+  const [checked, setChecked] = useState(false)
+
+  useEffect(() => {
+    if (loading) return
+    if (!user) { setChecked(true); return }
+    supabase.from('profiles').select('vapi_assistant_id').eq('id', user.id).maybeSingle().then(({ data }) => {
+      if (data?.vapi_assistant_id) {
+        window.location.replace('/')
+      } else {
+        setChecked(true)
+      }
+    })
+  }, [user, loading])
+
+  if (loading || !checked) return <Spinner />
+  return <OnboardingV3 onDone={() => { window.location.replace('/') }} />
 }
 
 type AppStatus = 'loading' | 'auth' | 'onboarding' | 'provisioning' | 'dashboard'
@@ -97,6 +119,7 @@ function AppContent() {
 export default function App() {
   if (window.location.pathname === '/accept') return <AcceptQuotePage />
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
+  if (window.location.pathname === '/commencer') return <AuthProvider><OnboardingV3Entry /></AuthProvider>
   if (window.location.pathname === '/join' && new URLSearchParams(window.location.search).has('token')) return <JoinDashboard />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
   if (window.location.pathname.startsWith('/r/')) return <ResumePage />

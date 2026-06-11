@@ -72,6 +72,33 @@ html, body, #root {
  * Le fond global utilise background-attachment:fixed pour être toujours visible.
  */
 
+/* Onboarding V3 — fond sombre */
+.onboarding-v3-bg {
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(59, 91, 245, 0.20) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, rgba(120, 40, 200, 0.12) 0%, transparent 50%),
+    #070B1A;
+  background-attachment: fixed;
+}
+
+/* Onboarding V3 — card dark */
+.v3-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Onboarding V3 — input dark */
+.v3-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.v3-input::placeholder { color: rgba(148, 163, 184, 0.50); }
+.v3-input:focus { border-color: rgba(59, 91, 245, 0.70); }
+
 /* Dashboard wrapper — fond fixe (ne scroll pas) */
 .dashboard-bg {
   background:
