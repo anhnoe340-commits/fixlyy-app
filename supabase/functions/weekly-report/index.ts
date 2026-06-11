@@ -8,6 +8,15 @@ const CRON_SECRET = Deno.env.get('CRON_SECRET') || null
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type, x-cron-secret' }
 
+const PLAN_MINUTES: Record<string, number> = { solo: 300, pro: 500, max: 1000 }
+
+function normalizePlan(raw: string | null | undefined): string {
+  const s = (raw ?? '').toLowerCase()
+  if (s === 'pro') return 'pro'
+  if (s === 'max' || s.includes('equipe') || s.includes('expert') || s.includes('team')) return 'max'
+  return 'solo'
+}
+
 function weekRange(): { from: Date; to: Date; label: string } {
   const now = new Date()
   const to = new Date(now)
@@ -36,22 +45,46 @@ function buildEmail(artisan: {
   rdvCount: number
   avgQuality: number | null
   avgDuration: number
-  topClients: { name: string; count: number }[]
+  topReasons: { reason: string; count: number }[]
   doneCount: number
   weekLabel: string
+  weekMinutes: number
+  monthMinutes: number
+  monthQuota: number
+  prevCallsCount: number
 }): string {
   const qScore = artisan.avgQuality != null ? artisan.avgQuality.toFixed(1) : '—'
   const qColor = qualityColor(artisan.avgQuality)
   const treatRate = artisan.totalCalls > 0 ? Math.round((artisan.doneCount / artisan.totalCalls) * 100) : 0
   const avgDurStr = artisan.avgDuration > 0 ? formatDuration(artisan.avgDuration) : '—'
 
-  const topClientsHtml = artisan.topClients.length === 0
-    ? '<p style="color:#9CA3AF;font-size:13px;">Aucun client identifié cette semaine</p>'
-    : artisan.topClients.map(c => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F3F4F6;">
-          <span style="font-size:13px;color:#374151;">${c.name}</span>
-          <span style="font-size:12px;font-weight:600;color:#6B7280;">${c.count} appel${c.count > 1 ? 's' : ''}</span>
-        </div>`).join('')
+  // Comparaison semaine précédente
+  const diff = artisan.totalCalls - artisan.prevCallsCount
+  const arrowSymbol = diff > 0 ? '↑' : diff < 0 ? '↓' : '→'
+  const arrowColor = diff > 0 ? '#10B981' : diff < 0 ? '#EF4444' : '#9CA3AF'
+  const arrowLabel = diff !== 0 ? `${arrowSymbol} ${Math.abs(diff)} vs sem. passée` : `${arrowSymbol} stable`
+
+  // Quota mensuel
+  const monthPct = Math.min(100, Math.round((artisan.monthMinutes / artisan.monthQuota) * 100))
+  const remaining = Math.max(0, artisan.monthQuota - artisan.monthMinutes)
+  const isOver = artisan.monthMinutes > artisan.monthQuota
+  const quotaBarColor = isOver ? '#EF4444' : monthPct >= 80 ? '#F59E0B' : '#10B981'
+  const quotaBarFill = isOver ? 100 : monthPct
+  const quotaRemainingText = isOver
+    ? `<span style="color:#EF4444;font-weight:600;">Quota dépassé de ${artisan.monthMinutes - artisan.monthQuota} min</span>`
+    : `${remaining} min restantes · ${monthPct}% du quota`
+
+  // Top 3 motifs d'appel
+  const topReasonsHtml = artisan.topReasons.length === 0
+    ? '<p style="color:#9CA3AF;font-size:13px;margin:0;">Aucun motif identifié cette semaine</p>'
+    : artisan.topReasons.map((r, i) => `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-bottom:1px solid #F3F4F6;">
+          <tr>
+            <td width="20" style="font-size:10px;font-weight:700;color:#9CA3AF;text-align:center;padding:8px 0;vertical-align:middle;">${i + 1}</td>
+            <td style="font-size:13px;color:#374151;padding:8px 0 8px 8px;vertical-align:middle;">${r.reason}</td>
+            <td style="font-size:12px;font-weight:600;color:#6B7280;text-align:right;white-space:nowrap;padding:8px 0;vertical-align:middle;">${r.count} appel${r.count > 1 ? 's' : ''}</td>
+          </tr>
+        </table>`).join('')
 
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -78,7 +111,8 @@ function buildEmail(artisan: {
               <td width="25%" style="text-align:center;padding:0 8px 0 0;">
                 <div style="background:#F9FAFB;border-radius:12px;padding:16px 8px;">
                   <p style="font-size:28px;font-weight:700;color:#111827;margin:0;">${artisan.totalCalls}</p>
-                  <p style="font-size:11px;color:#9CA3AF;margin:4px 0 0;text-transform:uppercase;letter-spacing:0.5px;">Appels</p>
+                  <p style="font-size:11px;color:#9CA3AF;margin:4px 0 2px;text-transform:uppercase;letter-spacing:0.5px;">Appels</p>
+                  <p style="font-size:11px;font-weight:600;color:${arrowColor};margin:0;">${arrowLabel}</p>
                 </div>
               </td>
               <td width="25%" style="text-align:center;padding:0 4px;">
@@ -121,10 +155,37 @@ function buildEmail(artisan: {
           </table>
         </td></tr>
 
-        <!-- Top clients -->
+        <!-- Quota mensuel -->
+        <tr><td style="background:#fff;padding:0 32px 24px;border-top:1px solid #F3F4F6;">
+          <p style="font-size:14px;font-weight:600;color:#111827;margin:0 0 12px;">Minutes ce mois</p>
+          <div style="background:#F9FAFB;border-radius:12px;padding:16px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <p style="font-size:13px;font-weight:700;color:#111827;margin:0;">
+                    <span style="color:${quotaBarColor};">${artisan.monthMinutes} min</span> sur ${artisan.monthQuota} min
+                  </p>
+                  <p style="font-size:11px;color:#9CA3AF;margin:3px 0 0;">${quotaRemainingText}</p>
+                </td>
+                <td align="right" style="white-space:nowrap;padding-left:12px;">
+                  <p style="font-size:20px;font-weight:700;color:${quotaBarColor};margin:0;">${monthPct}%</p>
+                </td>
+              </tr>
+            </table>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;background:#E5E7EB;border-radius:4px;">
+              <tr>
+                <td width="${quotaBarFill}%" style="background:${quotaBarColor};height:8px;border-radius:4px;font-size:0;line-height:0;">&nbsp;</td>
+                <td style="height:8px;font-size:0;line-height:0;"></td>
+              </tr>
+            </table>
+            <p style="font-size:11px;color:#9CA3AF;margin:8px 0 0;">Cette semaine : ${artisan.weekMinutes} min de conversation</p>
+          </div>
+        </td></tr>
+
+        <!-- Top motifs -->
         <tr><td style="background:#fff;padding:0 32px 28px;border-top:1px solid #F3F4F6;">
-          <p style="font-size:14px;font-weight:600;color:#111827;margin:0 0 12px;">Clients fréquents cette semaine</p>
-          ${topClientsHtml}
+          <p style="font-size:14px;font-weight:600;color:#111827;margin:0 0 12px;">Top 3 motifs d'appel</p>
+          ${topReasonsHtml}
         </td></tr>
 
         <!-- CTA -->
@@ -163,7 +224,6 @@ async function sendEmail(to: string, subject: string, html: string) {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
-  // Vérifier le secret cron si configuré
   if (CRON_SECRET) {
     const incoming = req.headers.get('x-cron-secret')
     if (incoming !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
@@ -171,7 +231,12 @@ serve(async (req) => {
 
   const { from, to, label: weekLabel } = weekRange()
 
-  // Charger tous les artisans actifs avec un email
+  // Bornes semaine précédente (pour comparaison ↑↓)
+  const prevFrom = new Date(from)
+  prevFrom.setDate(prevFrom.getDate() - 7)
+  const prevTo = new Date(to)
+  prevTo.setDate(prevTo.getDate() - 7)
+
   const { data: artisansRaw, error } = await supabase
     .from('profiles')
     .select('id, email, company_name, assistant_name, subscription_plan')
@@ -179,7 +244,7 @@ serve(async (req) => {
     .not('email', 'is', null)
     .eq('email_notifications_enabled', true)
 
-  // Filtrer par plan — weekly_report est Pro/Max uniquement
+  // weekly_report : Pro/Max uniquement
   const artisans = (artisansRaw ?? []).filter(a => featureAllowed(a.subscription_plan, 'weekly_report'))
 
   if (error || !artisans.length) {
@@ -192,51 +257,69 @@ serve(async (req) => {
 
   for (const artisan of artisans) {
     try {
-      // Appels de la semaine
+      // Appels de la semaine (reason inclus pour top motifs)
       const { data: calls } = await supabase
         .from('calls')
-        .select('status, duration_seconds, conversation_quality_score, caller_name')
+        .select('status, duration_seconds, conversation_quality_score, caller_name, reason')
         .eq('artisan_id', artisan.id)
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
 
-      // RDV de la semaine
-      const { count: rdvCount } = await supabase
-        .from('appointments')
-        .select('id', { count: 'exact', head: true })
-        .eq('artisan_id', artisan.id)
-        .gte('created_at', from.toISOString())
-        .lte('created_at', to.toISOString())
+      // RDV semaine + count semaine précédente + minutes mensuelles — en parallèle
+      const [rdvRes, prevCallsRes, monthMinutesRes] = await Promise.all([
+        supabase.from('appointments')
+          .select('id', { count: 'exact', head: true })
+          .eq('artisan_id', artisan.id)
+          .gte('created_at', from.toISOString())
+          .lte('created_at', to.toISOString()),
+        supabase.from('calls')
+          .select('id', { count: 'exact', head: true })
+          .eq('artisan_id', artisan.id)
+          .gte('created_at', prevFrom.toISOString())
+          .lte('created_at', prevTo.toISOString()),
+        supabase.rpc('get_monthly_minutes', { p_user_id: artisan.id }),
+      ])
+
+      const rdvCount = rdvRes.count ?? 0
+      const prevCallsCount = prevCallsRes.count ?? 0
+      const monthMinutes = (monthMinutesRes.data as number | null) ?? 0
+      const plan = normalizePlan(artisan.subscription_plan)
+      const monthQuota = PLAN_MINUTES[plan]
 
       const c = calls || []
       const urgentCalls = c.filter(x => x.status === 'urgent').length
       const doneCount = c.filter(x => x.status === 'done').length
       const durations = c.filter(x => x.duration_seconds != null).map(x => x.duration_seconds!)
       const avgDuration = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0
+      const weekMinutes = Math.ceil(durations.reduce((a, b) => a + b, 0) / 60)
       const scores = c.filter(x => x.conversation_quality_score != null).map(x => x.conversation_quality_score!)
       const avgQuality = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
 
-      // Top clients (par fréquence)
-      const nameCount: Record<string, number> = {}
-      c.forEach(x => { if (x.caller_name) nameCount[x.caller_name] = (nameCount[x.caller_name] || 0) + 1 })
-      const topClients = Object.entries(nameCount)
+      // Top 3 motifs d'appel
+      const reasonCount: Record<string, number> = {}
+      c.forEach(x => { if (x.reason) reasonCount[x.reason] = (reasonCount[x.reason] || 0) + 1 })
+      const topReasons = Object.entries(reasonCount)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
-        .map(([name, count]) => ({ name, count }))
+        .map(([reason, count]) => ({ reason, count }))
 
-      if (c.length === 0 && !rdvCount) continue // Pas d'activité, on n'envoie pas
+      if (c.length === 0 && !rdvCount) continue
 
       const artisanName = artisan.company_name || artisan.email!.split('@')[0]
       const html = buildEmail({
         name: artisanName,
         totalCalls: c.length,
         urgentCalls,
-        rdvCount: rdvCount || 0,
+        rdvCount,
         avgQuality,
         avgDuration,
-        topClients,
+        topReasons,
         doneCount,
         weekLabel,
+        weekMinutes,
+        monthMinutes,
+        monthQuota,
+        prevCallsCount,
       })
 
       await sendEmail(
@@ -246,7 +329,7 @@ serve(async (req) => {
       )
       sent++
     } catch (e: any) {
-      const maskedEmail = artisan.email ? artisan.email.split('@')[0].slice(0,2) + '***@' + artisan.email.split('@')[1] : 'unknown'
+      const maskedEmail = artisan.email ? artisan.email.split('@')[0].slice(0, 2) + '***@' + artisan.email.split('@')[1] : 'unknown'
       console.error(`Failed for ${maskedEmail}:`, e.message)
       errors.push(`${maskedEmail}: ${e.message}`)
     }
