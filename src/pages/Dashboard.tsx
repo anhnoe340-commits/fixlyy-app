@@ -6,7 +6,7 @@ import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
 import UsageMeter from '@/components/UsageMeter'
 import { CallsEvolutionChart, HourlyChart, ReasonsChart, type DayPoint, type ReasonPoint, type HourPoint } from '@/components/StatsCharts'
-import { canUseFeature, getPlanLimit, type PlanKey } from '@/config/plans'
+import { PLANS, canUseFeature, getPlanLimit, type PlanKey } from '@/config/plans'
 
 function resolvePlanKey(subscriptionPlan: string | null | undefined): PlanKey {
   const s = (subscriptionPlan ?? '').toLowerCase()
@@ -4186,22 +4186,50 @@ function SubscriptionPage({ accent }: { accent: string }) {
 
   const plans = [
     { id: 0, planId: 'starter', name: 'Solo',
-      monthly: { price: 97,  priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
-      annual:  { price: 97,  priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
+      monthly: { price: PLANS.solo.price, priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
+      annual:  { price: PLANS.solo.price, priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
       desc: "Idéal pour l'artisan indépendant",
-      features: ["Jusqu'à 150 appels/mois", 'Secrétaire IA 24h/24, 7j/7', 'SMS récap en 30 secondes', '1 utilisateur', 'Support par email', 'Mise en service gratuite'],
+      features: [
+        `${PLANS.solo.included_minutes} minutes incluses`,
+        'Mia répond 24h/24, 7j/7',
+        'SMS récap en 30 secondes',
+        'Qualification des urgences',
+        '1 numéro dédié',
+        `${PLANS.solo.member_limit} utilisateur`,
+        'Support par email',
+      ],
     },
     { id: 1, planId: 'pro', name: 'Pro', popular: true,
-      monthly: { price: 197, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
-      annual:  { price: 197, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
+      monthly: { price: PLANS.pro.price, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
+      annual:  { price: PLANS.pro.price, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
       desc: 'Pour les artisans avec un bon volume',
-      features: ['Appels illimités', 'Tout Solo inclus', 'Qualification des urgences', 'Planification des RDV', "Rapport d'appels hebdomadaire", 'Intégration Google Calendar', 'Statistiques détaillées', "Jusqu'à 3 utilisateurs", 'Support prioritaire par email', 'Numéro dédié'],
+      features: [
+        `${PLANS.pro.included_minutes} minutes incluses`,
+        'Tout Solo inclus',
+        'SMS confirmation client automatique',
+        'CRM clients natif',
+        'FAQ tarifaire configurable',
+        `${PLANS.pro.call_reasons_limit} motifs d'appel`,
+        'Rapport hebdomadaire',
+        'Statistiques détaillées',
+        `Jusqu'à ${PLANS.pro.member_limit} utilisateurs`,
+        'Support prioritaire',
+      ],
     },
     { id: 2, planId: 'max', name: 'Max',
-      monthly: { price: 347, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
-      annual:  { price: 347, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
+      monthly: { price: PLANS.max.price, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
+      annual:  { price: PLANS.max.price, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
       desc: 'Pour les TPE et petites équipes',
-      features: ['Tout Pro inclus', 'Appels illimités multi-lignes', 'Utilisateurs illimités', 'Multi-numéros', 'Tableau de bord équipe', 'Reporting hebdomadaire', 'Support prioritaire dédié'],
+      features: [
+        `${PLANS.max.included_minutes} minutes incluses`,
+        'Tout Pro inclus',
+        'Multilingue (FR EN AR ES PT)',
+        `${PLANS.max.call_reasons_limit} motifs d'appel`,
+        'Multi-numéros',
+        `Jusqu'à ${PLANS.max.member_limit} utilisateurs`,
+        'Rapports mensuels avancés',
+        'Support dédié',
+      ],
     },
   ]
 
@@ -4299,36 +4327,12 @@ function SubscriptionPage({ accent }: { accent: string }) {
         ))}
       </div>
 
-      {/* ── Barre appels mensuels (Solo uniquement) ── */}
-      {(() => {
-        const plan = (profile?.subscription_plan ?? '').toLowerCase()
-        const isUnlimited = plan.includes('pro') || plan.includes('équipe') || plan.includes('equipe') || plan.includes('team')
-        if (isUnlimited || monthCallCount === null) return null
-        const LIMIT = 150
-        const pct = Math.min(100, Math.round((monthCallCount / LIMIT) * 100))
-        const isWarn = monthCallCount >= 120
-        const isOver = monthCallCount >= LIMIT
-        return (
-          <div className="rounded-2xl px-5 py-4" style={{ background: isOver ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#F9FAFB', border: `1px solid ${isOver ? '#FECACA' : isWarn ? '#FDE68A' : '#F3F4F6'}` }}>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-semibold" style={{ color: isOver ? '#B91C1C' : isWarn ? '#92400E' : '#374151' }}>
-                {isOver ? '🚫 Limite atteinte — assistante en pause' : isWarn ? '⚠️ Vous approchez de votre limite' : '📞 Appels ce mois-ci'}
-              </p>
-              <p className="text-sm font-bold tabular-nums" style={{ color: isOver ? '#DC2626' : isWarn ? '#D97706' : '#111827' }}>
-                {monthCallCount} <span className="text-xs font-normal text-gray-400">/ {LIMIT}</span>
-              </p>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: isOver ? '#FECACA' : isWarn ? '#FDE68A' : '#E5E7EB' }}>
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: isOver ? '#EF4444' : isWarn ? '#F59E0B' : accent }} />
-            </div>
-            {isOver ? (
-              <p className="text-xs mt-1.5" style={{ color: '#DC2626' }}>Votre assistante reprendra automatiquement le 1er du mois prochain. Passez au forfait Pro pour des appels illimités.</p>
-            ) : (
-              <p className="text-xs mt-1.5 text-gray-400">{LIMIT - monthCallCount} appels restants ce mois · forfait Solo</p>
-            )}
-          </div>
-        )
-      })()}
+      {/* ── Utilisation minutes du mois (source de vérité : get-usage) ── */}
+      <UsageMeter
+        accent={accent}
+        userPlan={resolvePlanKey(profile?.subscription_plan)}
+        onUpgrade={() => {}}
+      />
 
       {/* ── Séparateur ── */}
       <div className="text-center pt-2">
