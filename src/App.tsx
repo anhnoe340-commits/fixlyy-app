@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ProfileProvider } from '@/contexts/ProfileContext'
 import OnboardingV2 from '@/pages/onboarding-v2/OnboardingV2'
 import OnboardingV3 from '@/pages/onboarding-v3/OnboardingV3'
+import LoginPage from '@/pages/LoginPage'
 import Dashboard from '@/pages/Dashboard'
 import AdminPage from '@/pages/AdminPage'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
@@ -35,6 +36,16 @@ function Spinner() {
       <div className="w-8 h-8 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin"/>
     </div>
   )
+}
+
+// Route /connexion → LoginPage, sauf si déjà connecté
+function LoginEntry() {
+  const { user, loading } = useAuth()
+  useEffect(() => {
+    if (!loading && user) window.location.replace('/')
+  }, [user, loading])
+  if (loading || user) return <Spinner />
+  return <LoginPage />
 }
 
 // Route /commencer → OnboardingV3, sauf si déjà provisionné
@@ -119,6 +130,7 @@ function AppContent() {
 export default function App() {
   if (window.location.pathname === '/accept') return <AcceptQuotePage />
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
+  if (window.location.pathname === '/connexion') return <AuthProvider><LoginEntry /></AuthProvider>
   if (window.location.pathname === '/commencer') return <AuthProvider><OnboardingV3Entry /></AuthProvider>
   if (window.location.pathname === '/join' && new URLSearchParams(window.location.search).has('token')) return <JoinDashboard />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
