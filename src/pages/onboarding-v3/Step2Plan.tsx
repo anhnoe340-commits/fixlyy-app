@@ -95,11 +95,22 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
               )}
 
               <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <p className="text-base font-bold text-white">{p.name}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.7)' }}>
-                    {p.included_minutes} min / mois
-                  </p>
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center transition-all"
+                    style={{
+                      background: isSelected ? BRAND : 'transparent',
+                      border: isSelected ? 'none' : '2px solid rgba(255,255,255,0.25)',
+                    }}
+                  >
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-white">{p.name}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.7)' }}>
+                      {p.included_minutes} min / mois
+                    </p>
+                  </div>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-xl font-black text-white">{p.price} €</p>
@@ -124,14 +135,6 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
                 </p>
               </div>
 
-              {isSelected && (
-                <div
-                  className="absolute top-4 right-4 w-5 h-5 rounded-full flex items-center justify-center"
-                  style={{ background: BRAND }}
-                >
-                  <Check className="w-3 h-3 text-white" />
-                </div>
-              )}
             </button>
           )
         })}
