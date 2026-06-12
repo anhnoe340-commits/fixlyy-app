@@ -10,7 +10,9 @@ export default function TrialBanner() {
   const trialEndsAt = (profile as any).trial_ends_at
   const paymentAdded = (profile as any).payment_method_added
 
-  if (paymentAdded || !trialStatus) return null
+  const subscriptionStatus = profile.subscription_status
+  // V3 users already registered CB at Stripe Checkout — never show add-card banner
+  if (paymentAdded || !trialStatus || subscriptionStatus === 'trialing' || subscriptionStatus === 'active') return null
 
   const daysLeft = trialEndsAt
     ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000))
