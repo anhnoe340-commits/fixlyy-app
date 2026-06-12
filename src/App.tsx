@@ -49,13 +49,17 @@ function LoginEntry() {
 }
 
 // Route /commencer → OnboardingV3, sauf si déjà provisionné
+// Exception : retour Stripe (?checkout=success) → laisser OnboardingV3 gérer le polling
 function OnboardingV3Entry() {
   const { user, loading } = useAuth()
   const [checked, setChecked] = useState(false)
+  const isCheckoutReturn = new URLSearchParams(window.location.search).get('checkout') === 'success'
 
   useEffect(() => {
     if (loading) return
     if (!user) { setChecked(true); return }
+    // Retour Stripe : OnboardingV3 gère lui-même le polling de provisioning
+    if (isCheckoutReturn) { setChecked(true); return }
     supabase.from('profiles').select('vapi_assistant_id').eq('id', user.id).maybeSingle().then(({ data }) => {
       if (data?.vapi_assistant_id) {
         window.location.replace('/')

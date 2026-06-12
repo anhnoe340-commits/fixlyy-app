@@ -77,3 +77,10 @@ export function getPlanLimit(
 ): number {
   return PLANS[plan][key] as number
 }
+
+// Stripe price IDs produits (créés le 2026-06-09)
+export const STRIPE_PRICE_IDS: Record<PlanKey, string> = {
+  solo: 'price_1TgNhNBKWw2SqpykxEkXTAma',
+  pro:  'price_1TgNhOBKWw2SqpykzY7j1ood',
+  max:  'price_1TgNhOBKWw2Sqpyku7Rk2ioO',
+}

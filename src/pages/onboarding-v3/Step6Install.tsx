@@ -37,7 +37,7 @@ export default function Step6Install({ userId, deferredPrompt, onDone }: Props) 
     { icon: '📞', label: 'Numéro Mia dédié attribué' },
     { icon: '✅', label: 'Renvoi d\'appel configuré' },
     { icon: '📩', label: 'SMS récap activé (30 secondes)' },
-    { icon: '🆓', label: '7 jours gratuits — aucun prélèvement' },
+    { icon: '🔒', label: 'CB enregistrée · aucun prélèvement avant 7 jours' },
   ]
 
   return (
@@ -94,9 +94,6 @@ export default function Step6Install({ userId, deferredPrompt, onDone }: Props) 
         </button>
       )}
 
-      <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
-        Votre CB sera demandée uniquement à l'activation, après les 7 jours gratuits.
-      </p>
     </div>
   )
 }
