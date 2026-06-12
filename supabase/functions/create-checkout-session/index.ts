@@ -20,16 +20,23 @@ serve(async (req) => {
   const { priceId, planId, associates_count, trade, company } = await req.json();
 
   try {
-    // Lookup by supabase_uid metadata — supports phone-only users (no email in auth)
-    const searchResult = await stripe.customers.search({
-      query: `metadata['supabase_uid']:'${user.id}'`,
-      limit: 1,
-    });
-    const customer = searchResult.data[0] ?? await stripe.customers.create({
-      ...(user.email ? { email: user.email } : {}),
-      name: company ?? '',
-      metadata: { supabase_uid: user.id, trade: trade ?? '' },
-    });
+    // Lookup existing Stripe customer via our DB — works for phone-only users (no email)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    let customer: Stripe.Customer;
+    if (profile?.stripe_customer_id) {
+      customer = await stripe.customers.retrieve(profile.stripe_customer_id) as Stripe.Customer;
+    } else {
+      customer = await stripe.customers.create({
+        ...(user.email ? { email: user.email } : {}),
+        name: company ?? '',
+        metadata: { supabase_uid: user.id, trade: trade ?? '' },
+      });
+    }
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
       { price: priceId, quantity: 1 },
