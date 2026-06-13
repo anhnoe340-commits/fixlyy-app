@@ -236,7 +236,9 @@ Deno.serve(async (req) => {
   let createdLivekitTrunkId: string | null = null
 
   try {
-    // 1. Réservation atomique
+    // 1. Réservation atomique via RPC PostgreSQL
+    // Le RPC filtre strictement sur status = 'available' — les numéros en
+    // 'quarantine' ou 'assigned' ne peuvent jamais être sélectionnés ici.
     const { data: rows, error: reserveErr } = await sb.rpc('assign_phone_number_to_user', { p_user_id: userId })
     if (reserveErr) throw new Error(reserveErr.message)
     assignedRow = rows?.[0]

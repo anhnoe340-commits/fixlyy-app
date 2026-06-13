@@ -219,10 +219,14 @@ serve(async (req) => {
       }
 
       // c. Remettre le numéro disponible dans le pool
+      // INVARIANT : on ne touche que les lignes status='assigned' — les numéros
+      // en 'quarantine' doivent rester en quarantine même si un utilisateur leur
+      // était encore associé (assigned_to_user_id non nul).
       const { error: poolErr } = await supabaseAdmin
         .from('phone_numbers_pool')
         .update({ status: 'available', assigned_to_user_id: null, assigned_at: null })
         .eq('phone_number', profile.twilio_number)
+        .eq('status', 'assigned')
       if (poolErr) {
         console.error('[delete-account] pool update failed — numéro bloqué:', poolErr.message)
       } else {
