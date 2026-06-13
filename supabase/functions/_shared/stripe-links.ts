@@ -3,17 +3,17 @@
 
 // ── Price IDs (LIVE) ─────────────────────────────────────────────────────────
 export const STRIPE_PRICES = {
-  solo_monthly:  'price_1TgNhNBKWw2SqpykxEkXTAma',  // 79€/mois
-  pro_monthly:   'price_1TgNhOBKWw2SqpykzY7j1ood',  // 149€/mois
-  max_monthly:   'price_1TgNhOBKWw2Sqpyku7Rk2ioO',  // 197€/mois
+  solo_monthly:  'price_1TgNhNBKWw2SqpykxEkXTAma',  // 97€/mois
+  pro_monthly:   'price_1TgNhOBKWw2SqpykzY7j1ood',  // 197€/mois
+  max_monthly:   'price_1TgNhOBKWw2Sqpyku7Rk2ioO',  // 347€/mois
 } as const
 
 // ── Payment Links ─────────────────────────────────────────────────────────────
 export const STRIPE_PAYMENT_LINKS = {
   /**
    * Canal prospection téléphonique (créé 2026-06-13)
-   * - Plan Pro, trial 7j, CB collectée upfront
-   * - allow_promotion_codes: true → entrer le coupon INTRO-[PRENOM] au checkout
+   * - Plan Pro 197€/mois, trial 7j, CB collectée upfront
+   * - allow_promotion_codes: true → entrer INTRO-[PRENOM] au checkout (-25% = 147,75€ au J+7)
    * - phone_number_collection: true → nécessaire pour matching côté /setup
    * - Redirect après paiement : https://app.fixlyy.fr/setup?source=prospection
    */
