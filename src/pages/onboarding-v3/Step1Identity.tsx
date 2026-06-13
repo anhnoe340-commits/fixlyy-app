@@ -25,7 +25,7 @@ function isValidFrPhone(e164: string): boolean {
 }
 
 interface Props {
-  onDone: (userId: string, phone: string, fullName: string, trade: string, companyName: string) => void
+  onDone: (userId: string, phone: string, fullName: string, trade: string, companyName: string, email: string) => void
 }
 
 export default function Step1Identity({ onDone }: Props) {
@@ -35,6 +35,7 @@ export default function Step1Identity({ onDone }: Props) {
   const [companyName, setCompanyName]       = useState('')
   const [companyTouched, setCompanyTouched] = useState(false)
   const [phone, setPhone]                   = useState('')
+  const [email, setEmail]                   = useState('')
   const [otp, setOtp]                       = useState('')
   const [loading, setLoading]               = useState(false)
   const [error, setError]                   = useState('')
@@ -44,7 +45,8 @@ export default function Step1Identity({ onDone }: Props) {
 
   const e164       = normalizePhone(phone)
   const phoneValid = isValidFrPhone(e164)
-  const canSubmit  = fullName.trim().length >= 2 && companyName.trim().length >= 2 && phoneValid
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const canSubmit  = fullName.trim().length >= 2 && companyName.trim().length >= 2 && phoneValid && emailValid
 
   useEffect(() => {
     if (!companyTouched && fullName.trim()) {
@@ -97,6 +99,7 @@ export default function Step1Identity({ onDone }: Props) {
       const { error: profileErr } = await supabase.from('profiles').upsert({
         id: userId,
         phone: e164,
+        email: email.trim().toLowerCase(),
         full_name: fullName.trim(),
         company_name: company,
         company_type: trade,
@@ -110,7 +113,7 @@ export default function Step1Identity({ onDone }: Props) {
       })
       if (profileErr) throw profileErr
 
-      onDone(userId, e164, fullName.trim(), trade, company)
+      onDone(userId, e164, fullName.trim(), trade, company, email.trim().toLowerCase())
     } catch (e: any) {
       const msg = e.message || ''
       setError(
@@ -244,6 +247,23 @@ export default function Step1Identity({ onDone }: Props) {
           <p className="text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>
             Mia répondra : « {companyName}, bonjour ! »
           </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
+          Email pro
+        </label>
+        <input
+          type="email" inputMode="email"
+          placeholder="jean@plomberie-dupont.fr"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && canSubmit && sendOtp()}
+          className="v3-input w-full rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30"
+        />
+        {email && !emailValid && (
+          <p className="text-xs text-red-400">Adresse email invalide</p>
         )}
       </div>
 

@@ -16,6 +16,7 @@ interface State {
   step:         number
   userId:       string | null
   phone:        string | null
+  email:        string | null
   fullName:     string | null
   trade:        string | null
   companyName:  string | null
@@ -34,6 +35,7 @@ export default function OnboardingV3({ onDone }: Props) {
     step: isCheckoutReturn ? 3 : 1,
     userId:       null,
     phone:        null,
+    email:        null,
     fullName:     null,
     trade:        null,
     companyName:  null,
@@ -110,8 +112,8 @@ export default function OnboardingV3({ onDone }: Props) {
 
           {state.step === 1 && (
             <Step1Identity
-              onDone={(userId, phone, fullName, trade, companyName) =>
-                next({ userId, phone, fullName, trade, companyName })
+              onDone={(userId, phone, fullName, trade, companyName, email) =>
+                next({ userId, phone, email, fullName, trade, companyName })
               }
             />
           )}
@@ -141,6 +143,8 @@ export default function OnboardingV3({ onDone }: Props) {
           {state.step === 4 && (
             <Step4Number
               fixlyyNumber={state.fixlyyNumber!}
+              artisanPhone={state.phone!}
+              userId={state.userId!}
               onDone={num => next({ fixlyyNumber: num })}
             />
           )}

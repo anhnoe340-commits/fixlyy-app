@@ -27,10 +27,10 @@ export default function Step3Provisioning({ userId, onDone }: Props) {
       }
       const { data } = await supabase
         .from('profiles')
-        .select('vapi_assistant_id, twilio_number')
+        .select('provisioning_status, twilio_number')
         .eq('id', userId)
         .single()
-      if (data?.vapi_assistant_id && data?.twilio_number) {
+      if (data?.provisioning_status === 'done' && data?.twilio_number) {
         clearInterval(poll)
         onDone(data.twilio_number)
       }

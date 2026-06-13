@@ -309,6 +309,62 @@ def is_max_plan(raw: str | None) -> bool:
     return s in ("max",) or any(k in s for k in ("equipe", "équipe", "expert", "team"))
 
 
+def _plan_label(plan: str) -> str:
+    return {"solo": "la formule Solo", "pro": "la formule Pro", "max": "la formule Max"}.get(plan, "votre formule")
+
+
+def build_onboarding_instructions(plan: str, company_name: str, assistant_name: str) -> str:
+    plan = plan.lower()
+
+    solo_features = (
+        "300 minutes incluses par mois, je réponds 24h/24, "
+        "je qualifie les urgences et je vous envoie un SMS récap en 30 secondes avec toutes les infos du client."
+    )
+    pro_extra = (
+        "En plus, j'envoie un SMS de confirmation à vos clients, je peux prendre des rendez-vous, "
+        "vous avez accès à un mini-CRM, des statistiques détaillées, "
+        "et vous pouvez configurer jusqu'à 10 motifs d'appel personnalisés pour votre métier."
+    )
+    max_extra = (
+        "Et avec votre formule Max, je réponds aussi en plusieurs langues, "
+        "vous avez 1000 minutes incluses, jusqu'à 20 motifs d'appel, et des rapports mensuels détaillés."
+    )
+
+    if plan == "solo":
+        features = solo_features
+        tips = "Pensez à activer le renvoi d'appel sur votre téléphone pour que je puisse prendre le relais quand vous ne décrochez pas."
+    elif plan == "pro":
+        features = solo_features + " " + pro_extra
+        tips = (
+            "Pour bien commencer, configurez vos motifs d'appel les plus fréquents dans votre tableau de bord — "
+            "ça m'aidera à mieux qualifier vos clients. "
+            "Et pensez à activer le renvoi d'appel."
+        )
+    else:  # max
+        features = solo_features + " " + pro_extra + " " + max_extra
+        tips = (
+            "Pour bien commencer, configurez vos motifs d'appel dans le tableau de bord "
+            "et activez le renvoi d'appel. "
+            "Si vous avez des clients qui parlent d'autres langues, je m'en occupe automatiquement."
+        )
+
+    label = _plan_label(plan)
+
+    return (
+        f"Tu es {assistant_name}, la réceptionniste téléphonique créée par Fixlyy pour {company_name}. "
+        "Tu viens d'être configurée et tu passes ton premier appel à l'artisan pour te présenter. "
+        "Suis EXACTEMENT ce script en 4 étapes, avec un ton chaleureux et naturel, comme une vraie réceptionniste. "
+        f"ÉTAPE 1 — Présentation : dis exactement 'Bonjour, je suis {assistant_name}, votre assistante téléphonique Fixlyy. "
+        "À partir de maintenant, c'est moi qui réponds à vos appels quand vous êtes occupé.' "
+        f"ÉTAPE 2 — Plan : explique 'Vous avez choisi {label} : {features}' "
+        f"ÉTAPE 3 — Conseil : dis '{tips}' "
+        "ÉTAPE 4 — Clôture : dis 'Vous allez maintenant pouvoir activer le renvoi d'appel — je vous explique ça juste après. À très vite !' puis raccroche. "
+        "Suis les 4 étapes dans l'ordre, avec des transitions naturelles. "
+        "Ne pose pas de question — c'est un monologue de présentation. "
+        "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
+    )
+
+
 class MiaAgent(Agent):
     def __init__(self, profile: dict, pricing: list | None = None, multilingual: bool = False):
         company_name   = profile.get("company_name")   or "votre artisan"
@@ -334,6 +390,31 @@ class MiaAgent(Agent):
     async def on_enter(self):
         logger.info("[mia] on_enter — greeting")
         self.session.say(self._greeting, allow_interruptions=False)
+
+
+class OnboardingMiaAgent(Agent):
+    """Agent utilisé uniquement lors de l'appel de présentation post-onboarding."""
+    def __init__(self, profile: dict, plan: str):
+        company_name   = profile.get("company_name")   or "votre activité"
+        assistant_name = profile.get("assistant_name") or "Mia"
+
+        super().__init__(
+            instructions=build_onboarding_instructions(plan, company_name, assistant_name),
+            turn_handling={
+                "endpointing": {"min_delay": 0.5},
+                "interruption": {"mode": "disabled"},
+            },
+        )
+        self._assistant_name = assistant_name
+        self._plan = plan
+
+    async def on_enter(self):
+        logger.info(f"[mia] onboarding call — plan={self._plan!r}")
+        greeting = (
+            f"Bonjour, je suis {self._assistant_name}, votre assistante téléphonique Fixlyy. "
+            "À partir de maintenant, c'est moi qui réponds à vos appels quand vous êtes occupé."
+        )
+        self.session.say(greeting, allow_interruptions=False)
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
@@ -374,6 +455,21 @@ async def entrypoint(ctx: JobContext):
 
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("[mia] connected")
+
+    # Détecter si c'est un appel d'onboarding (outbound sortant depuis initiate-outbound-call)
+    # Le participant SIP outbound a onboarding_call: true dans son metadata
+    onboarding_meta: dict = {}
+    for p in ctx.room.remote_participants.values():
+        identity = getattr(p, "identity", "") or ""
+        if identity.startswith("sip_out_"):
+            try:
+                meta = json.loads(getattr(p, "metadata", None) or "{}")
+                if meta.get("onboarding_call"):
+                    onboarding_meta = meta
+                    logger.info(f"[mia] onboarding call detected — plan={meta.get('plan_id')!r}")
+                    break
+            except Exception:
+                pass
 
     # STT : détection auto de langue pour Max, français forcé pour Solo/Pro
     if multilingual:
@@ -437,7 +533,14 @@ async def entrypoint(ctx: JobContext):
                     start_time=start_time,
                 ))
 
-    await session.start(MiaAgent(profile, pricing, multilingual), room=ctx.room)
+    if onboarding_meta.get("onboarding_call"):
+        plan = onboarding_meta.get("plan_id") or profile.get("subscription_plan") or "solo"
+        agent = OnboardingMiaAgent(profile, plan)
+        logger.info(f"[mia] starting OnboardingMiaAgent — plan={plan!r}")
+    else:
+        agent = MiaAgent(profile, pricing, multilingual)
+
+    await session.start(agent, room=ctx.room)
     logger.info("[mia] session started")
 
 

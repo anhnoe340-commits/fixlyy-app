@@ -103,8 +103,9 @@ Deno.serve(async (req) => {
     return new Response('Bad Request', { status: 400, headers: cors })
   }
 
-  const targetPhone = (body.target_phone as string | null)?.trim() ?? ''
-  const context     = body.context as string | null
+  const targetPhone    = (body.target_phone as string | null)?.trim() ?? ''
+  const context        = body.context as string | null
+  const onboardingCall = !!(body.onboarding_call as boolean | null)
 
   if (!/^\+[1-9]\d{7,14}$/.test(targetPhone)) {
     return new Response(JSON.stringify({ error: 'invalid_target_phone' }), {
@@ -147,7 +148,12 @@ Deno.serve(async (req) => {
       roomName,
       participantIdentity: participantId,
       participantName:     `Appel sortant ${targetPhone}`,
-      participantMetadata: JSON.stringify({ user_id: userId, outbound: true, ...(context ? { context } : {}) }),
+      participantMetadata: JSON.stringify({
+        user_id: userId,
+        outbound: true,
+        ...(onboardingCall ? { onboarding_call: true, plan_id: profile.subscription_plan || 'solo' } : {}),
+        ...(context ? { context } : {}),
+      }),
       from:                profile.twilio_number,
       playRingtone:        false,
     })
