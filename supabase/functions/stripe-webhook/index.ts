@@ -93,11 +93,19 @@ serve(async (req) => {
   const sig = req.headers.get('stripe-signature')!;
   const body = await req.text();
 
+  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
+  console.log('[debug] STRIPE_WEBHOOK_SECRET prefix:', webhookSecret.slice(0, 12), 'len:', webhookSecret.length);
+
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, Deno.env.get('STRIPE_WEBHOOK_SECRET')!);
-  } catch {
-    return new Response('Webhook signature invalid', { status: 400 });
+    event = await stripe.webhooks.constructEventAsync(body, sig, webhookSecret);
+  } catch (err: any) {
+    return new Response(JSON.stringify({
+      error: 'Webhook signature invalid',
+      secret_prefix: webhookSecret.slice(0, 8),
+      secret_len: webhookSecret.length,
+      detail: err.message,
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
   switch (event.type) {
@@ -128,6 +136,29 @@ serve(async (req) => {
         }
 
         callProvision(uid).catch(err => handleProvisioningFailure(uid, err.message))
+      } else {
+        // Payment Link sans supabase_uid → profil orphelin à réclamer via /setup
+        const customerId  = session.customer as string
+        const custDetails = (session as any).customer_details as Record<string, string> | null
+        const email       = custDetails?.email?.trim().toLowerCase() ?? ''
+        const phone       = (custDetails?.phone ?? '').replace(/\s/g, '')
+
+        if (customerId && (email || phone)) {
+          const orphanId = crypto.randomUUID()
+          const { error: orphanErr } = await supabase.from('profiles').insert({
+            id:                  orphanId,
+            stripe_customer_id:  customerId,
+            email,
+            phone,
+            source:              'prospection',
+            provisioning_status: 'pending_claim',
+          })
+          if (orphanErr) {
+            console.error('[webhook] orphan insert failed:', orphanErr.message)
+          } else {
+            console.log(`[webhook] orphan ${orphanId} customer=${customerId} phone=${phone}`)
+          }
+        }
       }
       break;
     }
@@ -147,7 +178,7 @@ serve(async (req) => {
         stripe_subscription_id: sub.id,
         status,
         plan: planName,
-        current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        current_period_end: sub.items.data[0]?.current_period_end ? new Date(sub.items.data[0].current_period_end * 1000).toISOString() : null,
         trial_end: trialEnd,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'stripe_subscription_id' });

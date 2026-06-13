@@ -11,6 +11,7 @@ import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
 import JoinDashboard from '@/pages/JoinDashboard'
 import ResumePage from '@/pages/ResumePage'
+import SetupPage from '@/pages/setup/SetupPage'
 import { supabase } from '@/lib/supabase'
 
 const ADMIN_USER_ID = 'e537e7ab-5f0e-489f-8acc-7faae4dbe0d7'
@@ -99,7 +100,7 @@ function AppContent() {
     // Vérifier l'état du profil
     supabase
       .from('profiles')
-      .select('id, company_name, stripe_customer_id, vapi_assistant_id')
+      .select('id, company_name, stripe_customer_id, vapi_assistant_id, livekit_trunk_id, onboarding_completed')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -111,15 +112,15 @@ function AppContent() {
         }
         if (!data) { setStatus('onboarding'); return }
 
-        if (data.vapi_assistant_id) {
-          // Provisioning terminé → dashboard
+        // Provisionné via Vapi (anciens users) ou LiveKit (V3/prospection)
+        const isProvisioned = !!(data.vapi_assistant_id || data.livekit_trunk_id)
+        if (isProvisioned || data.onboarding_completed) {
           sessionStorage.removeItem('fixlyy_checkout_success')
           setStatus('dashboard')
-        } else if (data.company_name && data.stripe_customer_id) {
-          // Onboarding fait + Stripe payé, mais provisioning pas encore terminé
+        } else if (data.stripe_customer_id) {
+          // Paiement effectué, provisioning en attente
           setStatus('provisioning')
         } else {
-          // Nouveau compte ou onboarding abandonné avant paiement
           setStatus('onboarding')
         }
       })
@@ -136,6 +137,7 @@ export default function App() {
   if (window.location.pathname === '/reset-password') return <ResetPasswordPage />
   if (window.location.pathname === '/connexion') return <AuthProvider><LoginEntry /></AuthProvider>
   if (window.location.pathname === '/commencer') return <AuthProvider><OnboardingV3Entry /></AuthProvider>
+  if (window.location.pathname === '/setup') return <SetupPage />
   if (window.location.pathname === '/join' && new URLSearchParams(window.location.search).has('token')) return <JoinDashboard />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
   if (window.location.pathname.startsWith('/r/')) return <ResumePage />
