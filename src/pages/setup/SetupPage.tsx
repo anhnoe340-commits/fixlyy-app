@@ -36,14 +36,12 @@ function SetupStep1({ onDone }: Step1Props) {
   const [userId,  setUserId]  = useState('')
   const [dots,    setDots]    = useState(1)
 
-  // Animation de points
   useEffect(() => {
     if (phase !== 'claiming' && phase !== 'provisioning') return
     const t = setInterval(() => setDots(d => (d % 3) + 1), 600)
     return () => clearInterval(t)
   }, [phase])
 
-  // Polling provisioning
   useEffect(() => {
     if (phase !== 'provisioning' || !userId) return
     const iv = setInterval(async () => {
@@ -76,6 +74,7 @@ function SetupStep1({ onDone }: Step1Props) {
   }
 
   async function verifyOtp() {
+    if (otp.length < 4) return
     setError('')
     setLoading(true)
     const { data, error: verifyErr } = await supabase.auth.verifyOtp({
@@ -127,9 +126,9 @@ function SetupStep1({ onDone }: Step1Props) {
 
     if (result.already_claimed) {
       if (result.provisioning === 'done' && result.twilio_number) {
-        const { data: profile } = await supabase
+        const { data: p } = await supabase
           .from('profiles').select('phone').eq('id', uid).single()
-        onDone(uid, result.twilio_number, profile?.phone ?? e164)
+        onDone(uid, result.twilio_number, p?.phone ?? e164)
       } else {
         setUserId(uid)
         setPhase('provisioning')
@@ -145,25 +144,38 @@ function SetupStep1({ onDone }: Step1Props) {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-white mb-1">Activez votre compte</h2>
-        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.8)' }}>
+        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
           Entrez le numéro utilisé lors de votre paiement pour lier votre abonnement.
         </p>
       </div>
-      <div className="v3-card rounded-2xl p-5">
-        <label className="text-xs font-semibold uppercase tracking-widest mb-2 block"
-          style={{ color: 'rgba(148,163,184,0.7)' }}>Numéro de téléphone</label>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: 'rgba(148,163,184,0.7)' }}>
+          Numéro de téléphone
+        </label>
         <input
           type="tel" inputMode="tel" value={phone}
           onChange={e => setPhone(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !loading && sendOtp()}
           placeholder="06 12 34 56 78"
-          className="w-full bg-transparent text-white text-lg font-medium border-0 outline-none placeholder:opacity-30"
+          className="v3-input w-full rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30"
         />
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <button onClick={sendOtp} disabled={loading || !phone.trim()}
-        className="w-full py-5 rounded-2xl text-white text-base font-bold transition-all active:scale-95 disabled:opacity-50"
-        style={{ background: loading ? 'rgba(59,91,245,0.5)' : `linear-gradient(135deg, ${BRAND}, #6366f1)` }}>
+
+      {error && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+          {error}
+        </p>
+      )}
+
+      <button
+        onClick={sendOtp}
+        disabled={loading || !phone.trim()}
+        className="w-full py-4 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
+        style={{ background: BRAND }}
+      >
+        {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
         {loading ? 'Envoi en cours…' : 'Recevoir le code SMS →'}
       </button>
     </div>
@@ -174,30 +186,54 @@ function SetupStep1({ onDone }: Step1Props) {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-white mb-1">Code SMS reçu ?</h2>
-        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.8)' }}>
-          Saisissez le code envoyé au <span className="text-white font-medium">{e164}</span>.
+        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
+          Code envoyé au <span className="text-white font-medium">{e164}</span>
         </p>
       </div>
-      <div className="v3-card rounded-2xl p-5">
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: 'rgba(148,163,184,0.7)' }}>
+          Code à 6 chiffres
+        </label>
         <input
-          type="tel" inputMode="numeric" maxLength={6} value={otp}
-          onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-          onKeyDown={e => e.key === 'Enter' && !loading && otp.length >= 4 && verifyOtp()}
+          type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+          value={otp}
+          onChange={e => {
+            const v = e.target.value.replace(/\D/g, '')
+            setOtp(v)
+            if (v.length === 6) setTimeout(verifyOtp, 50)
+          }}
           placeholder="123456"
-          className="w-full bg-transparent text-white text-3xl font-bold text-center border-0 outline-none tracking-widest placeholder:opacity-20"
+          className="v3-input w-full rounded-xl px-4 py-4 text-2xl font-bold text-center tracking-[0.5em] text-white"
         />
       </div>
-      {error && <p className="text-sm text-red-400 text-center">{error}</p>}
-      <button onClick={verifyOtp} disabled={loading || otp.length < 4}
-        className="w-full py-5 rounded-2xl text-white text-base font-bold transition-all active:scale-95 disabled:opacity-50"
-        style={{ background: loading ? 'rgba(59,91,245,0.5)' : `linear-gradient(135deg, ${BRAND}, #6366f1)` }}>
-        {loading ? 'Vérification…' : 'Confirmer le code →'}
+
+      {error && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+          {error}
+        </p>
+      )}
+
+      <button
+        onClick={verifyOtp}
+        disabled={loading || otp.length < 4}
+        className="w-full py-4 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
+        style={{ background: BRAND }}
+      >
+        {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+        Valider →
       </button>
-      <button onClick={() => { setPhase('phone'); setOtp(''); setError('') }}
-        className="text-sm text-center underline underline-offset-2"
-        style={{ color: 'rgba(148,163,184,0.5)' }}>
-        Changer de numéro
-      </button>
+
+      <div className="flex flex-col items-center gap-2">
+        <button
+          onClick={() => { setPhase('phone'); setOtp(''); setError('') }}
+          className="text-sm"
+          style={{ color: 'rgba(148,163,184,0.45)' }}
+        >
+          ← Changer de numéro
+        </button>
+      </div>
     </div>
   )
 
@@ -234,9 +270,9 @@ function SetupStep1({ onDone }: Step1Props) {
       </div>
       <div className="w-full v3-card rounded-2xl px-6 py-4 flex flex-col gap-3">
         {[
-          { label: 'Paiement confirmé', done: true },
-          { label: 'Compte lié',        done: true },
-          { label: 'Numéro Mia en cours d\'attribution', done: false },
+          { label: 'Paiement confirmé',                       done: true  },
+          { label: 'Compte lié',                              done: true  },
+          { label: "Numéro Mia en cours d'attribution",       done: false },
         ].map((item, i) => (
           <div key={i} className="flex items-center gap-3">
             <div className="w-5 h-5 flex-shrink-0 flex items-center justify-center">
@@ -254,35 +290,51 @@ function SetupStep1({ onDone }: Step1Props) {
     </div>
   )
 
-  // ── Abonnement introuvable + fallback email ───────────────────────────────
+  // ── Fallback email ────────────────────────────────────────────────────────
   if (phase === 'no_claim_email') return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-white mb-1">Essayons avec votre email</h2>
-        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.8)' }}>
+        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
           Entrez l'adresse email utilisée lors de votre paiement Stripe.
         </p>
       </div>
-      <div className="v3-card rounded-2xl p-5">
-        <label className="text-xs font-semibold uppercase tracking-widest mb-2 block"
-          style={{ color: 'rgba(148,163,184,0.7)' }}>Adresse email</label>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: 'rgba(148,163,184,0.7)' }}>
+          Adresse email
+        </label>
         <input
           type="email" inputMode="email" value={email}
           onChange={e => setEmail(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !loading && claimWithEmail()}
           placeholder="vous@exemple.fr"
-          className="w-full bg-transparent text-white text-base border-0 outline-none placeholder:opacity-30"
+          className="v3-input w-full rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30"
         />
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <button onClick={claimWithEmail} disabled={loading || !email.trim()}
-        className="w-full py-5 rounded-2xl text-white text-base font-bold transition-all active:scale-95 disabled:opacity-50"
-        style={{ background: loading ? 'rgba(59,91,245,0.5)' : `linear-gradient(135deg, ${BRAND}, #6366f1)` }}>
-        {loading ? 'Recherche…' : 'Rechercher mon abonnement →'}
+
+      {error && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+          {error}
+        </p>
+      )}
+
+      <button
+        onClick={claimWithEmail}
+        disabled={loading || !email.trim()}
+        className="w-full py-4 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
+        style={{ background: BRAND }}
+      >
+        {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+        Rechercher mon abonnement →
       </button>
-      <button onClick={() => { setPhase('phone'); setError('') }}
-        className="text-sm text-center underline underline-offset-2"
-        style={{ color: 'rgba(148,163,184,0.5)' }}>
+
+      <button
+        onClick={() => { setPhase('phone'); setError('') }}
+        className="text-sm text-center"
+        style={{ color: 'rgba(148,163,184,0.45)' }}
+      >
         ← Réessayer avec un autre numéro
       </button>
     </div>
@@ -306,16 +358,22 @@ function SetupStep1({ onDone }: Step1Props) {
       <button
         onClick={() => setPhase('no_claim_email')}
         className="w-full py-4 rounded-xl text-white text-sm font-bold"
-        style={{ background: BRAND }}>
+        style={{ background: BRAND }}
+      >
         Essayer avec mon email →
       </button>
-      <button onClick={() => { setPhase('phone'); setOtp(''); setError(''); setPhone('') }}
-        className="text-sm underline underline-offset-2"
-        style={{ color: 'rgba(148,163,184,0.5)' }}>
+      <button
+        onClick={() => { setPhase('phone'); setOtp(''); setError(''); setPhone('') }}
+        className="text-sm"
+        style={{ color: 'rgba(148,163,184,0.45)' }}
+      >
         Changer de numéro
       </button>
-      <a href="mailto:support@fixlyy.fr" className="text-sm underline underline-offset-2"
-        style={{ color: 'rgba(148,163,184,0.5)' }}>
+      <a
+        href="mailto:support@fixlyy.fr"
+        className="text-sm"
+        style={{ color: 'rgba(148,163,184,0.45)' }}
+      >
         Contacter le support
       </a>
     </div>
@@ -386,9 +444,11 @@ function SetupRecap({ userId, onDone }: { userId: string; onDone: () => void }) 
         )}
       </div>
 
-      <button onClick={onDone}
+      <button
+        onClick={onDone}
         className="w-full py-4 rounded-xl text-white text-sm font-bold"
-        style={{ background: `linear-gradient(135deg, ${BRAND}, #6366f1)` }}>
+        style={{ background: BRAND }}
+      >
         Accéder au tableau de bord →
       </button>
     </div>
@@ -441,65 +501,78 @@ export default function SetupPage() {
   const progressPct = ((state.step - 1) / (TOTAL - 1)) * 100
 
   return (
-    <div className="min-h-screen dashboard-bg flex flex-col">
+    <div
+      className="onboarding-v3-bg min-h-screen flex flex-col"
+      style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+    >
+      {/* Barre de progression fixe — identique OnboardingV3 */}
+      <div className="fixed top-0 left-0 right-0 z-50 h-0.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <div
+          className="h-full transition-all duration-500 ease-out"
+          style={{ width: `${progressPct}%`, background: BRAND }}
+        />
+      </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-4">
+      <div className="flex-shrink-0 flex items-center justify-between px-6 pt-8 pb-2">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-sm"
-            style={{ background: BRAND }}>F</div>
-          <span className="font-bold text-white text-sm">Fixlyy</span>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+            style={{ background: BRAND }}
+          >F</div>
+          <span className="text-base font-semibold text-white">Fixlyy</span>
         </div>
-        <span className="text-xs font-medium" style={{ color: 'rgba(148,163,184,0.6)' }}>
-          Étape {state.step}/{TOTAL} — {STEP_LABELS[state.step - 1]}
-        </span>
-      </div>
-
-      {/* Barre de progression */}
-      <div className="px-6 mb-6">
-        <div className="h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-          <div className="h-1 rounded-full transition-all duration-500"
-            style={{ background: `linear-gradient(90deg, ${BRAND}, #6366f1)`, width: `${progressPct}%` }} />
+        <div className="text-right">
+          <p className="text-xs font-medium text-white/50">{STEP_LABELS[state.step - 1]}</p>
+          <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.4)' }}>{state.step} / {TOTAL}</p>
         </div>
       </div>
 
-      {/* Contenu */}
-      <div className="flex-1 overflow-y-auto px-6 pb-8">
-        {state.step === 1 && (
-          <SetupStep1
-            onDone={(userId, fixlyyNumber, artisanPhone) =>
-              setState(s => ({ ...s, step: 2, userId, fixlyyNumber, artisanPhone }))
-            }
-          />
-        )}
-        {state.step === 2 && state.userId && state.fixlyyNumber && (
-          <Step4Number
-            userId={state.userId}
-            fixlyyNumber={state.fixlyyNumber}
-            artisanPhone={state.artisanPhone ?? ''}
-            onDone={() => next()}
-          />
-        )}
-        {state.step === 3 && state.userId && (
-          <Step5Forwarding
-            userId={state.userId}
-            fixlyyNumber={state.fixlyyNumber}
-            onDone={() => next()}
-          />
-        )}
-        {state.step === 4 && state.userId && (
-          <Step6Install
-            userId={state.userId}
-            deferredPrompt={deferredPrompt}
-            onDone={() => next()}
-          />
-        )}
-        {state.step === 5 && state.userId && (
-          <SetupRecap
-            userId={state.userId}
-            onDone={() => window.location.replace('/')}
-          />
-        )}
+      {/* Contenu — centré max-w-sm, identique OnboardingV3 */}
+      <div className="flex-1 flex items-start justify-center p-5 pb-12 pt-4">
+        <div className="w-full max-w-sm">
+
+          {state.step === 1 && (
+            <SetupStep1
+              onDone={(userId, fixlyyNumber, artisanPhone) =>
+                setState(s => ({ ...s, step: 2, userId, fixlyyNumber, artisanPhone }))
+              }
+            />
+          )}
+
+          {state.step === 2 && state.userId && state.fixlyyNumber && (
+            <Step4Number
+              userId={state.userId}
+              fixlyyNumber={state.fixlyyNumber}
+              artisanPhone={state.artisanPhone ?? ''}
+              onDone={() => next()}
+            />
+          )}
+
+          {state.step === 3 && state.userId && (
+            <Step5Forwarding
+              userId={state.userId}
+              fixlyyNumber={state.fixlyyNumber}
+              onDone={() => next()}
+            />
+          )}
+
+          {state.step === 4 && state.userId && (
+            <Step6Install
+              userId={state.userId}
+              deferredPrompt={deferredPrompt}
+              onDone={() => next()}
+            />
+          )}
+
+          {state.step === 5 && state.userId && (
+            <SetupRecap
+              userId={state.userId}
+              onDone={() => window.location.replace('/')}
+            />
+          )}
+
+        </div>
       </div>
     </div>
   )
