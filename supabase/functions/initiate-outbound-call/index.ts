@@ -24,12 +24,12 @@ function fetchWithTimeout(url: string, init: RequestInit, ms = 15000): Promise<R
   return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(t))
 }
 
-async function livekitAdminToken(): Promise<string> {
+async function lkMakeToken(sipGrant: Record<string, boolean>): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   const enc = (o: object) =>
     btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
   const head    = enc({ alg: 'HS256', typ: 'JWT' })
-  const payload = enc({ iss: LK_KEY, sub: 'sip-admin', iat: now, exp: now + 60, nbf: now, sip: { admin: true } })
+  const payload = enc({ iss: LK_KEY, sub: 'sip-admin', iat: now, exp: now + 60, nbf: now, sip: sipGrant })
   const input   = `${head}.${payload}`
   const key     = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(LK_SECRET),
@@ -41,8 +41,12 @@ async function livekitAdminToken(): Promise<string> {
   return `${input}.${sigB64}`
 }
 
-async function lkPost(path: string, body: unknown): Promise<Record<string, unknown>> {
-  const token = await livekitAdminToken()
+// CreateSIPParticipant → sip.call  |  gestion trunks/dispatch rules → sip.admin
+const lkAdminToken = () => lkMakeToken({ admin: true })
+const lkCallToken  = () => lkMakeToken({ call: true })
+
+async function lkPost(path: string, body: unknown, useCallGrant = false): Promise<Record<string, unknown>> {
+  const token = useCallGrant ? await lkCallToken() : await lkAdminToken()
   const res   = await fetchWithTimeout(`${LK_URL}/twirp/livekit.SIP/${path}`, {
     method:  'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -156,7 +160,7 @@ Deno.serve(async (req) => {
       }),
       from:                profile.twilio_number,
       playRingtone:        false,
-    })
+    }, true)
 
     await logEvent({
       supabase,
