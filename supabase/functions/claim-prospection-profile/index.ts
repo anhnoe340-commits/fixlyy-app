@@ -101,6 +101,32 @@ Deno.serve(async (req) => {
     })
   }
 
+  // Sync subscription_plan/status depuis la table subscriptions (peuplée par subscription.created
+  // avant que le profil orphelin existe — le webhook n'a donc pas pu mettre à jour profiles à ce moment)
+  const stripeCustomerId = (rpcResult as any)?.stripe_customer_id as string | null
+  if (stripeCustomerId) {
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('plan, status, trial_end')
+      .eq('stripe_customer_id', stripeCustomerId)
+      .in('status', ['trialing', 'active'])
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (sub?.plan) {
+      await supabase.from('profiles').update({
+        subscription_plan:      sub.plan,
+        selected_plan:          sub.plan,
+        subscription_status:    sub.status,
+        subscription_trial_end: sub.trial_end ?? null,
+        vapi_enabled:           true,
+        trial_status:           'converted',
+        payment_method_added:   true,
+      }).eq('id', userId)
+    }
+  }
+
   await logEvent({
     supabase,
     eventType:    'prospection_claimed',

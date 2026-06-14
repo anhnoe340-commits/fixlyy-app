@@ -4184,8 +4184,11 @@ function SubscriptionPage({ accent }: { accent: string }) {
     })
   }, [user])
 
+  const userPlanKey = resolvePlanKey(profile?.subscription_plan)
+  const hasActiveSub = isTrialActive || isActive
+
   const plans = [
-    { id: 0, planId: 'starter', name: 'Solo',
+    { id: 0, planId: 'starter', planKey: 'solo' as const, name: 'Solo',
       monthly: { price: PLANS.solo.price, priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
       annual:  { price: PLANS.solo.price, priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
       desc: "Idéal pour l'artisan indépendant",
@@ -4199,7 +4202,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
         'Support par email',
       ],
     },
-    { id: 1, planId: 'pro', name: 'Pro', popular: true,
+    { id: 1, planId: 'pro', planKey: 'pro' as const, name: 'Pro', popular: true,
       monthly: { price: PLANS.pro.price, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
       annual:  { price: PLANS.pro.price, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
       desc: 'Pour les artisans avec un bon volume',
@@ -4216,7 +4219,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
         'Support prioritaire',
       ],
     },
-    { id: 2, planId: 'max', name: 'Max',
+    { id: 2, planId: 'max', planKey: 'max' as const, name: 'Max',
       monthly: { price: PLANS.max.price, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
       annual:  { price: PLANS.max.price, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
       desc: 'Pour les TPE et petites équipes',
@@ -4347,20 +4350,26 @@ function SubscriptionPage({ accent }: { accent: string }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {plans.map((p) => {
           const isSelected = selected === p.id
+          const isCurrentPlan = hasActiveSub && p.planKey === userPlanKey
           const tier = billing === 'annual' ? p.annual : p.monthly
           return (
             <div key={p.id} onClick={() => setSelected(p.id)}
               className="bg-white rounded-2xl p-5 cursor-pointer transition-all relative overflow-hidden"
               style={{
-                border: isSelected ? `2px solid ${accent}` : '1px solid #F3F4F6',
-                boxShadow: isSelected ? `0 0 0 4px ${accent}12` : '0 1px 3px 0 rgb(0 0 0/0.05)',
+                border: isCurrentPlan ? `2px solid ${accent}` : isSelected ? `2px solid ${accent}` : '1px solid #F3F4F6',
+                boxShadow: isCurrentPlan || isSelected ? `0 0 0 4px ${accent}12` : '0 1px 3px 0 rgb(0 0 0/0.05)',
               }}>
-              {p.popular && (
+              {isCurrentPlan && (
+                <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
+                  Plan actuel
+                </div>
+              )}
+              {!isCurrentPlan && p.popular && (
                 <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
                   Recommandé
                 </div>
               )}
-              <div className={p.popular ? 'pt-5' : ''}>
+              <div className={isCurrentPlan || p.popular ? 'pt-5' : ''}>
                 <p className="font-bold text-gray-900 mb-1">{p.name}</p>
                 <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
                   {tier.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
