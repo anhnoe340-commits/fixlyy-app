@@ -56,6 +56,8 @@ export default function OnboardingV3({ onDone }: Props) {
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
+      const raw = user.phone ?? ''
+      const phone = raw ? (raw.startsWith('+') ? raw : `+${raw}`) : null
       supabase
         .from('profiles')
         .select('vapi_assistant_id, twilio_number')
@@ -64,9 +66,9 @@ export default function OnboardingV3({ onDone }: Props) {
         .then(({ data }) => {
           if (data?.vapi_assistant_id && data?.twilio_number) {
             // Webhook already fired — skip polling, go straight to reveal
-            setState(s => ({ ...s, userId: user.id, step: 4, fixlyyNumber: data.twilio_number }))
+            setState(s => ({ ...s, userId: user.id, phone, step: 4, fixlyyNumber: data.twilio_number }))
           } else {
-            setState(s => ({ ...s, userId: user.id, step: 3 }))
+            setState(s => ({ ...s, userId: user.id, phone, step: 3 }))
           }
         })
     })
