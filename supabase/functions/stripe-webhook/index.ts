@@ -94,18 +94,15 @@ serve(async (req) => {
   const body = await req.text();
 
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
-  console.log('[debug] STRIPE_WEBHOOK_SECRET prefix:', webhookSecret.slice(0, 12), 'len:', webhookSecret.length);
 
   let event: Stripe.Event;
   try {
     event = await stripe.webhooks.constructEventAsync(body, sig, webhookSecret);
   } catch (err: any) {
-    return new Response(JSON.stringify({
-      error: 'Webhook signature invalid',
-      secret_prefix: webhookSecret.slice(0, 8),
-      secret_len: webhookSecret.length,
-      detail: err.message,
-    }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    console.error('[webhook] signature check failed:', err.message)
+    return new Response(JSON.stringify({ error: 'Webhook signature invalid' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   switch (event.type) {
@@ -143,7 +140,13 @@ serve(async (req) => {
         const email       = custDetails?.email?.trim().toLowerCase() ?? ''
         const phone       = (custDetails?.phone ?? '').replace(/\s/g, '')
 
-        if (customerId && (email || phone)) {
+        console.log(`[webhook] checkout.session.completed (Payment Link) customer=${customerId} email=${email} phone=${phone} custDetails=${JSON.stringify(custDetails)}`)
+
+        if (!customerId) {
+          console.error('[webhook] checkout: no customerId — skipping orphan insert')
+        } else if (!email && !phone) {
+          console.error(`[webhook] checkout: no email/phone for customer=${customerId} — skipping orphan insert`)
+        } else {
           const orphanId = crypto.randomUUID()
           const { error: orphanErr } = await supabase.from('profiles').insert({
             id:                  orphanId,
@@ -154,9 +157,9 @@ serve(async (req) => {
             provisioning_status: 'pending_claim',
           })
           if (orphanErr) {
-            console.error('[webhook] orphan insert failed:', orphanErr.message)
+            console.error(`[webhook] orphan insert failed customer=${customerId}: ${orphanErr.message}`)
           } else {
-            console.log(`[webhook] orphan ${orphanId} customer=${customerId} phone=${phone}`)
+            console.log(`[webhook] orphan created id=${orphanId} customer=${customerId} email=${email} phone=${phone}`)
           }
         }
       }
