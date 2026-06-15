@@ -456,20 +456,40 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("[mia] connected")
 
-    # Détecter si c'est un appel d'onboarding (outbound sortant depuis initiate-outbound-call)
-    # Le participant SIP outbound a onboarding_call: true dans son metadata
+    # Détection du type d'appel (inbound normal vs outbound onboarding).
+    # Le participant SIP outbound peut arriver APRÈS ctx.connect() — on ne scanne
+    # pas remote_participants de façon synchrone (race condition), on écoute
+    # l'événement participant_connected avec un timeout de 30 s.
     onboarding_meta: dict = {}
-    for p in ctx.room.remote_participants.values():
+    _sip_seen = asyncio.Event()
+
+    def _inspect_sip_participant(p) -> None:
         identity = getattr(p, "identity", "") or ""
+        if not identity.startswith("sip_"):
+            return
         if identity.startswith("sip_out_"):
             try:
                 meta = json.loads(getattr(p, "metadata", None) or "{}")
                 if meta.get("onboarding_call"):
-                    onboarding_meta = meta
+                    onboarding_meta.update(meta)
                     logger.info(f"[mia] onboarding call detected — plan={meta.get('plan_id')!r}")
-                    break
             except Exception:
                 pass
+        _sip_seen.set()
+
+    # Vérifier les participants déjà présents (cas inbound : souvent déjà là)
+    for p in ctx.room.remote_participants.values():
+        _inspect_sip_participant(p)
+
+    if not _sip_seen.is_set():
+        @ctx.room.on("participant_connected")
+        def _on_participant_connected(participant):
+            _inspect_sip_participant(participant)
+
+        try:
+            await asyncio.wait_for(_sip_seen.wait(), timeout=30.0)
+        except asyncio.TimeoutError:
+            logger.warning("[mia] aucun participant SIP en 30s — démarrage MiaAgent standard")
 
     # STT : détection auto de langue pour Max, français forcé pour Solo/Pro
     if multilingual:
