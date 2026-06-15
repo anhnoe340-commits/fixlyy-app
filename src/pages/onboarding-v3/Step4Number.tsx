@@ -215,6 +215,11 @@ export default function Step4Number({ fixlyyNumber, artisanPhone, userId, onDone
           <p className="text-sm" style={{ color: 'rgba(239,68,68,0.9)' }}>
             L'appel n'a pas pu aboutir. Vérifiez votre connexion et réessayez.
           </p>
+          {callError && (
+            <p className="text-xs font-mono break-all" style={{ color: 'rgba(239,68,68,0.7)' }}>
+              {callError}
+            </p>
+          )}
           <button
             onClick={retryCall}
             className="text-xs font-semibold underline underline-offset-2"

@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
     const phoneClean        = targetPhone.replace(/\D/g, '')
     const participantId     = `sip_out_${phoneClean}`
 
-    await lkPost('CreateSIPParticipant', {
+    const sipBody = {
       sipTrunkId:          outboundTrunkId,
       sipCallTo:           targetPhone,
       roomName,
@@ -160,7 +160,10 @@ Deno.serve(async (req) => {
       }),
       from:                profile.twilio_number,
       playRingtone:        false,
-    }, true)
+    }
+    console.log('[outbound] CreateSIPParticipant body:', JSON.stringify(sipBody))
+    const sipResult = await lkPost('CreateSIPParticipant', sipBody, true)
+    console.log('[outbound] CreateSIPParticipant ok:', JSON.stringify(sipResult))
 
     await logEvent({
       supabase,
