@@ -313,54 +313,68 @@ def _plan_label(plan: str) -> str:
     return {"solo": "la formule Solo", "pro": "la formule Pro", "max": "la formule Max"}.get(plan, "votre formule")
 
 
-def build_onboarding_instructions(plan: str, company_name: str, assistant_name: str) -> str:
+def _build_onboarding_script(plan: str, assistant_name: str) -> str:
+    """Texte parlé complet pour on_enter — monologue autonome, pas de question."""
     plan = plan.lower()
-
-    solo_features = (
-        "300 minutes incluses par mois, je réponds 24h/24, "
-        "je qualifie les urgences et je vous envoie un SMS récap en 30 secondes avec toutes les infos du client."
-    )
-    pro_extra = (
-        "En plus, j'envoie un SMS de confirmation à vos clients, je peux prendre des rendez-vous, "
-        "vous avez accès à un mini-CRM, des statistiques détaillées, "
-        "et vous pouvez configurer jusqu'à 10 motifs d'appel personnalisés pour votre métier."
-    )
-    max_extra = (
-        "Et avec votre formule Max, je réponds aussi en plusieurs langues, "
-        "vous avez 1000 minutes incluses, jusqu'à 20 motifs d'appel, et des rapports mensuels détaillés."
-    )
+    label = _plan_label(plan)
 
     if plan == "solo":
-        features = solo_features
-        tips = "Pensez à activer le renvoi d'appel sur votre téléphone pour que je puisse prendre le relais quand vous ne décrochez pas."
+        minutes = "300"
+        features = ""
     elif plan == "pro":
-        features = solo_features + " " + pro_extra
-        tips = (
-            "Pour bien commencer, configurez vos motifs d'appel les plus fréquents dans votre tableau de bord — "
-            "ça m'aidera à mieux qualifier vos clients. "
-            "Et pensez à activer le renvoi d'appel."
+        minutes = "500"
+        features = (
+            ", j'envoie un SMS de confirmation à vos clients, "
+            "je peux prendre des rendez-vous et vous avez accès à un mini-CRM"
         )
     else:  # max
-        features = solo_features + " " + pro_extra + " " + max_extra
-        tips = (
-            "Pour bien commencer, configurez vos motifs d'appel dans le tableau de bord "
-            "et activez le renvoi d'appel. "
-            "Si vous avez des clients qui parlent d'autres langues, je m'en occupe automatiquement."
+        minutes = "1000"
+        features = (
+            ", je réponds en plusieurs langues, "
+            "jusqu'à 20 motifs d'appel personnalisables et des rapports mensuels détaillés"
         )
 
+    return (
+        f"Bonjour, je suis {assistant_name}, votre assistante téléphonique Fixlyy. "
+        "À partir de maintenant, je réponds à vos appels manqués 24h/24, 7j/7. "
+        "Concrètement : quand un client vous appelle et que vous êtes occupé, je décroche, "
+        "je qualifie sa demande et je vous envoie un SMS récap en moins de 30 secondes "
+        "avec son nom, numéro, adresse et motif d'appel. "
+        f"Avec votre formule {label}, vous avez {minutes} minutes incluses par mois{features}. "
+        "Pour bien démarrer, activez le renvoi d'appel vers votre numéro Mia "
+        "et configurez vos motifs d'appel dans le tableau de bord. "
+        "Je suis prête !"
+    )
+
+
+def build_onboarding_instructions(plan: str, company_name: str, assistant_name: str) -> str:
+    """System prompt LLM — utilisé si l'artisan répond au monologue."""
+    plan = plan.lower()
     label = _plan_label(plan)
+
+    if plan == "solo":
+        minutes = "300"
+        extra = ""
+    elif plan == "pro":
+        minutes = "500"
+        extra = (
+            " J'envoie aussi un SMS de confirmation à vos clients, je peux prendre des rendez-vous, "
+            "vous avez accès à un mini-CRM, des statistiques et jusqu'à 10 motifs d'appel personnalisés."
+        )
+    else:  # max
+        minutes = "1000"
+        extra = (
+            " Je réponds aussi en plusieurs langues, "
+            "jusqu'à 20 motifs d'appel et des rapports mensuels détaillés."
+        )
 
     return (
         f"Tu es {assistant_name}, la réceptionniste téléphonique créée par Fixlyy pour {company_name}. "
-        "Tu viens d'être configurée et tu passes ton premier appel à l'artisan pour te présenter. "
-        "Suis EXACTEMENT ce script en 4 étapes, avec un ton chaleureux et naturel, comme une vraie réceptionniste. "
-        f"ÉTAPE 1 — Présentation : dis exactement 'Bonjour, je suis {assistant_name}, votre assistante téléphonique Fixlyy. "
-        "À partir de maintenant, c'est moi qui réponds à vos appels quand vous êtes occupé.' "
-        f"ÉTAPE 2 — Plan : explique 'Vous avez choisi {label} : {features}' "
-        f"ÉTAPE 3 — Conseil : dis '{tips}' "
-        "ÉTAPE 4 — Clôture : dis 'Vous allez maintenant pouvoir activer le renvoi d'appel — je vous explique ça juste après. À très vite !' puis raccroche. "
-        "Suis les 4 étapes dans l'ordre, avec des transitions naturelles. "
-        "Ne pose pas de question — c'est un monologue de présentation. "
+        "Tu viens de te présenter à l'artisan. Si il ou elle pose une question, réponds-y naturellement et chaleureusement. "
+        f"Rappelle-leur les points clés de leur formule {label} : {minutes} minutes incluses par mois.{extra} "
+        "Encourage-les à activer le renvoi d'appel et à configurer leurs motifs d'appel dans le tableau de bord. "
+        "Ton ton est chaleureux, professionnel, comme une vraie réceptionniste. "
+        "Ne pose pas de question — attends qu'ils parlent. "
         "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
     )
 
@@ -407,14 +421,11 @@ class OnboardingMiaAgent(Agent):
         )
         self._assistant_name = assistant_name
         self._plan = plan
+        self._script = _build_onboarding_script(plan, assistant_name)
 
     async def on_enter(self):
         logger.info(f"[mia] onboarding call — plan={self._plan!r}")
-        greeting = (
-            f"Bonjour, je suis {self._assistant_name}, votre assistante téléphonique Fixlyy. "
-            "À partir de maintenant, c'est moi qui réponds à vos appels quand vous êtes occupé."
-        )
-        self.session.say(greeting, allow_interruptions=False)
+        self.session.say(self._script, allow_interruptions=False)
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
