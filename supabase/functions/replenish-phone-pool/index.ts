@@ -1,8 +1,9 @@
 // Cron horaire : achète des numéros Twilio si le pool est sous REPLENISH_THRESHOLD
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const TWILIO_SID    = Deno.env.get('TWILIO_ACCOUNT_SID')!
-const TWILIO_TOKEN  = Deno.env.get('TWILIO_AUTH_TOKEN')!
+const TWILIO_SID         = Deno.env.get('TWILIO_ACCOUNT_SID')!
+const TWILIO_TOKEN       = Deno.env.get('TWILIO_AUTH_TOKEN')!
+const TWILIO_ADDRESS_SID = Deno.env.get('TWILIO_ADDRESS_SID') ?? ''
 const SB_URL        = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE    = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 const CRON_SECRET   = Deno.env.get('CRON_SECRET')!
@@ -33,7 +34,10 @@ async function buyFrenchNumber(): Promise<{ sid: string; phoneNumber: string } |
       Authorization: 'Basic ' + btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`),
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({ PhoneNumber: toRent }),
+    body: new URLSearchParams({
+      PhoneNumber: toRent,
+      ...(TWILIO_ADDRESS_SID ? { AddressSid: TWILIO_ADDRESS_SID } : {}),
+    }),
   })
   if (!buyRes.ok) throw new Error(`Twilio buy failed: ${buyRes.status} ${await buyRes.text()}`)
   const bought = await buyRes.json()

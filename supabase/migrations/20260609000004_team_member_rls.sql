@@ -31,12 +31,6 @@ CREATE POLICY "appointments_team_member_read"
   ON appointments FOR SELECT
   USING (is_team_member_of(artisan_id));
 
--- messages : les membres peuvent lire les messages du owner
-DROP POLICY IF EXISTS "messages_team_member_read" ON messages;
-CREATE POLICY "messages_team_member_read"
-  ON messages FOR SELECT
-  USING (is_team_member_of(artisan_id));
-
 -- service_pricing : les membres admin peuvent lire/modifier les tarifs
 DROP POLICY IF EXISTS "service_pricing_team_member_read" ON service_pricing;
 CREATE POLICY "service_pricing_team_member_read"
