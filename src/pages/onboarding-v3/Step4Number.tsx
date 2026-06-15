@@ -45,6 +45,12 @@ export default function Step4Number({ fixlyyNumber, artisanPhone, userId, onDone
     setPhase('calling')
     callStartRef.current = new Date().toISOString()
 
+    if (!artisanPhone || !/^\+[1-9]\d{7,14}$/.test(artisanPhone)) {
+      setCallError(`phone_invalide: "${artisanPhone}"`)
+      setPhase('call_failed')
+      return
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('session_missing')
