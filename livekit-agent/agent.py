@@ -473,8 +473,8 @@ async def entrypoint(ctx: JobContext):
 
     # STT : détection auto de langue pour Max, français forcé pour Solo/Pro
     if multilingual:
-        stt = deepgram.STT(model="nova-3", detect_language=True)
-        logger.info("[mia] STT: detect_language=True (Max plan)")
+        stt = deepgram.STT(model="nova-3", language="multi")
+        logger.info("[mia] STT: language=multi (Max plan)")
     else:
         stt = deepgram.STT(model="nova-3", language="fr")
 
