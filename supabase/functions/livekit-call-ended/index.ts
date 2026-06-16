@@ -62,6 +62,8 @@ Deno.serve(async (req) => {
   const smsBody       = body.sms_body       as string | null
   const apptDate      = body.appointment_date as string | null
   const apptTime      = body.appointment_time as string | null
+  const transferredTo = body.transferred_to   as string | null
+  const transferredAt = body.transferred_at   as string | null
 
   if (!userId) {
     return new Response(JSON.stringify({ error: 'missing user_id' }), {
@@ -95,6 +97,7 @@ Deno.serve(async (req) => {
       reason,
       status:           urgency === 'urgent' ? 'urgent' : 'new',
       transcript,
+      ...(transferredTo ? { transferred_to: transferredTo, transferred_at: transferredAt ?? new Date().toISOString() } : {}),
     })
 
     // 3. Compteur de minutes mensuel — alertes quota plan

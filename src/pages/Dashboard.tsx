@@ -393,6 +393,9 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
   const urgentCalls = calls.filter(c => c.status === 'urgent')
   const pendingCalls = calls.filter(c => c.status === 'pending')
   const recentCalls = calls.slice(0, 5)
+  const isMax = resolvePlanKey(profile?.subscription_plan) === 'max'
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  const transfersThisMonth = isMax ? calls.filter(c => c.transferred_to && new Date(c.created_at) >= monthStart).length : 0
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   const fmtDate = (iso: string) => {
@@ -432,11 +435,12 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
           {[1,2,3].map(i => <div key={i} className="flex-1 h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
+        <div className={`grid gap-3 ${isMax ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {[
             { label: "Aujourd'hui", value: todayCalls.length, sub: 'appels', color: accent },
             { label: 'À rappeler', value: urgentCalls.length + pendingCalls.length, sub: 'en attente', color: (urgentCalls.length + pendingCalls.length) > 0 ? '#EF4444' : '#10B981' },
             { label: 'Total', value: calls.length, sub: 'depuis toujours', color: '#6B7280' },
+            ...(isMax ? [{ label: 'Transferts', value: transfersThisMonth, sub: 'urgences ce mois', color: transfersThisMonth > 0 ? '#7C3AED' : '#6B7280' }] : []),
           ].map(s => (
             <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
@@ -585,6 +589,8 @@ type CallRow = {
   status: string
   duration_seconds: number | null
   created_at: string
+  transferred_to: string | null
+  transferred_at: string | null
 }
 
 const STATUS_LABELS: Record<string, string> = { new: 'Nouveau', pending: 'En attente', urgent: 'Urgent', done: 'Traité', spam: 'Spam' }

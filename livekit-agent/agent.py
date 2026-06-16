@@ -1,11 +1,15 @@
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
 import time
 import httpx
+from datetime import datetime, timezone
 from dotenv import load_dotenv
-from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli
+from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, function_tool
 from livekit.agents import Agent, AgentSession
 from livekit.plugins import deepgram, elevenlabs, groq, silero
 
@@ -15,6 +19,14 @@ logger = logging.getLogger("fixlyy.agent")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN", "")
+
+LK_URL    = (os.getenv("LIVEKIT_CLOUD_URL", "")
+             .replace("wss://", "https://")
+             .replace("ws://", "http://"))
+LK_KEY    = os.getenv("LIVEKIT_CLOUD_API_KEY", "")
+LK_SECRET = os.getenv("LIVEKIT_CLOUD_API_SECRET", "")
 
 DEFAULT_GREETING = (
     "Bonjour, vous êtes bien sur le service de gestion des appels. "
@@ -82,6 +94,86 @@ IMPORTANT : full_summary et sms_body doivent TOUJOURS être rédigés en frança
 quelle que soit la langue parlée pendant la conversation."""
 
 
+# ── LiveKit SIP helpers ───────────────────────────────────────────────────────
+
+def _lk_admin_jwt() -> str:
+    """JWT HS256 avec claim sip.admin pour l'API LiveKit."""
+    now = int(time.time())
+
+    def b64url(obj: dict) -> str:
+        return base64.urlsafe_b64encode(
+            json.dumps(obj, separators=(",", ":")).encode()
+        ).rstrip(b"=").decode()
+
+    header  = b64url({"alg": "HS256", "typ": "JWT"})
+    payload = b64url({
+        "iss": LK_KEY, "sub": "sip-admin",
+        "iat": now, "exp": now + 60, "nbf": now,
+        "sip": {"admin": True},
+    })
+    msg = f"{header}.{payload}"
+    sig = base64.urlsafe_b64encode(
+        hmac.new(LK_SECRET.encode(), msg.encode(), hashlib.sha256).digest()
+    ).rstrip(b"=").decode()
+    return f"{msg}.{sig}"
+
+
+async def _do_sip_transfer(room_name: str, identity: str, to_phone: str) -> bool:
+    """Transfère le participant SIP vers un numéro E.164 via TransferSIPParticipant."""
+    if not LK_URL or not LK_KEY or not LK_SECRET:
+        logger.error("[mia] SIP transfer: LiveKit credentials not configured")
+        return False
+    try:
+        token = _lk_admin_jwt()
+        url   = f"{LK_URL}/twirp/livekit.SIP/TransferSIPParticipant"
+        body  = {
+            "room_name":            room_name,
+            "participant_identity": identity,
+            "transfer_to":          f"tel:{to_phone}",
+            "play_dialtone":        True,
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                url, json=body,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                logger.info(f"[mia] SIP transfer OK → {to_phone}")
+                return True
+            logger.error(f"[mia] SIP transfer {resp.status_code}: {resp.text[:200]}")
+            return False
+    except Exception as e:
+        logger.error(f"[mia] SIP transfer exception: {e}")
+        return False
+
+
+async def _send_transfer_sms(to: str, from_num: str, body: str) -> None:
+    """SMS Twilio signalant le transfert urgent à l'artisan."""
+    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
+        logger.warning("[mia] Twilio SMS: credentials absent")
+        return
+    try:
+        auth = base64.b64encode(
+            f"{TWILIO_ACCOUNT_SID}:{TWILIO_AUTH_TOKEN}".encode()
+        ).decode()
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json"
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                url,
+                headers={"Authorization": f"Basic {auth}",
+                         "Content-Type": "application/x-www-form-urlencoded"},
+                data={"From": from_num, "To": to, "Body": body},
+                timeout=10.0,
+            )
+            if resp.status_code in (200, 201):
+                logger.info(f"[mia] transfer SMS sent to {to[:6]}***")
+            else:
+                logger.error(f"[mia] transfer SMS {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.error(f"[mia] transfer SMS exception: {e}")
+
+
 # ── Supabase helpers ──────────────────────────────────────────────────────────
 
 async def fetch_artisan_profile(user_id: str) -> dict:
@@ -94,7 +186,7 @@ async def fetch_artisan_profile(user_id: str) -> dict:
     }
     params = {
         "id": f"eq.{user_id}",
-        "select": "company_name,company_type,assistant_name,greeting_open,subscription_plan",
+        "select": "company_name,company_type,assistant_name,greeting_open,subscription_plan,phone,transfer_phone,twilio_number",
         "limit": "1",
     }
     try:
@@ -165,6 +257,8 @@ async def post_call_ended(
     transcript: str,
     duration_seconds: int,
     structured: dict,
+    transferred_to: str | None = None,
+    transferred_at: str | None = None,
 ) -> None:
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.warning("[mia] post_call_ended: SUPABASE_URL or KEY missing")
@@ -189,6 +283,9 @@ async def post_call_ended(
         "appointment_date": structured.get("appointment_date"),
         "appointment_time": structured.get("appointment_time"),
     }
+    if transferred_to:
+        payload["transferred_to"] = transferred_to
+        payload["transferred_at"] = transferred_at
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, headers=headers, json=payload, timeout=20.0)
@@ -203,11 +300,11 @@ async def handle_call_ended(
     caller_number: str,
     conversation_items: list,
     start_time: float,
+    transfer_state: dict | None = None,
 ) -> None:
     duration_secs = int(time.time() - start_time)
     logger.info(f"[mia] call ended — duration={duration_secs}s caller={caller_number} items={len(conversation_items)}")
 
-    # Construire le transcript texte
     lines = []
     for item in conversation_items:
         label = "Mia" if item["role"] == "assistant" else "Client"
@@ -221,17 +318,18 @@ async def handle_call_ended(
         logger.warning("[mia] transcript vide — call-ended non envoyé")
         return
 
-    # Générer le résumé structuré via Groq
     structured = await generate_summary(transcript)
     logger.info(f"[mia] structured summary: {structured.get('reason', '(vide)')!r}")
 
-    # Envoyer à l'edge function
+    ts = transfer_state or {}
     await post_call_ended(
         user_id=user_id,
         caller_number=caller_number,
         transcript=transcript,
         duration_seconds=duration_secs,
         structured=structured,
+        transferred_to=ts.get("to"),
+        transferred_at=ts.get("at"),
     )
 
 
@@ -244,13 +342,14 @@ def build_instructions(
     pricing: list | None = None,
     is_multilingual: bool = False,
     demo_mode: bool = False,
+    can_transfer: bool = False,
 ) -> str:
     if is_multilingual:
         lang_rule = (
             "Détecte la langue du client dès sa première phrase et réponds dans cette langue. "
             "Langues supportées : français, anglais, arabe, espagnol, portugais. "
             "Pour toute autre langue, réponds en français. "
-            "Le contexte métier de l’artisan reste le même quelle que soit la langue. "
+            "Le contexte métier de l'artisan reste le même quelle que soit la langue. "
         )
     else:
         lang_rule = "Tu réponds en français, de façon naturelle et professionnelle. "
@@ -259,19 +358,28 @@ def build_instructions(
         f"Tu es {assistant_name}, la réceptionniste téléphonique de {company_name} ({company_type}). "
         + lang_rule
         + "Phrases courtes, max 20 mots, adaptées au téléphone. "
-        + "Commence par un marqueur naturel : ‘D’accord’, ‘Très bien’, ‘Je note’. "
+        + "Commence par un marqueur naturel : 'D'accord', 'Très bien', 'Je note'. "
         + "Réagis aux émotions avant de poser ta question suivante. "
         + "Reformule ce que dit le client pour montrer que tu écoutes. "
         + "Ne dis jamais deux fois la même formule. "
-        + "Objectif : collecter naturellement le nom, le téléphone, l’adresse, le problème, l’urgence et les disponibilités. "
-        + "Ne dis JAMAIS ‘Je dois vous poser quelques questions’. "
-        + "Demande TOUJOURS l’adresse avant de raccrocher — sans adresse l’artisan ne peut pas intervenir. "
-        + "Pose aussi une question de contexte : ‘Ça dure depuis quand ?’ ou ‘Quelqu’un est déjà intervenu ?’. "
-        + "Termine par un récapitulatif : ‘Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
-        + "On vous rappelle [délai]. C’est bien ça ?’ puis ‘Merci, à très vite !’. "
-        + f"Si on te demande si tu es une IA : ‘Je suis l’assistante de {company_name}, je transmets votre demande à l’artisan.’ "
+        + "Objectif : collecter naturellement le nom, le téléphone, l'adresse, le problème, l'urgence et les disponibilités. "
+        + "Ne dis JAMAIS 'Je dois vous poser quelques questions'. "
+        + "Demande TOUJOURS l'adresse avant de raccrocher — sans adresse l'artisan ne peut pas intervenir. "
+        + "Pose aussi une question de contexte : 'Ça dure depuis quand ?' ou 'Quelqu'un est déjà intervenu ?'. "
+        + "Termine par un récapitulatif : 'Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
+        + "On vous rappelle [délai]. C'est bien ça ?' puis 'Merci, à très vite !'. "
+        + f"Si on te demande si tu es une IA : 'Je suis l'assistante de {company_name}, je transmets votre demande à l'artisan.' "
         + "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
     )
+
+    if can_transfer:
+        base += (
+            " Si le client décrit une urgence réelle nécessitant une intervention immédiate"
+            " (fuite d'eau active, panne de chauffage en hiver, panne électrique grave,"
+            " serrure bloquée en urgence, etc.), dis : 'Votre situation est urgente."
+            f" Je vous mets en contact direct avec {company_name}. Ne raccrochez pas.'"
+            " puis appelle la fonction transfer_urgent_call."
+        )
 
     if pricing:
         lines = []
@@ -289,16 +397,16 @@ def build_instructions(
             base += (
                 " Tarifs indicatifs (communique-les si le client demande le prix) : "
                 + " | ".join(lines[:15])
-                + " — Le tarif définitif sera confirmé par l’artisan après diagnostic."
+                + " — Le tarif définitif sera confirmé par l'artisan après diagnostic."
             )
 
     if demo_mode:
         base += (
-            " Si l’interlocuteur te demande ce qu’est ce service, comment ça fonctionne"
-            " ou ce qu’est Fixlyy : ‘Je suis Mia, une réceptionniste virtuelle fournie par"
-            " Fixlyy — je prends les appels pour l’artisan quand il n’est pas disponible."
-            " Si ça vous intéresse pour votre entreprise, visitez fixlyy.fr.’"
-            " Sinon, réponds exactement comme tu le ferais pour n’importe quel appel client."
+            " Si l'interlocuteur te demande ce qu'est ce service, comment ça fonctionne"
+            " ou ce qu'est Fixlyy : 'Je suis Mia, une réceptionniste virtuelle fournie par"
+            " Fixlyy — je prends les appels pour l'artisan quand il n'est pas disponible."
+            " Si ça vous intéresse pour votre entreprise, visitez fixlyy.fr.'"
+            " Sinon, réponds exactement comme tu le ferais pour n'importe quel appel client."
         )
 
     return base
@@ -314,7 +422,6 @@ def _plan_label(plan: str) -> str:
 
 
 def _build_onboarding_script(plan: str, assistant_name: str) -> str:
-    """Texte parlé complet pour on_enter — monologue autonome, pas de question."""
     plan = plan.lower()
     label = _plan_label(plan)
 
@@ -331,7 +438,8 @@ def _build_onboarding_script(plan: str, assistant_name: str) -> str:
         minutes = "1000"
         features = (
             ", je réponds en plusieurs langues, "
-            "jusqu'à 20 motifs d'appel personnalisables et des rapports mensuels détaillés"
+            "je transfère les urgences directement sur votre mobile "
+            "et jusqu'à 20 motifs d'appel personnalisables"
         )
 
     return (
@@ -348,7 +456,6 @@ def _build_onboarding_script(plan: str, assistant_name: str) -> str:
 
 
 def build_onboarding_instructions(plan: str, company_name: str, assistant_name: str) -> str:
-    """System prompt LLM — utilisé si l'artisan répond au monologue."""
     plan = plan.lower()
     label = _plan_label(plan)
 
@@ -364,8 +471,8 @@ def build_onboarding_instructions(plan: str, company_name: str, assistant_name: 
     else:  # max
         minutes = "1000"
         extra = (
-            " Je réponds aussi en plusieurs langues, "
-            "jusqu'à 20 motifs d'appel et des rapports mensuels détaillés."
+            " Je réponds aussi en plusieurs langues, je transfère automatiquement les urgences "
+            "directement sur votre mobile, et jusqu'à 20 motifs d'appel personnalisables."
         )
 
     return (
@@ -380,15 +487,40 @@ def build_onboarding_instructions(plan: str, company_name: str, assistant_name: 
 
 
 class MiaAgent(Agent):
-    def __init__(self, profile: dict, pricing: list | None = None, multilingual: bool = False):
+    def __init__(
+        self,
+        profile: dict,
+        pricing: list | None = None,
+        multilingual: bool = False,
+        transfer_phone: str | None = None,
+        twilio_from: str | None = None,
+        room_name: str = "",
+        sip_ref: dict | None = None,
+        user_id: str = "",
+    ):
         company_name   = profile.get("company_name")   or "votre artisan"
         company_type   = profile.get("company_type")   or "artisan"
         assistant_name = profile.get("assistant_name") or "Mia"
         greeting       = profile.get("greeting_open")  or DEFAULT_GREETING
         demo_mode      = bool(profile.get("demo_mode", False))
+        can_transfer   = bool(transfer_phone and is_max_plan(profile.get("subscription_plan")))
+
+        # Mutable state — shared with entrypoint via reference
+        self._transfer_phone = transfer_phone
+        self._twilio_from    = twilio_from
+        self._room_name      = room_name
+        self._sip_ref        = sip_ref if sip_ref is not None else {}
+        self._user_id        = user_id
+        self._transfer_done  = False
+
+        tools = [self.transfer_urgent_call] if can_transfer else []
 
         super().__init__(
-            instructions=build_instructions(assistant_name, company_name, company_type, pricing, multilingual, demo_mode),
+            instructions=build_instructions(
+                assistant_name, company_name, company_type,
+                pricing, multilingual, demo_mode, can_transfer,
+            ),
+            tools=tools,
             turn_handling={
                 "endpointing": {"min_delay": 0.3},
                 "interruption": {
@@ -400,6 +532,50 @@ class MiaAgent(Agent):
             },
         )
         self._greeting = greeting
+
+    @function_tool
+    async def transfer_urgent_call(self) -> str:
+        """
+        Transfère immédiatement cet appel urgent vers l'artisan sur son mobile.
+        À utiliser uniquement si la situation nécessite une intervention immédiate :
+        fuite active, panne grave, urgence réelle. Ne pas utiliser pour une simple
+        demande de devis ou un rappel prévu.
+        """
+        if self._transfer_done:
+            return "Transfert déjà initié — l'artisan arrive."
+
+        if not self._transfer_phone:
+            return "Numéro de transfert non configuré. Prise en charge du message."
+
+        caller_identity = self._sip_ref.get("identity")
+        if not caller_identity:
+            logger.warning("[mia] transfer_urgent_call: SIP identity inconnue")
+            return "Impossible d'identifier l'appelant pour le transfert. Prise en charge du message."
+
+        self._transfer_done = True
+        caller_info = self._sip_ref.get("caller_number", "un client")
+
+        # SMS de prévenance à l'artisan AVANT le transfert
+        if self._twilio_from:
+            sms_body = f"URGENT : {caller_info} vous appelle. Transfert en cours..."
+            asyncio.create_task(
+                _send_transfer_sms(self._transfer_phone, self._twilio_from, sms_body)
+            )
+
+        # Transfert SIP
+        ok = await _do_sip_transfer(self._room_name, caller_identity, self._transfer_phone)
+        if ok:
+            # Stocker pour log post-appel
+            self._sip_ref["transferred_to"] = self._transfer_phone
+            self._sip_ref["transferred_at"] = datetime.now(timezone.utc).isoformat()
+            logger.info(f"[mia] transfer OK → {self._transfer_phone[:6]}***")
+            return "Transfert initié. L'artisan répond directement."
+
+        logger.error("[mia] transfer_urgent_call: SIP transfer échoué")
+        return (
+            "Je n'ai pas pu établir le transfert. Je prends votre message "
+            "et l'artisan vous rappelle dans les plus brefs délais."
+        )
 
     async def on_enter(self):
         logger.info("[mia] on_enter — greeting")
@@ -439,6 +615,10 @@ async def entrypoint(ctx: JobContext):
 
     pricing: list = []
     multilingual: bool = False
+
+    # Container mutable partagé entre entrypoint et MiaAgent
+    sip_ref = {"identity": None, "caller_number": "", "transferred_to": None, "transferred_at": None}
+
     if room_name.startswith("artisan-"):
         user_id = room_name[len("artisan-"):]
         logger.info(f"[mia] fetching profile for user_id={user_id}")
@@ -451,12 +631,12 @@ async def entrypoint(ctx: JobContext):
             logger.info(
                 f"[mia] profile loaded — company={profile.get('company_name')!r} "
                 f"plan={profile.get('subscription_plan')!r} multilingual={multilingual} "
-                f"pricing={len(pricing)} items"
+                f"pricing={len(pricing)} items "
+                f"transfer_phone={'yes' if (profile.get('transfer_phone') or profile.get('phone')) else 'no'}"
             )
         else:
             logger.warning("[mia] profile not found — using defaults")
     elif room_name.startswith("demo-"):
-        # Room name : demo-{metier}-{uuid}  (ex: demo-plombier-abc123)
         parts  = room_name.split("-")
         metier = parts[1] if len(parts) > 1 else "autre"
         profile = _build_demo_profile(metier)
@@ -467,10 +647,6 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("[mia] connected")
 
-    # Détection du type d'appel (inbound normal vs outbound onboarding).
-    # Le participant SIP outbound peut arriver APRÈS ctx.connect() — on ne scanne
-    # pas remote_participants de façon synchrone (race condition), on écoute
-    # l'événement participant_connected avec un timeout de 30 s.
     onboarding_meta: dict = {}
     _sip_seen = asyncio.Event()
 
@@ -486,9 +662,13 @@ async def entrypoint(ctx: JobContext):
                     logger.info(f"[mia] onboarding call detected — plan={meta.get('plan_id')!r}")
             except Exception:
                 pass
+        else:
+            # Appelant entrant — stocker l'identité pour le transfert SIP
+            sip_ref["identity"] = identity
+            sip_ref["caller_number"] = identity[len("sip_"):]
+            logger.info(f"[mia] inbound SIP: identity={identity!r}")
         _sip_seen.set()
 
-    # Vérifier les participants déjà présents (cas inbound : souvent déjà là)
     for p in ctx.room.remote_participants.values():
         _inspect_sip_participant(p)
 
@@ -502,7 +682,6 @@ async def entrypoint(ctx: JobContext):
         except asyncio.TimeoutError:
             logger.warning("[mia] aucun participant SIP en 30s — démarrage MiaAgent standard")
 
-    # STT : détection auto de langue pour Max, français forcé pour Solo/Pro
     if multilingual:
         stt = deepgram.STT(model="nova-3", language="multi")
         logger.info("[mia] STT: language=multi (Max plan)")
@@ -554,22 +733,38 @@ async def entrypoint(ctx: JobContext):
     def on_participant_disconnected(participant):
         nonlocal caller_number
         identity = getattr(participant, "identity", "") or ""
-        if identity.startswith("sip_"):
-            caller_number = identity[len("sip_"):]
+        if identity.startswith("sip_") and not identity.startswith("sip_out_"):
+            caller_number = sip_ref.get("caller_number") or identity[len("sip_"):]
+            transfer_state = {
+                "to":  sip_ref.get("transferred_to"),
+                "at":  sip_ref.get("transferred_at"),
+            }
             if user_id:
                 loop.create_task(handle_call_ended(
                     user_id=user_id,
                     caller_number=caller_number,
                     conversation_items=list(conversation_items),
                     start_time=start_time,
+                    transfer_state=transfer_state,
                 ))
+
+    # Résoudre le numéro de transfert : transfer_phone en priorité, phone en fallback
+    transfer_phone = profile.get("transfer_phone") or profile.get("phone") or None
+    twilio_from    = profile.get("twilio_number") or None
 
     if onboarding_meta.get("onboarding_call"):
         plan = onboarding_meta.get("plan_id") or profile.get("subscription_plan") or "solo"
         agent = OnboardingMiaAgent(profile, plan)
         logger.info(f"[mia] starting OnboardingMiaAgent — plan={plan!r}")
     else:
-        agent = MiaAgent(profile, pricing, multilingual)
+        agent = MiaAgent(
+            profile, pricing, multilingual,
+            transfer_phone=transfer_phone,
+            twilio_from=twilio_from,
+            room_name=room_name,
+            sip_ref=sip_ref,
+            user_id=user_id,
+        )
 
     await session.start(agent, room=ctx.room)
     logger.info("[mia] session started")
