@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Step1Identity from './Step1Identity'
-import Step2Plan from './Step2Plan'
+import Step2Plan, { PLAN_SESSION_KEY } from './Step2Plan'
 import Step3Provisioning from './Step3Provisioning'
 import Step4Number from './Step4Number'
 import Step5Forwarding from './Step5Forwarding'
 import Step6Install from './Step6Install'
+import { trackEvent } from '@/utils/pixel'
+import { PLANS, type PlanKey } from '@/config/plans'
 
 const BRAND = '#3B5BF5'
 const TOTAL = 6
@@ -41,6 +43,17 @@ export default function OnboardingV3({ onDone }: Props) {
     companyName:  null,
     fixlyyNumber: null,
   })
+
+  // Meta Pixel: InitiateCheckout (step 1) ou Purchase (retour Stripe)
+  useEffect(() => {
+    if (isCheckoutReturn) {
+      const planKey = sessionStorage.getItem(PLAN_SESSION_KEY) as PlanKey | null
+      const value = planKey && PLANS[planKey] ? PLANS[planKey].price : undefined
+      trackEvent('Purchase', { value, currency: 'EUR' })
+    } else {
+      trackEvent('InitiateCheckout')
+    }
+  }, [])
 
   // Capture beforeinstallprompt as early as possible
   useEffect(() => {

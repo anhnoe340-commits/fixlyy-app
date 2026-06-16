@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { trackEvent } from '@/utils/pixel'
 
 const BRAND         = '#3B5BF5'
 const POLL_INTERVAL = 2000
@@ -32,6 +33,7 @@ export default function Step3Provisioning({ userId, onDone }: Props) {
         .single()
       if (data?.provisioning_status === 'done' && data?.twilio_number) {
         clearInterval(poll)
+        trackEvent('CompleteRegistration')
         onDone(data.twilio_number)
       }
     }, POLL_INTERVAL)
