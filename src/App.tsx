@@ -127,7 +127,8 @@ function AppContent() {
   }, [user, loading])
 
   if (loading || status === 'loading') return <Spinner />
-  if (!user || status === 'auth' || status === 'onboarding') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
+  if (!user) { window.location.replace('/connexion'); return <Spinner /> }
+  if (status === 'auth' || status === 'onboarding') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
   if (status === 'provisioning') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
   return <ProfileProvider><Dashboard /></ProfileProvider>
 }
