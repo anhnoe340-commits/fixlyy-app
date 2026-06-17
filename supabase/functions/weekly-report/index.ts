@@ -225,8 +225,12 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   if (CRON_SECRET) {
-    const incoming = req.headers.get('x-cron-secret')
-    if (incoming !== CRON_SECRET) return new Response('Unauthorized', { status: 401 })
+    const cronHeader  = req.headers.get('x-cron-secret')
+    const authHeader  = req.headers.get('Authorization') ?? ''
+    const serviceKey  = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY') ?? ''
+    const validCron   = cronHeader === CRON_SECRET
+    const validBearer = serviceKey !== '' && authHeader === `Bearer ${serviceKey}`
+    if (!validCron && !validBearer) return new Response('Unauthorized', { status: 401 })
   }
 
   const { from, to, label: weekLabel } = weekRange()

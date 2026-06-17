@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 
-const ADMIN_USER_ID = 'e537e7ab-5f0e-489f-8acc-7faae4dbe0d7'
+const ADMIN_EMAIL = 'fixlyy@fixlyy.fr'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -107,7 +107,8 @@ export default function AdminPage() {
   const [alerts, setAlerts] = useState<CriticalAlert[]>([])
   const [metrics, setMetrics] = useState({ totalArtisans: 0, actifs: 0, appels: 0, essais: 0 })
   const [recentProfiles, setRecentProfiles] = useState<any[]>([])
-  const [poolStats, setPoolStats] = useState({ total: 0, disponibles: 0, assignes: 0 })
+  const [poolStats, setPoolStats] = useState({ total: 0, disponibles: 0, assignes: 0, quarantine: 0 })
+  const [mrr, setMrr] = useState<number | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
   const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [processingAbuseId, setProcessingAbuseId] = useState<string | null>(null)
@@ -143,11 +144,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (!user || user.id !== ADMIN_USER_ID) window.location.href = '/'
+    if (!user || user.email !== ADMIN_EMAIL) window.location.href = '/dashboard'
   }, [user, authLoading])
 
   useEffect(() => {
-    if (!user || user.id !== ADMIN_USER_ID) return
+    if (!user || user.email !== ADMIN_EMAIL) return
     loadGeneral()
   }, [user])
 
@@ -161,7 +162,7 @@ export default function AdminPage() {
 
   async function loadGeneral() {
     setDataLoading(true)
-    await Promise.all([loadAlerts(), loadMetrics(), loadRecentProfiles(), loadPoolStats(), loadKeyRotations(), loadTasks()])
+    await Promise.all([loadAlerts(), loadMetrics(), loadRecentProfiles(), loadPoolStats(), loadKeyRotations(), loadTasks(), loadMrr()])
     setDataLoading(false)
   }
 
@@ -180,14 +181,28 @@ export default function AdminPage() {
     setMetrics({ totalArtisans: a.count ?? 0, actifs: b.count ?? 0, appels: c.count ?? 0, essais: d.count ?? 0 })
   }
   async function loadRecentProfiles() {
-    const { data } = await supabase.from('profiles').select('id,phone,company_name,created_at,subscription_plan,subscription_status').order('created_at', { ascending: false }).limit(10)
+    const { data } = await supabase.from('profiles').select('id,phone,company_name,created_at,subscription_plan,subscription_status,twilio_number,provisioning_status').order('created_at', { ascending: false }).limit(10)
     setRecentProfiles(data ?? [])
   }
   async function loadPoolStats() {
-    const { data: d1 } = await supabase.from('phone_number_pool').select('is_assigned')
-    if (d1) { setPoolStats({ total: d1.length, disponibles: d1.filter(r => !r.is_assigned).length, assignes: d1.filter(r => r.is_assigned).length }); return }
-    const { data: d2 } = await supabase.from('phone_numbers_pool').select('status')
-    if (d2) setPoolStats({ total: d2.length, disponibles: d2.filter(r => r.status === 'available').length, assignes: d2.filter(r => r.status === 'assigned').length })
+    const { data } = await supabase.from('phone_numbers_pool').select('status')
+    if (data) setPoolStats({
+      total:      data.length,
+      disponibles: data.filter(r => r.status === 'available').length,
+      assignes:   data.filter(r => r.status === 'assigned').length,
+      quarantine: data.filter(r => r.status === 'quarantine').length,
+    })
+  }
+
+  async function loadMrr() {
+    const PLAN_PRICE: Record<string, number> = { solo: 97, pro: 197, max: 347 }
+    const { data } = await supabase
+      .from('profiles')
+      .select('subscription_plan, subscription_status')
+      .eq('subscription_status', 'active')
+    if (!data) return
+    const total = data.reduce((sum, p) => sum + (PLAN_PRICE[(p.subscription_plan ?? '').toLowerCase()] ?? 0), 0)
+    setMrr(total)
   }
   async function loadKeyRotations() {
     const { data } = await supabase.from('key_rotations').select('*').order('next_rotation_at', { ascending: true })
@@ -434,7 +449,7 @@ export default function AdminPage() {
       <div className="w-6 h-6 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin" />
     </div>
   )
-  if (!user || user.id !== ADMIN_USER_ID) return null
+  if (!user || user.email !== ADMIN_EMAIL) return null
 
   // ── Calculs ────────────────────────────────────────────────────────────────
 
@@ -497,12 +512,13 @@ export default function AdminPage() {
         {activeTab === 'overview' && (<>
 
           {/* Row 1 — KPI (.glass = fond bleu foncé → text-white + text-muted-2) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               { label: 'Total artisans', value: metrics.totalArtisans, icon: '👷' },
               { label: 'Artisans actifs', value: metrics.actifs, icon: '✅' },
               { label: 'Appels ce mois', value: metrics.appels, icon: '📞' },
               { label: 'Essais actifs', value: metrics.essais, icon: '🎁' },
+              { label: 'MRR', value: mrr !== null ? `${mrr} €` : '…', icon: '💰' },
             ].map(k => (
               <div key={k.label} className="glass rounded-2xl px-5 py-5">
                 <div className="w-10 h-10 rounded-xl bg-[#2850c8]/10 flex items-center justify-center text-lg mb-3">{k.icon}</div>
@@ -590,6 +606,7 @@ export default function AdminPage() {
                   { label: 'Total', value: poolStats.total, color: 'text-gray-900' },
                   { label: 'Disponibles', value: poolStats.disponibles, color: 'text-emerald-600' },
                   { label: 'Assignés', value: poolStats.assignes, color: 'text-blue-600' },
+                  { label: 'Quarantaine', value: poolStats.quarantine, color: 'text-orange-500' },
                 ].map(s => (
                   <div key={s.label} className="flex items-center justify-between">
                     <p className="text-xs text-gray-500">{s.label}</p>
@@ -610,15 +627,17 @@ export default function AdminPage() {
               {dataLoading ? <p className="text-sm text-gray-400">Chargement…</p> : recentProfiles.length === 0 ? <p className="text-sm text-gray-400">Aucun profil.</p> : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead><tr className="border-b border-gray-100">{['Entreprise','Téléphone','Inscrit le','Plan','Statut'].map(h => <th key={h} className="text-left py-2 px-3 text-gray-400 font-semibold">{h}</th>)}</tr></thead>
+                    <thead><tr className="border-b border-gray-100">{['Entreprise','Téléphone','Inscrit le','Plan','Statut','Numéro','Provision'].map(h => <th key={h} className="text-left py-2 px-3 text-gray-400 font-semibold whitespace-nowrap">{h}</th>)}</tr></thead>
                     <tbody>
                       {recentProfiles.map(p => (
-                        <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                        <tr key={p.id} className={`border-b border-gray-50 hover:bg-gray-50/60 ${p.provisioning_status === 'failed' ? 'bg-red-50/40' : ''}`}>
                           <td className="py-2 px-3 font-semibold text-gray-800">{p.company_name || '—'}</td>
-                          <td className="py-2 px-3 text-gray-500 font-mono">{p.phone || '—'}</td>
+                          <td className="py-2 px-3 text-gray-500 font-mono text-[10px]">{p.phone || '—'}</td>
                           <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{fmtDate(p.created_at)}</td>
                           <td className="py-2 px-3"><span className="px-2 py-0.5 rounded-full bg-[#2850c8]/10 text-[#2850c8] text-[10px] font-bold">{p.subscription_plan || 'essai'}</span></td>
                           <td className="py-2 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${p.subscription_status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : p.subscription_status === 'trialing' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>{p.subscription_status || 'essai'}</span></td>
+                          <td className="py-2 px-3 font-mono text-[10px] text-gray-500">{p.twilio_number || '—'}</td>
+                          <td className="py-2 px-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${p.provisioning_status === 'done' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : p.provisioning_status === 'failed' ? 'bg-red-50 text-red-600 border-red-200' : p.provisioning_status === 'pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>{p.provisioning_status || '—'}</span></td>
                         </tr>
                       ))}
                     </tbody>

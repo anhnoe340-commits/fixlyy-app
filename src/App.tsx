@@ -14,8 +14,6 @@ import ResumePage from '@/pages/ResumePage'
 import SetupPage from '@/pages/setup/SetupPage'
 import { supabase } from '@/lib/supabase'
 
-const ADMIN_USER_ID = 'e537e7ab-5f0e-489f-8acc-7faae4dbe0d7'
-
 // AdminGuard : valide l'auth avant de rendre AdminPage
 function AdminGuard() {
   const { user, loading } = useAuth()
@@ -24,8 +22,8 @@ function AdminGuard() {
       <div className="w-8 h-8 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin" />
     </div>
   )
-  if (!user || user.id !== ADMIN_USER_ID) {
-    window.location.href = '/'
+  if (!user || user.email !== 'fixlyy@fixlyy.fr') {
+    window.location.href = '/dashboard'
     return null
   }
   return <AdminPage />
