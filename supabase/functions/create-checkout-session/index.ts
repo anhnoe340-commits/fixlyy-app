@@ -57,7 +57,7 @@ serve(async (req) => {
       },
       subscription_data: {
         trial_period_days: 7,
-        metadata: { supabase_uid: user.id },
+        metadata: { supabase_uid: user.id, commitment_months: '3' },
       },
       success_url: `${APP_BASE}/commencer?checkout=success`,
       cancel_url:  `${APP_BASE}/commencer`,

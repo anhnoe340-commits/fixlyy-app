@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
   try {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, subscription_plan')
+      .select('id, subscription_plan, stripe_customer_id')
       .eq('id', user.id)
       .single()
 
@@ -54,7 +54,22 @@ Deno.serve(async (req) => {
     const endIso   = new Date(year, month + 1, 1).toISOString()
 
     const periodStart = new Date(year, month, 1).toISOString().split('T')[0]
-    const periodEnd   = new Date(year, month + 1, 0).toISOString().split('T')[0]
+
+    // periodEnd : current_period_end Stripe si disponible, sinon dernier jour du mois
+    let periodEnd = new Date(year, month + 1, 0).toISOString().split('T')[0]
+    if (profile.stripe_customer_id) {
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('current_period_end')
+        .eq('stripe_customer_id', profile.stripe_customer_id)
+        .in('status', ['trialing', 'active'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (sub?.current_period_end) {
+        periodEnd = sub.current_period_end.split('T')[0]
+      }
+    }
 
     // get_monthly_minutes gère la TZ Europe/Paris (cohérent avec la vue monthly_minutes)
     const [minutesRes, countRes] = await Promise.all([

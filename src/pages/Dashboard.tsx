@@ -4114,6 +4114,22 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [commitmentEnd, setCommitmentEnd] = useState<Date | null>(null)
+  const [showCommitmentWarning, setShowCommitmentWarning] = useState(false)
+
+  useEffect(() => {
+    if (!profile?.stripe_customer_id) return
+    supabase
+      .from('subscriptions')
+      .select('commitment_end')
+      .eq('stripe_customer_id', profile.stripe_customer_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.commitment_end) setCommitmentEnd(new Date(data.commitment_end))
+      })
+  }, [profile?.stripe_customer_id])
 
   async function handleDeleteAccount() {
     setDeleteLoading(true)
@@ -4139,7 +4155,12 @@ function SubscriptionPage({ accent }: { accent: string }) {
     }
   }
 
-  async function openPortal() {
+  async function openPortal(forceOpen = false) {
+    const isInCommitment = commitmentEnd !== null && now < commitmentEnd
+    if (isInCommitment && !forceOpen) {
+      setShowCommitmentWarning(true)
+      return
+    }
     setPortalLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -4317,6 +4338,19 @@ function SubscriptionPage({ accent }: { accent: string }) {
         </div>
       )}
 
+      {/* ── Bannière engagement ── */}
+      {commitmentEnd !== null && now < commitmentEnd && isActive && (
+        <div className="rounded-2xl px-5 py-3 flex items-center gap-3"
+          style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+          <span className="text-base">📋</span>
+          <p className="text-xs text-blue-700">
+            Engagement actif jusqu'au{' '}
+            <strong>{commitmentEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+            {' '}· résiliable à tout moment après cette date
+          </p>
+        </div>
+      )}
+
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
@@ -4347,7 +4381,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
       <div className="text-center pt-2">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Tarifs</p>
         <p className="text-base font-bold text-gray-900">Choisissez votre formule</p>
-        <p className="text-xs text-gray-400 mt-0.5">Sans engagement · annulation à tout moment</p>
+        <p className="text-xs text-gray-400 mt-0.5">Engagement 3 mois · puis résiliable à tout moment</p>
       </div>
 
       {/* Toggle annuel désactivé — price IDs annuels non créés dans Stripe */}
@@ -4463,6 +4497,35 @@ function SubscriptionPage({ accent }: { accent: string }) {
           Supprimer mon compte
         </button>
       </div>
+
+      {/* ── Modale avertissement engagement ── */}
+      {showCommitmentWarning && commitmentEnd && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="glass-light rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Engagement en cours</h3>
+            <p className="text-sm text-gray-500 mb-1">
+              Votre abonnement est sous engagement jusqu'au{' '}
+              <strong>{commitmentEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>.
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Les mensualités restantes sont dues même en cas de résiliation anticipée, conformément à nos{' '}
+              <a href="https://fixlyy.fr/cgv" target="_blank" rel="noopener noreferrer" className="underline">CGV</a>.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCommitmentWarning(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all">
+                Rester abonné
+              </button>
+              <button
+                onClick={() => { setShowCommitmentWarning(false); openPortal(true) }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-gray-800 hover:bg-gray-900 transition-all">
+                Accéder au portail
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modale de confirmation suppression ── */}
       {showDeleteConfirm && (

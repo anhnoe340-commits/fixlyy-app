@@ -176,6 +176,11 @@ serve(async (req) => {
       const memberLimit = planMeta?.member_limit ?? null;
       const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
 
+      // engagement 3 mois calculé une seule fois à la création
+      const commitmentEnd = event.type === 'customer.subscription.created'
+        ? new Date(((sub.start_date ?? Math.floor(Date.now() / 1000))) * 1000 + 90 * 24 * 60 * 60 * 1000).toISOString()
+        : undefined
+
       await supabase.from('subscriptions').upsert({
         stripe_customer_id: sub.customer as string,
         stripe_subscription_id: sub.id,
@@ -184,6 +189,7 @@ serve(async (req) => {
         current_period_end: sub.items.data[0]?.current_period_end ? new Date(sub.items.data[0].current_period_end * 1000).toISOString() : null,
         trial_end: trialEnd,
         updated_at: new Date().toISOString(),
+        ...(commitmentEnd ? { commitment_end: commitmentEnd } : {}),
       }, { onConflict: 'stripe_subscription_id' });
 
       const active = ['trialing', 'active'].includes(status);
