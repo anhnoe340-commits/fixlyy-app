@@ -44,6 +44,11 @@ serve(async (req) => {
 
     const APP_BASE = Deno.env.get('APP_URL') || 'https://app.fixlyy.fr';
 
+    // Réduction lancement : -50% Pro / -30% Max sur le 1er mois après trial
+    const launchCoupon: string | null =
+      planId === 'pro' ? 'LAUNCH-PRO-50' :
+      planId === 'max' ? 'LAUNCH-MAX-30' : null;
+
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: 'subscription',
@@ -61,7 +66,11 @@ serve(async (req) => {
       },
       success_url: `${APP_BASE}/commencer?checkout=success`,
       cancel_url:  `${APP_BASE}/commencer`,
-      allow_promotion_codes: true,
+      // discounts et allow_promotion_codes sont mutuellement exclusifs dans Stripe
+      ...(launchCoupon
+        ? { discounts: [{ coupon: launchCoupon }] }
+        : { allow_promotion_codes: true }
+      ),
       billing_address_collection: 'auto',
       locale: 'fr',
     });

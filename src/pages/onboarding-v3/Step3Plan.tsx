@@ -11,6 +11,8 @@ const PLANS = [
     id: 'solo' as PlanId,
     name: 'Solo',
     price: 97,
+    launchPrice: null as number | null,
+    launchBadge: null as string | null,
     minutes: '300 min / mois',
     overage: '0,25 €/min au-delà',
     features: ['1 numéro dédié', 'SMS récap 30 secondes', 'Qualification urgences', '1 utilisateur'],
@@ -20,6 +22,8 @@ const PLANS = [
     id: 'pro' as PlanId,
     name: 'Pro',
     price: 197,
+    launchPrice: 98.50 as number | null,
+    launchBadge: 'OFFRE LANCEMENT -50%' as string | null,
     minutes: '500 min / mois',
     overage: '0,25 €/min au-delà',
     features: ['Tout Solo', 'CRM clients', 'Rapports hebdomadaires', 'Jusqu\'à 3 utilisateurs'],
@@ -29,6 +33,8 @@ const PLANS = [
     id: 'max' as PlanId,
     name: 'Max',
     price: 347,
+    launchPrice: 242.90 as number | null,
+    launchBadge: 'OFFRE LANCEMENT -30%' as string | null,
     minutes: '1 000 min / mois',
     overage: '0,20 €/min au-delà',
     features: ['Tout Pro', 'Multilingue (FR EN AR ES)', 'Multi-numéros', 'Jusqu\'à 10 utilisateurs'],
@@ -85,7 +91,11 @@ export default function Step3Plan({ userId, onDone }: Props) {
                 boxShadow: isSelected ? '0 0 24px rgba(59,91,245,0.20)' : 'none',
               }}
             >
-              {plan.popular && (
+              {plan.launchBadge ? (
+                <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-widest whitespace-nowrap" style={{ background: '#059669' }}>
+                  {plan.launchBadge}
+                </div>
+              ) : plan.popular && (
                 <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-widest" style={{ background: BRAND }}>
                   Populaire
                 </div>
@@ -97,8 +107,18 @@ export default function Step3Plan({ userId, onDone }: Props) {
                   <p className="text-xs mt-0.5" style={{ color: 'rgba(148,163,184,0.7)' }}>{plan.minutes}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xl font-black text-white">{plan.price} €</p>
-                  <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>/mois HT</p>
+                  {plan.launchPrice ? (
+                    <>
+                      <p className="text-[11px] line-through" style={{ color: 'rgba(148,163,184,0.5)' }}>{plan.price} €</p>
+                      <p className="text-xl font-black text-emerald-400">{plan.launchPrice.toFixed(2).replace('.', ',')} €</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>1er mois HT</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xl font-black text-white">{plan.price} €</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>/mois HT</p>
+                    </>
+                  )}
                 </div>
               </div>
 

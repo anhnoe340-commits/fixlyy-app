@@ -4116,18 +4116,20 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const [deleteError, setDeleteError] = useState('')
   const [commitmentEnd, setCommitmentEnd] = useState<Date | null>(null)
   const [showCommitmentWarning, setShowCommitmentWarning] = useState(false)
+  const [hasLaunchDiscount, setHasLaunchDiscount] = useState(false)
 
   useEffect(() => {
     if (!profile?.stripe_customer_id) return
     supabase
       .from('subscriptions')
-      .select('commitment_end')
+      .select('commitment_end, has_launch_discount')
       .eq('stripe_customer_id', profile.stripe_customer_id)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data?.commitment_end) setCommitmentEnd(new Date(data.commitment_end))
+        setHasLaunchDiscount(data?.has_launch_discount ?? false)
       })
   }, [profile?.stripe_customer_id])
 
@@ -4337,6 +4339,24 @@ function SubscriptionPage({ accent }: { accent: string }) {
           </div>
         </div>
       )}
+
+      {/* ── Bannière réduction lancement ── */}
+      {hasLaunchDiscount && (() => {
+        const plan = (profile?.subscription_plan ?? '').toLowerCase()
+        const reducedPrice = plan === 'pro' ? '98,50' : plan === 'max' ? '242,90' : null
+        const normalPrice  = plan === 'pro' ? '197' : plan === 'max' ? '347' : null
+        if (!reducedPrice || !normalPrice) return null
+        return (
+          <div className="rounded-2xl px-5 py-3 flex items-center gap-3"
+            style={{ background: '#ECFDF5', border: '1px solid #6EE7B7' }}>
+            <span className="text-base">🎉</span>
+            <p className="text-xs text-emerald-700">
+              <strong>Offre lancement appliquée</strong> — {reducedPrice} € ce mois, puis{' '}
+              <strong>{normalPrice} €/mois</strong> à partir du mois prochain
+            </p>
+          </div>
+        )
+      })()}
 
       {/* ── Bannière engagement ── */}
       {commitmentEnd !== null && now < commitmentEnd && isActive && (

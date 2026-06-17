@@ -12,6 +12,12 @@ const PLAN_HIGHLIGHTS: Record<PlanKey, string[]> = {
   max:  ['Tout Pro', 'Multilingue (FR EN AR ES)', 'Multi-numéros', "Jusqu'à 10 utilisateurs"],
 }
 
+const LAUNCH: Record<PlanKey, { badge: string; reducedPrice: number } | null> = {
+  solo: null,
+  pro:  { badge: 'OFFRE LANCEMENT -50%', reducedPrice: 98.50 },
+  max:  { badge: 'OFFRE LANCEMENT -30%', reducedPrice: 242.90 },
+}
+
 interface Props {
   companyName: string
   trade: string
@@ -73,6 +79,8 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
           const isSelected = selected === key
           const isPopular  = key === 'pro'
 
+          const launch = LAUNCH[key]
+
           return (
             <button
               key={key}
@@ -85,7 +93,14 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
                 boxShadow: isSelected ? '0 0 24px rgba(59,91,245,0.20)' : 'none',
               }}
             >
-              {isPopular && (
+              {launch ? (
+                <div
+                  className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
+                  style={{ background: '#059669' }}
+                >
+                  {launch.badge}
+                </div>
+              ) : isPopular && (
                 <div
                   className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-widest"
                   style={{ background: BRAND }}
@@ -113,8 +128,18 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xl font-black text-white">{p.price} €</p>
-                  <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>/mois HT</p>
+                  {launch ? (
+                    <>
+                      <p className="text-[11px] line-through" style={{ color: 'rgba(148,163,184,0.5)' }}>{p.price} €</p>
+                      <p className="text-xl font-black text-emerald-400">{launch.reducedPrice.toFixed(2).replace('.', ',')} €</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>1er mois HT</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xl font-black text-white">{p.price} €</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>/mois HT</p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -155,7 +180,10 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
       </button>
 
       <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
-        Essai 7 jours, puis {plan.price} €/mois HT · Résiliable à tout moment
+        {LAUNCH[selected]
+          ? `Essai 7 jours, puis ${LAUNCH[selected]!.reducedPrice.toFixed(2).replace('.', ',')} € 1er mois, puis ${plan.price} €/mois HT`
+          : `Essai 7 jours, puis ${plan.price} €/mois HT · Résiliable à tout moment`
+        }
       </p>
 
       <button
