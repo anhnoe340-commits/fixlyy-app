@@ -4448,7 +4448,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
               </p>
             </div>
           </div>
-          <button onClick={openPortal} disabled={portalLoading}
+          <button onClick={() => openPortal()} disabled={portalLoading}
             className="text-xs px-4 py-2 rounded-xl font-semibold hover:opacity-80 transition-opacity flex-shrink-0 disabled:opacity-50"
             style={{ background: '#DCFCE7', color: '#166534' }}>
             {portalLoading ? '…' : 'Annuler'}
@@ -4461,7 +4461,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
             <p className="text-sm font-semibold" style={{ color: accent }}>Abonnement actif</p>
             <p className="text-xs text-gray-500 mt-0.5">Gérez vos factures et votre abonnement · support@fixlyy.fr</p>
           </div>
-          <button onClick={openPortal} disabled={portalLoading}
+          <button onClick={() => openPortal()} disabled={portalLoading}
             className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-50"
             style={{ background: accent }}>
             {portalLoading ? '…' : 'Gérer mon abonnement'}
