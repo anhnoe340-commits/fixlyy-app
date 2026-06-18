@@ -94,7 +94,11 @@ async function createLivekitSipTrunk(userId: string, phoneNumber: string): Promi
     },
     12000,
   )
-  if (!res.ok) throw new Error(`LiveKit CreateSIPInboundTrunk ${res.status}: ${await res.text()}`)
+  if (!res.ok) {
+    const body = await res.text()
+    console.error(`[assign-number-from-pool] LiveKit CreateSIPInboundTrunk error: status=${res.status} body=${body}`)
+    throw new Error(`LiveKit CreateSIPInboundTrunk ${res.status}: ${body}`)
+  }
   const data = await res.json()
   const id = data?.sip_trunk_id ?? data?.sipTrunkId ?? data?.trunk?.sip_trunk_id ?? data?.trunk?.sipTrunkId
   if (!id) throw new Error(`LiveKit trunk: sip_trunk_id absent dans la réponse: ${JSON.stringify(data)}`)
@@ -116,7 +120,11 @@ async function createLivekitDispatchRule(userId: string, trunkId: string): Promi
     },
     12000,
   )
-  if (!res.ok) throw new Error(`LiveKit CreateSIPDispatchRule ${res.status}: ${await res.text()}`)
+  if (!res.ok) {
+    const body = await res.text()
+    console.error(`[assign-number-from-pool] LiveKit CreateSIPDispatchRule error: status=${res.status} body=${body}`)
+    throw new Error(`LiveKit CreateSIPDispatchRule ${res.status}: ${body}`)
+  }
   const data = await res.json()
   const id = data?.sip_dispatch_rule_id ?? data?.sipDispatchRuleId
     ?? data?.rule?.sip_dispatch_rule_id ?? data?.rule?.sipDispatchRuleId
@@ -280,7 +288,11 @@ Deno.serve(async (req) => {
           twilioAuthToken: TWILIO_TOKEN,
         }),
       })
-      if (!vapiRes.ok) throw new Error(`Vapi PATCH phone-number failed: ${vapiRes.status} ${await vapiRes.text()}`)
+      if (!vapiRes.ok) {
+        const body = await vapiRes.text()
+        console.error(`[assign-number-from-pool] Vapi PATCH phone-number error: status=${vapiRes.status} body=${body}`)
+        throw new Error(`Vapi PATCH phone-number failed: ${vapiRes.status} ${body}`)
+      }
     }
 
     // 4. PATCH Twilio VoiceUrl → SIP router LiveKit
@@ -298,7 +310,11 @@ Deno.serve(async (req) => {
         }),
       }
     )
-    if (!twilioRes.ok) throw new Error(`Twilio PATCH failed: ${twilioRes.status}`)
+    if (!twilioRes.ok) {
+      const body = await twilioRes.text()
+      console.error(`[assign-number-from-pool] Twilio PATCH VoiceUrl error: status=${twilioRes.status} body=${body}`)
+      throw new Error(`Twilio PATCH failed: ${twilioRes.status} ${body}`)
+    }
     twilioPatched = true
 
     // 5. LiveKit SIP trunk + dispatch rule (BLOQUANT — provisioning_status ne sera 'done'
@@ -321,7 +337,11 @@ Deno.serve(async (req) => {
         },
         12000,
       )
-      if (!updRes.ok) throw new Error(`LiveKit UpdateSIPInboundTrunk ${updRes.status}: ${await updRes.text()}`)
+      if (!updRes.ok) {
+        const body = await updRes.text()
+        console.error(`[assign-number-from-pool] LiveKit UpdateSIPInboundTrunk error: status=${updRes.status} body=${body}`)
+        throw new Error(`LiveKit UpdateSIPInboundTrunk ${updRes.status}: ${body}`)
+      }
 
       if (lkDispatchRuleId) {
         const token2 = await livekitAdminToken()
@@ -341,7 +361,11 @@ Deno.serve(async (req) => {
           },
           12000,
         )
-        if (!updRuleRes.ok) throw new Error(`LiveKit UpdateSIPDispatchRule ${updRuleRes.status}: ${await updRuleRes.text()}`)
+        if (!updRuleRes.ok) {
+          const body = await updRuleRes.text()
+          console.error(`[assign-number-from-pool] LiveKit UpdateSIPDispatchRule error: status=${updRuleRes.status} body=${body}`)
+          throw new Error(`LiveKit UpdateSIPDispatchRule ${updRuleRes.status}: ${body}`)
+        }
       } else {
         lkDispatchRuleId = await createLivekitDispatchRule(userId, lkTrunkId)
       }
