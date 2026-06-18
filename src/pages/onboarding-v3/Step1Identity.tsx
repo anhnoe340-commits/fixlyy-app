@@ -306,6 +306,13 @@ export default function Step1Identity({ onDone }: Props) {
         {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
         Recevoir mon code SMS →
       </button>
+
+      <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
+        Déjà inscrit ?{' '}
+        <a href="/connexion" className="underline" style={{ color: 'rgba(148,163,184,0.7)' }}>
+          Se reconnecter
+        </a>
+      </p>
     </div>
   )
 }
