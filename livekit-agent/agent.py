@@ -507,6 +507,56 @@ def build_onboarding_instructions(plan: str, company_name: str, assistant_name: 
     )
 
 
+def _make_transfer_tool(
+    transfer_phone: str,
+    twilio_from: str | None,
+    room_name: str,
+    sip_ref: dict,
+):
+    """Crée un function_tool de transfert avec les paramètres capturés en closure."""
+    state = {"done": False}
+
+    @function_tool
+    async def transfer_urgent_call() -> str:
+        """
+        Transfère immédiatement cet appel urgent vers l'artisan sur son mobile.
+        À utiliser uniquement si la situation nécessite une intervention immédiate :
+        fuite active, panne grave, urgence réelle. Ne pas utiliser pour une simple
+        demande de devis ou un rappel prévu.
+        """
+        if state["done"]:
+            return "Transfert déjà initié — l'artisan arrive."
+
+        caller_identity = sip_ref.get("identity")
+        if not caller_identity:
+            logger.warning("[mia] transfer_urgent_call: SIP identity inconnue")
+            return "Impossible d'identifier l'appelant pour le transfert. Prise en charge du message."
+
+        state["done"] = True
+        caller_info = sip_ref.get("caller_number", "un client")
+
+        if twilio_from:
+            sms_body = f"URGENT : {caller_info} vous appelle. Transfert en cours..."
+            asyncio.create_task(
+                _send_transfer_sms(transfer_phone, twilio_from, sms_body)
+            )
+
+        ok = await _do_sip_transfer(room_name, caller_identity, transfer_phone)
+        if ok:
+            sip_ref["transferred_to"] = transfer_phone
+            sip_ref["transferred_at"] = datetime.now(timezone.utc).isoformat()
+            logger.info(f"[mia] transfer OK → {transfer_phone[:6]}***")
+            return "Transfert initié. L'artisan répond directement."
+
+        logger.error("[mia] transfer_urgent_call: SIP transfer échoué")
+        return (
+            "Je n'ai pas pu établir le transfert. Je prends votre message "
+            "et l'artisan vous rappelle dans les plus brefs délais."
+        )
+
+    return transfer_urgent_call
+
+
 class MiaAgent(Agent):
     def __init__(
         self,
@@ -534,18 +584,15 @@ class MiaAgent(Agent):
         else:
             greeting = profile.get("greeting_open") or DEFAULT_GREETING
 
-        # Mutable state — shared with entrypoint via reference
-        self._transfer_phone  = transfer_phone
-        self._twilio_from     = twilio_from
-        self._room_name       = room_name
-        self._sip_ref         = sip_ref if sip_ref is not None else {}
-        self._user_id         = user_id
-        self._transfer_done   = False
-        self._multilingual    = multilingual
-        self._detected_lang   = "fr"
-        self._lang_injected   = False
+        self._multilingual  = multilingual
+        self._detected_lang = "fr"
+        self._lang_injected = False
 
-        tools = [self.transfer_urgent_call] if can_transfer else []
+        _sip_ref = sip_ref if sip_ref is not None else {}
+        if can_transfer:
+            tools = [_make_transfer_tool(transfer_phone, twilio_from, room_name, _sip_ref)]
+        else:
+            tools = []
 
         super().__init__(
             instructions=build_instructions(
@@ -616,49 +663,6 @@ class MiaAgent(Agent):
                 logger.warning(f"[mia] LLM context injection failed: {exc}")
         async for chunk in super().llm_node(chat_ctx, tools, model_settings):
             yield chunk
-
-    async def transfer_urgent_call(self) -> str:
-        """
-        Transfère immédiatement cet appel urgent vers l'artisan sur son mobile.
-        À utiliser uniquement si la situation nécessite une intervention immédiate :
-        fuite active, panne grave, urgence réelle. Ne pas utiliser pour une simple
-        demande de devis ou un rappel prévu.
-        """
-        if self._transfer_done:
-            return "Transfert déjà initié — l'artisan arrive."
-
-        if not self._transfer_phone:
-            return "Numéro de transfert non configuré. Prise en charge du message."
-
-        caller_identity = self._sip_ref.get("identity")
-        if not caller_identity:
-            logger.warning("[mia] transfer_urgent_call: SIP identity inconnue")
-            return "Impossible d'identifier l'appelant pour le transfert. Prise en charge du message."
-
-        self._transfer_done = True
-        caller_info = self._sip_ref.get("caller_number", "un client")
-
-        # SMS de prévenance à l'artisan AVANT le transfert
-        if self._twilio_from:
-            sms_body = f"URGENT : {caller_info} vous appelle. Transfert en cours..."
-            asyncio.create_task(
-                _send_transfer_sms(self._transfer_phone, self._twilio_from, sms_body)
-            )
-
-        # Transfert SIP
-        ok = await _do_sip_transfer(self._room_name, caller_identity, self._transfer_phone)
-        if ok:
-            # Stocker pour log post-appel
-            self._sip_ref["transferred_to"] = self._transfer_phone
-            self._sip_ref["transferred_at"] = datetime.now(timezone.utc).isoformat()
-            logger.info(f"[mia] transfer OK → {self._transfer_phone[:6]}***")
-            return "Transfert initié. L'artisan répond directement."
-
-        logger.error("[mia] transfer_urgent_call: SIP transfer échoué")
-        return (
-            "Je n'ai pas pu établir le transfert. Je prends votre message "
-            "et l'artisan vous rappelle dans les plus brefs délais."
-        )
 
     async def on_enter(self):
         logger.info("[mia] on_enter — greeting")
