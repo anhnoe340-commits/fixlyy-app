@@ -5,7 +5,6 @@ import OnboardingV2 from '@/pages/onboarding-v2/OnboardingV2'
 import OnboardingV3 from '@/pages/onboarding-v3/OnboardingV3'
 import LoginPage from '@/pages/LoginPage'
 import Dashboard from '@/pages/Dashboard'
-import AdminPage from '@/pages/AdminPage'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
@@ -13,21 +12,6 @@ import JoinDashboard from '@/pages/JoinDashboard'
 import ResumePage from '@/pages/ResumePage'
 import SetupPage from '@/pages/setup/SetupPage'
 import { supabase } from '@/lib/supabase'
-
-// AdminGuard : valide l'auth avant de rendre AdminPage
-function AdminGuard() {
-  const { user, loading } = useAuth()
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-white">
-      <div className="w-8 h-8 border-2 border-[#2850c8] border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
-  if (!user || user.email !== 'fixlyy@fixlyy.fr') {
-    window.location.href = '/dashboard'
-    return null
-  }
-  return <AdminPage />
-}
 
 function Spinner() {
   return (
@@ -134,6 +118,5 @@ export default function App() {
   if (window.location.pathname === '/join' && new URLSearchParams(window.location.search).has('token')) return <JoinDashboard />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
   if (window.location.pathname.startsWith('/r/')) return <ResumePage />
-  if (window.location.pathname === '/admin') return <AuthProvider><AdminGuard /></AuthProvider>
   return <AuthProvider><AppContent /></AuthProvider>
 }
