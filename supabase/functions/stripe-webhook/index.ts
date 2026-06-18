@@ -182,6 +182,7 @@ serve(async (req) => {
         : undefined
 
       const hasLaunchDiscount = sub.discount !== null && sub.discount !== undefined;
+      const billingInterval = (sub.items.data[0]?.price?.recurring?.interval === 'year') ? 'annual' : 'monthly';
 
       await supabase.from('subscriptions').upsert({
         stripe_customer_id: sub.customer as string,
@@ -192,6 +193,7 @@ serve(async (req) => {
         trial_end: trialEnd,
         updated_at: new Date().toISOString(),
         has_launch_discount: hasLaunchDiscount,
+        billing_interval: billingInterval,
         ...(commitmentEnd ? { commitment_end: commitmentEnd } : {}),
       }, { onConflict: 'stripe_subscription_id' });
 

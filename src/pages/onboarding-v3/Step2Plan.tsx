@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { PLANS, STRIPE_PRICE_IDS, type PlanKey } from '@/config/plans'
+import { PLANS, STRIPE_PRICE_IDS, STRIPE_PRICE_IDS_ANNUAL, ANNUAL_MONTHLY_PRICE, type PlanKey } from '@/config/plans'
 import { Check } from 'lucide-react'
 
 const BRAND    = '#3B5BF5'
@@ -25,6 +25,9 @@ interface Props {
 }
 
 export default function Step2Plan({ companyName, trade, onBack }: Props) {
+  const billingInterval = (new URLSearchParams(window.location.search).get('billing') === 'annual') ? 'annual' : 'monthly'
+  const isAnnual = billingInterval === 'annual'
+
   const [selected, setSelected] = useState<PlanKey>('pro')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
@@ -37,6 +40,8 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Session expirée. Reconnectez-vous.')
 
+      const priceId = isAnnual ? STRIPE_PRICE_IDS_ANNUAL[selected] : STRIPE_PRICE_IDS[selected]
+
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
         {
@@ -46,10 +51,11 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            priceId: STRIPE_PRICE_IDS[selected],
+            priceId,
             planId: selected,
             company: companyName,
             trade,
+            billingInterval,
           }),
         }
       )
@@ -128,7 +134,13 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  {launch ? (
+                  {isAnnual ? (
+                    <>
+                      <p className="text-[11px] line-through" style={{ color: 'rgba(148,163,184,0.5)' }}>{p.price} €</p>
+                      <p className="text-xl font-black text-emerald-400">{ANNUAL_MONTHLY_PRICE[key].toFixed(2).replace('.', ',')} €</p>
+                      <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.6)' }}>/mois · facturé/an</p>
+                    </>
+                  ) : launch ? (
                     <>
                       <p className="text-[11px] line-through" style={{ color: 'rgba(148,163,184,0.5)' }}>{p.price} €</p>
                       <p className="text-xl font-black text-emerald-400">{launch.reducedPrice.toFixed(2).replace('.', ',')} €</p>
@@ -180,9 +192,11 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
       </button>
 
       <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
-        {LAUNCH[selected]
-          ? `Essai 7 jours, puis ${LAUNCH[selected]!.reducedPrice.toFixed(2).replace('.', ',')} € 1er mois, puis ${plan.price} €/mois HT`
-          : `Essai 7 jours, puis ${plan.price} €/mois HT · Résiliable à tout moment`
+        {isAnnual
+          ? `Essai 7 jours, puis ${ANNUAL_MONTHLY_PRICE[selected].toFixed(2).replace('.', ',')} €/mois · Engagement 12 mois · Facturé annuellement`
+          : LAUNCH[selected]
+            ? `Essai 7 jours, puis ${LAUNCH[selected]!.reducedPrice.toFixed(2).replace('.', ',')} € 1er mois, puis ${plan.price} €/mois HT`
+            : `Essai 7 jours, puis ${plan.price} €/mois HT · Résiliable à tout moment`
         }
       </p>
 

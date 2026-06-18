@@ -78,9 +78,23 @@ export function getPlanLimit(
   return PLANS[plan][key] as number
 }
 
-// Stripe price IDs produits (créés le 2026-06-09)
+// Stripe price IDs — mensuel (créés le 2026-06-09)
 export const STRIPE_PRICE_IDS: Record<PlanKey, string> = {
   solo: 'price_1TgNhNBKWw2SqpykxEkXTAma',
   pro:  'price_1TgNhOBKWw2SqpykzY7j1ood',
   max:  'price_1TgNhOBKWw2Sqpyku7Rk2ioO',
+}
+
+// Stripe price IDs — annuel (créés le 2026-06-18)
+export const STRIPE_PRICE_IDS_ANNUAL: Record<PlanKey, string> = {
+  solo: 'price_1TjlrKBKWw2Sqpykk0wK6sTV',
+  pro:  'price_1TjlrKBKWw2SqpykwMlOIjxi',
+  max:  'price_1TjlrKBKWw2SqpykLvTqH6OP',
+}
+
+// Prix mensuel équivalent affiché en mode annuel
+export const ANNUAL_MONTHLY_PRICE: Record<PlanKey, number> = {
+  solo:  77.60,
+  pro:  157.60,
+  max:  277.60,
 }

@@ -4,50 +4,82 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 
+// Monthly price IDs (existing)
+const MONTHLY_PRICE_IDS = {
+  solo: 'price_1TgNhNBKWw2SqpykxEkXTAma',
+  pro:  'price_1TgNhOBKWw2SqpykzY7j1ood',
+  max:  'price_1TgNhOBKWw2Sqpyku7Rk2ioO',
+};
+
+// Annual amounts in cents (monthly equivalent × 12)
+// Solo:  77.60 × 12 =  931.20€ → 93120
+// Pro:  157.60 × 12 = 1891.20€ → 189120
+// Max:  277.60 × 12 = 3331.20€ → 333120
+const ANNUAL_AMOUNTS = {
+  solo:  93120,
+  pro:  189120,
+  max:  333120,
+};
+
 serve(async (req) => {
   const cors = corsHeaders(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
+  // Auth check
+  const auth = req.headers.get('Authorization') ?? '';
+  const serviceKey = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY') ?? '';
+  if (!auth.includes(serviceKey)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: cors });
+  }
+
   try {
-    const results: Record<string, string> = {};
+    // Retrieve product IDs from existing monthly prices
+    const [soloP, proP, maxP] = await Promise.all([
+      stripe.prices.retrieve(MONTHLY_PRICE_IDS.solo),
+      stripe.prices.retrieve(MONTHLY_PRICE_IDS.pro),
+      stripe.prices.retrieve(MONTHLY_PRICE_IDS.max),
+    ]);
 
-    const plans = [
-      { name: 'Solo', monthly: 7900, annual: 6300 },
-      { name: 'Pro',  monthly: 14900, annual: 11900 },
-      { name: 'Equipe', monthly: 24900, annual: 19900 },
-    ];
+    const products = {
+      solo: soloP.product as string,
+      pro:  proP.product as string,
+      max:  maxP.product as string,
+    };
 
-    for (const plan of plans) {
-      // Créer le produit
-      const product = await stripe.products.create({
-        name: `Fixlyy ${plan.name}`,
-        metadata: { plan: plan.name.toLowerCase() },
-      });
-
-      // Prix mensuel
-      const monthlyPrice = await stripe.prices.create({
-        product: product.id,
-        unit_amount: plan.monthly,
+    // Create annual prices
+    const [soloAnnual, proAnnual, maxAnnual] = await Promise.all([
+      stripe.prices.create({
+        product: products.solo,
+        unit_amount: ANNUAL_AMOUNTS.solo,
         currency: 'eur',
-        recurring: { interval: 'month' },
-        nickname: `${plan.name} Mensuel`,
-      });
-
-      // Prix annuel
-      const annualPrice = await stripe.prices.create({
-        product: product.id,
-        unit_amount: plan.annual,
+        recurring: { interval: 'year' },
+        nickname: 'Solo Annuel',
+        metadata: { plan: 'solo', billing: 'annual' },
+      }),
+      stripe.prices.create({
+        product: products.pro,
+        unit_amount: ANNUAL_AMOUNTS.pro,
         currency: 'eur',
-        recurring: { interval: 'month' },
-        nickname: `${plan.name} Annuel`,
-        metadata: { billing: 'annual' },
-      });
+        recurring: { interval: 'year' },
+        nickname: 'Pro Annuel',
+        metadata: { plan: 'pro', billing: 'annual' },
+      }),
+      stripe.prices.create({
+        product: products.max,
+        unit_amount: ANNUAL_AMOUNTS.max,
+        currency: 'eur',
+        recurring: { interval: 'year' },
+        nickname: 'Max Annuel',
+        metadata: { plan: 'max', billing: 'annual' },
+      }),
+    ]);
 
-      results[`${plan.name.toLowerCase()}_monthly`] = monthlyPrice.id;
-      results[`${plan.name.toLowerCase()}_annual`] = annualPrice.id;
-    }
-
-    return new Response(JSON.stringify(results, null, 2), {
+    return new Response(JSON.stringify({
+      STRIPE_PRICE_SOLO_ANNUAL: soloAnnual.id,
+      STRIPE_PRICE_PRO_ANNUAL:  proAnnual.id,
+      STRIPE_PRICE_MAX_ANNUAL:  maxAnnual.id,
+      products,
+    }, null, 2), {
       headers: { ...cors, 'Content-Type': 'application/json' },
     });
   } catch (e: any) {

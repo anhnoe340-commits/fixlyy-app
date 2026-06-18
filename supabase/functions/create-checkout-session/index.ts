@@ -17,7 +17,7 @@ serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
   if (!user) return new Response(JSON.stringify({ error: 'Non autorisé' }), { status: 401, headers: cors });
 
-  const { priceId, planId, associates_count, trade, company } = await req.json();
+  const { priceId, planId, associates_count, trade, company, billingInterval } = await req.json();
 
   try {
     // Lookup existing Stripe customer via our DB — works for phone-only users (no email)
@@ -44,8 +44,9 @@ serve(async (req) => {
 
     const APP_BASE = Deno.env.get('APP_URL') || 'https://app.fixlyy.fr';
 
-    // Réduction lancement : -50% Pro / -30% Max sur le 1er mois après trial
-    const launchCoupon: string | null =
+    // Réduction lancement : -50% Pro / -30% Max — uniquement sur le mensuel
+    const isAnnual = billingInterval === 'annual';
+    const launchCoupon: string | null = isAnnual ? null :
       planId === 'pro' ? 'LAUNCH-PRO-50' :
       planId === 'max' ? 'LAUNCH-MAX-30' : null;
 
@@ -59,10 +60,15 @@ serve(async (req) => {
         trade: trade ?? '',
         plan_id: planId ?? '',
         associates_count: String(associates_count || 1),
+        billing_interval: billingInterval ?? 'monthly',
       },
       subscription_data: {
         trial_period_days: 7,
-        metadata: { supabase_uid: user.id, commitment_months: '3' },
+        metadata: {
+          supabase_uid: user.id,
+          commitment_months: '3',
+          billing_interval: billingInterval ?? 'monthly',
+        },
       },
       success_url: `${APP_BASE}/commencer?checkout=success`,
       cancel_url:  `${APP_BASE}/commencer`,
