@@ -28,6 +28,24 @@ LK_URL    = (os.getenv("LIVEKIT_CLOUD_URL", "")
 LK_KEY    = os.getenv("LIVEKIT_CLOUD_API_KEY", "")
 LK_SECRET = os.getenv("LIVEKIT_CLOUD_API_SECRET", "")
 
+VOICE_MAP: dict[str, str] = {
+    "fr": "FFXYdAYPzn8Tw8KiHZqg",
+    "en": "OYTbf65OHHFELVut7v2H",
+    "ar": "VwC51uc4PUblWEJSPzeo",
+    "es": "nbcvT3C2tyOd2OsRAtUf",
+    "pt": "RGymW84CSmfVugnA5tvA",
+}
+_tts_cache: dict[str, elevenlabs.TTS] = {}
+
+def _tts_for_lang(lang: str) -> elevenlabs.TTS:
+    lang = lang if lang in VOICE_MAP else "fr"
+    if lang not in _tts_cache:
+        _tts_cache[lang] = elevenlabs.TTS(
+            voice=VOICE_MAP[lang],
+            model="eleven_multilingual_v2",
+        )
+    return _tts_cache[lang]
+
 DEFAULT_GREETING = (
     "Bonjour, vous êtes bien sur le service de gestion des appels. "
     "Comment puis-je vous aider ?"
@@ -349,6 +367,9 @@ def build_instructions(
             "Détecte la langue du client dès sa première phrase et réponds dans cette langue. "
             "Langues supportées : français, anglais, arabe, espagnol, portugais. "
             "Pour toute autre langue, réponds en français. "
+            "Si le client s'expresse dans une autre langue que le français, tu dois immédiatement "
+            "et définitivement switcher dans cette langue pour TOUTE la suite de la conversation. "
+            "Ne reviens jamais au français sauf demande explicite du client. "
             "Le contexte métier de l'artisan reste le même quelle que soit la langue. "
         )
     else:
@@ -506,12 +527,14 @@ class MiaAgent(Agent):
         can_transfer   = bool(transfer_phone and is_max_plan(profile.get("subscription_plan")))
 
         # Mutable state — shared with entrypoint via reference
-        self._transfer_phone = transfer_phone
-        self._twilio_from    = twilio_from
-        self._room_name      = room_name
-        self._sip_ref        = sip_ref if sip_ref is not None else {}
-        self._user_id        = user_id
-        self._transfer_done  = False
+        self._transfer_phone  = transfer_phone
+        self._twilio_from     = twilio_from
+        self._room_name       = room_name
+        self._sip_ref         = sip_ref if sip_ref is not None else {}
+        self._user_id         = user_id
+        self._transfer_done   = False
+        self._multilingual    = multilingual
+        self._detected_lang   = "fr"
 
         tools = [self.transfer_urgent_call] if can_transfer else []
 
@@ -532,6 +555,30 @@ class MiaAgent(Agent):
             },
         )
         self._greeting = greeting
+
+    async def stt_node(self, audio, model_settings):
+        from livekit.agents import stt as stt_module
+        async for event in super().stt_node(audio, model_settings):
+            if (
+                self._multilingual
+                and event.type == stt_module.SpeechEventType.FINAL_TRANSCRIPT
+                and event.alternatives
+            ):
+                raw_lang = getattr(event.alternatives[0], "language", None) or ""
+                lang = raw_lang[:2].lower() if raw_lang else "fr"
+                lang = lang if lang in VOICE_MAP else "fr"
+                if lang != self._detected_lang:
+                    prev = self._detected_lang
+                    self._detected_lang = lang
+                    logger.info(f"[mia] lang detected: {prev!r} → {lang!r}, switching TTS voice")
+                    try:
+                        new_tts = _tts_for_lang(lang)
+                        if self.session is not None:
+                            self.session.update_options(tts=new_tts)
+                            logger.info(f"[mia] TTS voice updated for lang={lang!r}")
+                    except Exception as exc:
+                        logger.warning(f"[mia] TTS voice switch failed: {exc}")
+            yield event
 
     @function_tool
     async def transfer_urgent_call(self) -> str:
@@ -697,7 +744,7 @@ async def entrypoint(ctx: JobContext):
         ),
         stt=stt,
         llm=groq.LLM(model="llama-3.3-70b-versatile"),
-        tts=elevenlabs.TTS(language="fr"),
+        tts=_tts_for_lang("fr"),
         aec_warmup_duration=5.0,
         min_interruption_duration=1.5,
         min_interruption_words=3,
