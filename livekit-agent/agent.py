@@ -522,9 +522,17 @@ class MiaAgent(Agent):
         company_name   = profile.get("company_name")   or "votre artisan"
         company_type   = profile.get("company_type")   or "artisan"
         assistant_name = profile.get("assistant_name") or "Mia"
-        greeting       = profile.get("greeting_open")  or DEFAULT_GREETING
         demo_mode      = bool(profile.get("demo_mode", False))
         can_transfer   = bool(transfer_phone and is_max_plan(profile.get("subscription_plan")))
+
+        # Plan Max : greeting neutre bi-langue pour ne pas présupposer la langue
+        if multilingual:
+            greeting = (
+                f"Hello / Bonjour — {company_name}, {assistant_name}. "
+                "How can I help you? / Comment puis-je vous aider ?"
+            )
+        else:
+            greeting = profile.get("greeting_open") or DEFAULT_GREETING
 
         # Mutable state — shared with entrypoint via reference
         self._transfer_phone  = transfer_phone
@@ -535,6 +543,7 @@ class MiaAgent(Agent):
         self._transfer_done   = False
         self._multilingual    = multilingual
         self._detected_lang   = "fr"
+        self._lang_injected   = False
 
         tools = [self.transfer_urgent_call] if can_transfer else []
 
@@ -579,6 +588,34 @@ class MiaAgent(Agent):
                     except Exception as exc:
                         logger.warning(f"[mia] TTS voice switch failed: {exc}")
             yield event
+
+    _LANG_NAMES: dict[str, str] = {
+        "en": "English",
+        "ar": "Arabic",
+        "es": "Spanish",
+        "pt": "Portuguese",
+    }
+
+    async def llm_node(self, chat_ctx, tools, model_settings):
+        if (
+            self._multilingual
+            and self._detected_lang != "fr"
+            and not self._lang_injected
+        ):
+            self._lang_injected = True
+            lang_name = self._LANG_NAMES.get(self._detected_lang, self._detected_lang.upper())
+            injection = (
+                f"The client is speaking {lang_name}. "
+                f"Switch immediately and definitively to {lang_name} for the entire conversation. "
+                f"Do not use French unless the client explicitly requests it."
+            )
+            try:
+                chat_ctx.append(role="system", text=injection)
+                logger.info(f"[mia] LLM context injected — lang={self._detected_lang!r} ({lang_name})")
+            except Exception as exc:
+                logger.warning(f"[mia] LLM context injection failed: {exc}")
+        async for chunk in super().llm_node(chat_ctx, tools, model_settings):
+            yield chunk
 
     @function_tool
     async def transfer_urgent_call(self) -> str:
