@@ -41,7 +41,7 @@ def _tts_for_lang(lang: str) -> elevenlabs.TTS:
     lang = lang if lang in VOICE_MAP else "fr"
     if lang not in _tts_cache:
         _tts_cache[lang] = elevenlabs.TTS(
-            voice=VOICE_MAP[lang],
+            voice_id=VOICE_MAP[lang],
             model="eleven_multilingual_v2",
         )
     return _tts_cache[lang]
