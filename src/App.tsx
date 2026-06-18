@@ -126,8 +126,8 @@ function AppContent() {
 
   if (loading || status === 'loading') return <Spinner />
   if (!user) { window.location.replace('/connexion'); return <Spinner /> }
-  if (status === 'auth' || status === 'onboarding') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
-  if (status === 'provisioning') return <OnboardingV2 onDone={() => setStatus('dashboard')} />
+  if (status === 'onboarding') { window.location.replace('/commencer'); return <Spinner /> }
+  if (status === 'provisioning') { window.location.replace('/commencer?checkout=success'); return <Spinner /> }
   return <ProfileProvider><Dashboard /></ProfileProvider>
 }
 
