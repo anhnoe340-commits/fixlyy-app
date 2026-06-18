@@ -617,7 +617,6 @@ class MiaAgent(Agent):
         async for chunk in super().llm_node(chat_ctx, tools, model_settings):
             yield chunk
 
-    @function_tool
     async def transfer_urgent_call(self) -> str:
         """
         Transfère immédiatement cet appel urgent vers l'artisan sur son mobile.
