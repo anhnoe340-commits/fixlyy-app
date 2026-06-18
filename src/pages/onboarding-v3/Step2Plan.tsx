@@ -75,7 +75,7 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
       <div>
         <h2 className="text-2xl font-bold text-white mb-1">Choisissez votre forfait</h2>
         <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
-          Essai 7 jours · Résiliable à tout moment
+          {isAnnual ? 'Essai 7 jours · Engagement 12 mois · Facturé annuellement' : 'Essai 7 jours · Résiliable à tout moment'}
         </p>
       </div>
 
@@ -99,21 +99,21 @@ export default function Step2Plan({ companyName, trade, onBack }: Props) {
                 boxShadow: isSelected ? '0 0 24px rgba(59,91,245,0.20)' : 'none',
               }}
             >
-              {launch ? (
+              {!isAnnual && launch ? (
                 <div
                   className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-widest whitespace-nowrap"
                   style={{ background: '#059669' }}
                 >
                   {launch.badge}
                 </div>
-              ) : isPopular && (
+              ) : isPopular ? (
                 <div
                   className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-white text-[10px] font-bold uppercase tracking-widest"
-                  style={{ background: BRAND }}
+                  style={{ background: isAnnual ? '#059669' : BRAND }}
                 >
-                  Recommandé
+                  {isAnnual ? '-20% ANNUEL' : 'Recommandé'}
                 </div>
-              )}
+              ) : null}
 
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2.5">
