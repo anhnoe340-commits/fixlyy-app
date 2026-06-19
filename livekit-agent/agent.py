@@ -665,8 +665,11 @@ class MiaAgent(Agent):
             yield chunk
 
     async def on_enter(self):
-        logger.info("[mia] on_enter — greeting")
+        logger.info(
+            f"[mia] on_enter — greeting (len={len(self._greeting)} multilingual={self._multilingual}): {self._greeting!r}"
+        )
         self.session.say(self._greeting, allow_interruptions=False)
+        logger.info("[mia] on_enter — session.say() dispatched")
 
 
 class OnboardingMiaAgent(Agent):
