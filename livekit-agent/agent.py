@@ -393,11 +393,22 @@ def build_instructions(
         + "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
     )
 
+    if "garage" in company_type.lower() or "mécan" in company_type.lower():
+        base += (
+            " Contexte garage automobile : tu connais les termes du métier —"
+            " révision, vidange, courroie de distribution, plaquettes de frein,"
+            " diagnostic électronique, devis, rendez-vous atelier, véhicule immobilisé."
+            " Urgences typiques : panne sur la route, voiture qui ne démarre pas,"
+            " voyant rouge allumé, freins qui grincent, fuite d'huile."
+            " Si un client décrit une panne immobilisante (voiture bloquée sur la route,"
+            " ne démarre plus), précise que son appel sera traité en priorité."
+        )
+
     if can_transfer:
         base += (
             " Si le client décrit une urgence réelle nécessitant une intervention immédiate"
             " (fuite d'eau active, panne de chauffage en hiver, panne électrique grave,"
-            " serrure bloquée en urgence, etc.), dis : 'Votre situation est urgente."
+            " serrure bloquée en urgence, voiture en panne sur la route, etc.), dis : 'Votre situation est urgente."
             f" Je vous mets en contact direct avec {company_name}. Ne raccrochez pas.'"
             " puis appelle la fonction transfer_urgent_call."
         )
@@ -626,15 +637,19 @@ class MiaAgent(Agent):
                 if lang != self._detected_lang:
                     prev = self._detected_lang
                     self._detected_lang = lang
-                    logger.info(f"[mia] lang detected: {prev!r} → {lang!r}, switching TTS voice")
-                    try:
-                        new_tts = _tts_for_lang(lang)
-                        if self.session is not None:
-                            self.session.update_options(tts=new_tts)
-                            logger.info(f"[mia] TTS voice updated for lang={lang!r}")
-                    except Exception as exc:
-                        logger.warning(f"[mia] TTS voice switch failed: {exc}")
+                    logger.info(f"[mia] lang detected: {prev!r} → {lang!r} (voice switch will apply at next tts_node)")
             yield event
+
+    def tts_node(self, text, model_settings):
+        # Sélectionne la voix ElevenLabs selon la langue détectée dans stt_node.
+        # On pose self._tts directement : activity.tts lit agent._tts en priorité
+        # sur session.tts (cf. agent_activity.py:3895).
+        new_tts = _tts_for_lang(self._detected_lang)
+        self._tts = new_tts
+        logger.info(
+            f"[mia] tts_node: lang={self._detected_lang!r} voice_id={VOICE_MAP.get(self._detected_lang)}"
+        )
+        return super().tts_node(text, model_settings)
 
     _LANG_NAMES: dict[str, str] = {
         "en": "English",
@@ -657,7 +672,7 @@ class MiaAgent(Agent):
                 f"Do not use French unless the client explicitly requests it."
             )
             try:
-                chat_ctx.append(role="system", text=injection)
+                chat_ctx.add_message(role="system", content=injection)
                 logger.info(f"[mia] LLM context injected — lang={self._detected_lang!r} ({lang_name})")
             except Exception as exc:
                 logger.warning(f"[mia] LLM context injection failed: {exc}")

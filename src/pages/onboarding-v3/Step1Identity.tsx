@@ -9,6 +9,7 @@ const TRADES = [
   { label: '🔒 Serrurier',    value: 'Serrurerie' },
   { label: '🔥 Chauffagiste', value: 'Chauffage / Climatisation' },
   { label: '🪵 Menuisier',    value: 'Menuiserie / Charpenterie' },
+  { label: '🚗 Garagiste',    value: 'Garage / Mécanique' },
   { label: '✏️ Autre',        value: 'Autre' },
 ]
 
