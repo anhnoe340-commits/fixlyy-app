@@ -106,14 +106,8 @@ export default function OnboardingV3({ onDone }: Props) {
 
       {/* Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 pt-8 pb-2">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
-            style={{ background: BRAND }}
-          >
-            F
-          </div>
-          <span className="text-base font-semibold text-white">Fixlyy</span>
+        <div>
+          <img src="/logo-full-clean.svg" alt="Fixlyy" className="h-8" />
         </div>
         <div className="text-right">
           <p className="text-xs font-medium text-white/50">{STEP_LABELS[state.step - 1]}</p>

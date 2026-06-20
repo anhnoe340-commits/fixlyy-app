@@ -78,9 +78,8 @@ export default function LoginPage() {
     <div className="onboarding-v3-bg min-h-screen flex flex-col items-center justify-center p-5" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
 
       {/* Logo */}
-      <div className="flex items-center gap-2 mb-10">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-base font-bold" style={{ background: BRAND }}>F</div>
-        <span className="text-lg font-semibold text-white">Fixlyy</span>
+      <div className="mb-10">
+        <img src="/logo-full-clean.svg" alt="Fixlyy" className="h-9" />
       </div>
 
       <div className="w-full max-w-sm v3-card rounded-2xl p-7">

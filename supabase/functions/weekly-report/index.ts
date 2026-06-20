@@ -97,7 +97,7 @@ function buildEmail(artisan: {
         <!-- Header -->
         <tr><td style="background:#111827;border-radius:16px 16px 0 0;padding:28px 32px;">
           <table width="100%"><tr>
-            <td><span style="font-size:18px;font-weight:700;color:#fff;letter-spacing:-0.3px;">⚡ Fixlyy</span></td>
+            <td><img src="https://app.fixlyy.fr/logo-full-clean.svg" alt="Fixlyy" height="34" style="display:block;border:0;max-height:34px;" /></td>
             <td align="right"><span style="font-size:12px;color:#9CA3AF;">Rapport du ${artisan.weekLabel}</span></td>
           </tr></table>
           <p style="font-size:22px;font-weight:700;color:#fff;margin:16px 0 4px;">Bonjour ${artisan.name} 👋</p>
@@ -231,6 +231,27 @@ serve(async (req) => {
     const validCron   = cronHeader === CRON_SECRET
     const validBearer = serviceKey !== '' && authHeader === `Bearer ${serviceKey}`
     if (!validCron && !validBearer) return new Response('Unauthorized', { status: 401 })
+  }
+
+  // Mode test — envoie un email factice pour valider le format
+  const url = new URL(req.url)
+  if (url.searchParams.get('test') === '1') {
+    const { label: weekLabel } = weekRange()
+    const testHtml = buildEmail({
+      name: 'Jean Dupont Plomberie',
+      totalCalls: 12, urgentCalls: 2, rdvCount: 3,
+      avgQuality: 7.8, avgDuration: 185,
+      topReasons: [
+        { reason: 'Fuite d\'eau sous évier', count: 4 },
+        { reason: 'Chauffe-eau en panne', count: 3 },
+        { reason: 'Débouchage WC', count: 2 },
+      ],
+      doneCount: 10, weekLabel,
+      weekMinutes: 42, monthMinutes: 180, monthQuota: 500, prevCallsCount: 9,
+    })
+    const testTo = url.searchParams.get('email') || 'anhnoe340@gmail.com'
+    await sendEmail(testTo, '📊 [TEST] Rapport hebdo Fixlyy — 12 appels cette semaine', testHtml)
+    return new Response(JSON.stringify({ ok: true, test: true, to: testTo }), { headers: { ...cors, 'Content-Type': 'application/json' } })
   }
 
   const { from, to, label: weekLabel } = weekRange()
