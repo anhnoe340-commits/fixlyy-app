@@ -743,7 +743,7 @@ export default function OnboardingPage({ userEmail }: Props) {
               {loading ? 'Enregistrement en cours...' : 'Lancer mon assistante — 7 jours gratuits →'}
             </button>
             <p className="text-center text-[11px] text-gray-400 mt-2">
-              Satisfait ou remboursé 30 jours · Annulation à tout moment
+              7 jours d'essai gratuit — aucune carte débitée avant le 8ème jour
             </p>
 
             <button onClick={() => setStep(5)} className="w-full text-center text-xs text-gray-400 mt-3 hover:text-gray-600">← Retour</button>

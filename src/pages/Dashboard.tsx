@@ -4479,8 +4479,8 @@ function SubscriptionPage({ accent }: { accent: string }) {
         /* Pas encore souscrit (ou annulé) → Stripe checkout */
         <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: accent + '08', border: `1px solid ${accent}20` }}>
           <div>
-            <p className="text-sm font-semibold" style={{ color: accent }}>Garantie satisfait ou remboursé 30 jours</p>
-            <p className="text-xs text-gray-500 mt-0.5">Entrez votre carte maintenant · prélevé dans 7 jours · annulez quand vous voulez</p>
+            <p className="text-sm font-semibold" style={{ color: accent }}>7 jours d'essai gratuit — aucune carte débitée avant le 8ème jour</p>
+            <p className="text-xs text-gray-500 mt-0.5">Entrez votre carte maintenant · prélevé le 8ème jour · annulez quand vous voulez</p>
           </div>
           <button
             onClick={handleCheckout}
