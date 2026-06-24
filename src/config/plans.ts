@@ -10,6 +10,5 @@ export const PLAN = {
   trial_days:       7,
 } as const
 
-// Price ID Stripe — 497€/mois récurrent, trial 7 jours
-// Créé le 2026-06-24 via Stripe CLI
-export const STRIPE_PRICE_ID = 'price_1TkkZXBKWw2SqpykPLACEHOLDER'
+// Price ID Stripe — 497€/mois récurrent, essai 7 jours — créé le 2026-06-24
+export const STRIPE_PRICE_ID = 'price_1TlxrCBKWw2SqpyktOcCssFu'
