@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { type PlanKey } from '@/config/plans'
 
 interface UsageData {
   minutes_used: number
@@ -17,7 +16,6 @@ interface UsageData {
 
 interface UsageMeterProps {
   accent: string
-  userPlan: PlanKey
   onUpgrade?: () => void
   compact?: boolean
 }
@@ -26,7 +24,7 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
 }
 
-export default function UsageMeter({ accent, userPlan, onUpgrade, compact = false }: UsageMeterProps) {
+export default function UsageMeter({ accent, onUpgrade, compact = false }: UsageMeterProps) {
   const [data, setData] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -62,7 +60,7 @@ export default function UsageMeter({ accent, userPlan, onUpgrade, compact = fals
   const isOver      = data.overage_minutes > 0
   const isWarning   = !isOver && pct >= 80
   const barColor    = isOver ? '#EF4444' : pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981'
-  const isMaxPlan   = userPlan === 'max'
+  const isMaxPlan   = true
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">

@@ -1,18 +1,16 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Step1Identity from './Step1Identity'
-import Step2Plan, { PLAN_SESSION_KEY } from './Step2Plan'
 import Step3Provisioning from './Step3Provisioning'
 import Step4Number from './Step4Number'
 import Step5Forwarding from './Step5Forwarding'
 import Step6Install from './Step6Install'
 import { trackEvent } from '@/utils/pixel'
-import { PLANS, type PlanKey } from '@/config/plans'
 
 const BRAND = '#3B5BF5'
-const TOTAL = 6
+const TOTAL = 5
 
-const STEP_LABELS = ['Identité', 'Forfait', 'Activation', 'Numéro', 'Renvoi', 'Installation']
+const STEP_LABELS = ['Identité', 'Activation', 'Numéro', 'Renvoi', 'Installation']
 
 interface State {
   step:         number
@@ -32,9 +30,11 @@ interface Props {
 export default function OnboardingV3({ onDone }: Props) {
   const isCheckoutReturn = new URLSearchParams(window.location.search).get('checkout') === 'success'
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
   const [state, setState] = useState<State>({
-    step: isCheckoutReturn ? 3 : 1,
+    step: isCheckoutReturn ? 2 : 1,
     userId:       null,
     phone:        null,
     email:        null,
@@ -44,12 +44,10 @@ export default function OnboardingV3({ onDone }: Props) {
     fixlyyNumber: null,
   })
 
-  // Meta Pixel: InitiateCheckout (step 1) ou Purchase (retour Stripe)
+  // Meta Pixel
   useEffect(() => {
     if (isCheckoutReturn) {
-      const planKey = sessionStorage.getItem(PLAN_SESSION_KEY) as PlanKey | null
-      const value = planKey && PLANS[planKey] ? PLANS[planKey].price : undefined
-      trackEvent('Purchase', { value, currency: 'EUR' })
+      trackEvent('Purchase', { value: 497, currency: 'EUR' })
     } else {
       trackEvent('InitiateCheckout')
     }
@@ -79,13 +77,48 @@ export default function OnboardingV3({ onDone }: Props) {
         .then(({ data }) => {
           if (data?.vapi_assistant_id && data?.twilio_number) {
             // Webhook already fired — skip polling, go straight to reveal
-            setState(s => ({ ...s, userId: user.id, phone, step: 4, fixlyyNumber: data.twilio_number }))
+            setState(s => ({ ...s, userId: user.id, phone, step: 3, fixlyyNumber: data.twilio_number }))
           } else {
-            setState(s => ({ ...s, userId: user.id, phone, step: 3 }))
+            setState(s => ({ ...s, userId: user.id, phone, step: 2 }))
           }
         })
     })
   }, [])
+
+  async function handleCheckout(
+    userId: string,
+    phone: string | null,
+    fullName: string | null,
+    trade: string | null,
+    companyName: string | null,
+    email: string | null,
+  ) {
+    setState(s => ({ ...s, userId, phone, email, fullName, trade, companyName }))
+    setCheckoutLoading(true)
+    setCheckoutError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Session expirée. Reconnectez-vous.')
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ trade, company: companyName }),
+        }
+      )
+      const data = await resp.json()
+      if (!resp.ok || data.error) throw new Error(data.error || 'Erreur lors de la création du checkout.')
+      window.location.href = data.url
+    } catch (e: any) {
+      setCheckoutError(e.message || 'Erreur. Réessayez.')
+      setCheckoutLoading(false)
+    }
+  }
 
   function next(patch: Partial<State> = {}) {
     setState(s => ({ ...s, ...patch, step: s.step + 1 }))
@@ -120,36 +153,41 @@ export default function OnboardingV3({ onDone }: Props) {
         <div className="w-full max-w-sm">
 
           {state.step === 1 && (
-            <Step1Identity
-              onDone={(userId, phone, fullName, trade, companyName, email) =>
-                next({ userId, phone, email, fullName, trade, companyName })
-              }
-            />
+            <>
+              <Step1Identity
+                onDone={(userId, phone, fullName, trade, companyName, email) =>
+                  handleCheckout(userId, phone, fullName, trade, companyName, email)
+                }
+              />
+              {checkoutError && (
+                <p className="mt-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                  {checkoutError}
+                </p>
+              )}
+              {checkoutLoading && (
+                <div className="mt-4 flex items-center justify-center gap-3 py-4">
+                  <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BRAND }} />
+                  <p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>Redirection vers le paiement…</p>
+                </div>
+              )}
+            </>
           )}
 
-          {state.step === 2 && (
-            <Step2Plan
-              companyName={state.companyName!}
-              trade={state.trade!}
-              onBack={() => setState(s => ({ ...s, step: 1 }))}
-            />
-          )}
-
-          {state.step === 3 && !state.userId && (
+          {state.step === 2 && !state.userId && (
             <div className="flex flex-col items-center justify-center gap-4 py-12">
               <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BRAND }} />
               <p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>Chargement…</p>
             </div>
           )}
 
-          {state.step === 3 && state.userId && (
+          {state.step === 2 && state.userId && (
             <Step3Provisioning
               userId={state.userId}
               onDone={number => next({ fixlyyNumber: number })}
             />
           )}
 
-          {state.step === 4 && (
+          {state.step === 3 && (
             <Step4Number
               fixlyyNumber={state.fixlyyNumber!}
               artisanPhone={state.phone!}
@@ -158,7 +196,7 @@ export default function OnboardingV3({ onDone }: Props) {
             />
           )}
 
-          {state.step === 5 && (
+          {state.step === 4 && (
             <Step5Forwarding
               userId={state.userId!}
               fixlyyNumber={state.fixlyyNumber}
@@ -166,7 +204,7 @@ export default function OnboardingV3({ onDone }: Props) {
             />
           )}
 
-          {state.step === 6 && (
+          {state.step === 5 && (
             <Step6Install
               userId={state.userId!}
               deferredPrompt={deferredPrompt}

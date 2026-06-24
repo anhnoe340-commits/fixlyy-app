@@ -5,6 +5,9 @@ import Stripe from 'https://esm.sh/stripe@13?target=deno';
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!);
 
+// Offre unique 497€/mois — engagement 3 mois, essai 7 jours
+const PRICE_ID = Deno.env.get('STRIPE_PRICE_ID_497') ?? '';
+
 const cors = {
   'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
@@ -17,10 +20,10 @@ serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
   if (!user) return new Response(JSON.stringify({ error: 'Non autorisé' }), { status: 401, headers: cors });
 
-  const { priceId, planId, associates_count, trade, company, billingInterval } = await req.json();
+  const { trade, company } = await req.json();
 
   try {
-    // Lookup existing Stripe customer via our DB — works for phone-only users (no email)
+    // Lookup existing Stripe customer via notre DB — compatible phone-only (sans email)
     const { data: profile } = await supabase
       .from('profiles')
       .select('stripe_customer_id')
@@ -38,45 +41,27 @@ serve(async (req) => {
       });
     }
 
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
-      { price: priceId, quantity: 1 },
-    ];
-
     const APP_BASE = Deno.env.get('APP_URL') || 'https://app.fixlyy.fr';
-
-    // Réduction lancement : -50% Pro / -30% Max — uniquement sur le mensuel
-    const isAnnual = billingInterval === 'annual';
-    const launchCoupon: string | null = isAnnual ? null :
-      planId === 'pro' ? 'LAUNCH-PRO-50' :
-      planId === 'max' ? 'LAUNCH-MAX-30' : null;
 
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: 'subscription',
-      line_items: lineItems,
+      line_items: [{ price: PRICE_ID, quantity: 1 }],
       metadata: {
         supabase_uid: user.id,
         company: company ?? '',
         trade: trade ?? '',
-        plan_id: planId ?? '',
-        associates_count: String(associates_count || 1),
-        billing_interval: billingInterval ?? 'monthly',
       },
       subscription_data: {
         trial_period_days: 7,
         metadata: {
           supabase_uid: user.id,
           commitment_months: '3',
-          billing_interval: billingInterval ?? 'monthly',
         },
       },
       success_url: `${APP_BASE}/commencer?checkout=success`,
       cancel_url:  `${APP_BASE}/commencer`,
-      // discounts et allow_promotion_codes sont mutuellement exclusifs dans Stripe
-      ...(launchCoupon
-        ? { discounts: [{ coupon: launchCoupon }] }
-        : { allow_promotion_codes: true }
-      ),
+      allow_promotion_codes: true,
       billing_address_collection: 'auto',
       locale: 'fr',
     });

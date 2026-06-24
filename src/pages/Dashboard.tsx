@@ -6,42 +6,6 @@ import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
 import UsageMeter from '@/components/UsageMeter'
 import { CallsEvolutionChart, HourlyChart, ReasonsChart, type DayPoint, type ReasonPoint, type HourPoint } from '@/components/StatsCharts'
-import { PLANS, canUseFeature, getPlanLimit, type PlanKey } from '@/config/plans'
-
-function resolvePlanKey(subscriptionPlan: string | null | undefined): PlanKey {
-  const s = (subscriptionPlan ?? '').toLowerCase()
-  if (s === 'pro') return 'pro'
-  if (s === 'max' || s.includes('équipe') || s.includes('equipe') || s.includes('expert') || s.includes('team')) return 'max'
-  return 'solo'
-}
-
-function UpgradeWall({ feature, requiredPlan, accent, onUpgrade }: {
-  feature: string
-  requiredPlan: string
-  accent: string
-  onUpgrade?: () => void
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center h-72 gap-4 text-center px-6">
-      <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl" style={{ background: accent + '15' }}>
-        🔒
-      </div>
-      <div>
-        <p className="font-semibold text-gray-900 text-base">{feature}</p>
-        <p className="text-sm text-gray-400 mt-1">Disponible avec le plan <span className="font-semibold capitalize">{requiredPlan}</span></p>
-      </div>
-      {onUpgrade && (
-        <button
-          onClick={onUpgrade}
-          className="text-sm font-semibold px-5 py-2.5 rounded-xl text-white transition-opacity hover:opacity-90"
-          style={{ background: accent }}
-        >
-          Passer au plan {requiredPlan} →
-        </button>
-      )}
-    </div>
-  )
-}
 
 type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
@@ -75,7 +39,6 @@ async function syncAssistant() {
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { profile, uploadLogo, memberRole } = useProfile()
-  const userPlan = resolvePlanKey(profile?.subscription_plan)
   const [page, setPage] = useState<Page>('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -243,38 +206,22 @@ export default function Dashboard() {
         <main className="flex-1 p-4 md:p-6 overflow-y-auto overflow-x-hidden pb-20 md:pb-6">
           {page === 'today' && <TodayPage accent={accent} onNavigate={setPage} />}
           {page === 'calls' && <CallsPage accent={accent} />}
-          {page === 'contacts' && (
-            canUseFeature(userPlan, 'crm')
-              ? <ContactsPage accent={accent} />
-              : <UpgradeWall feature="Contacts & CRM" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
-          )}
+          {page === 'contacts' && <ContactsPage accent={accent} />}
           {page === 'agenda' && <AgendaPage accent={accent} onGoToIntegrations={() => setPage('integrations')} />}
-          {page === 'stats' && (
-            canUseFeature(userPlan, 'detailed_stats')
-              ? <StatsPage accent={accent} />
-              : <UpgradeWall feature="Statistiques détaillées" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
-          )}
+          {page === 'stats' && <StatsPage accent={accent} />}
           {page === 'messages' && <MessagesPage accent={accent} />}
           {page === 'greeting' && <GreetingPage accent={accent} />}
-          {page === 'inbound-reasons' && (
-            getPlanLimit(userPlan, 'call_reasons_limit') > 0
-              ? <InboundReasonsPage accent={accent} reasonsLimit={getPlanLimit(userPlan, 'call_reasons_limit')} />
-              : <UpgradeWall feature="Motifs d'appel" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
-          )}
-          {page === 'pricing' && (
-            canUseFeature(userPlan, 'pricing')
-              ? <PricingPage accent={accent} />
-              : <UpgradeWall feature="Tarifs & informations d'intervention" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
-          )}
+          {page === 'inbound-reasons' && <InboundReasonsPage accent={accent} reasonsLimit={20} />}
+          {page === 'pricing' && <PricingPage accent={accent} />}
           {page === 'outbound-reasons' && <OutboundReasonsPage accent={accent} />}
           {page === 'call-transfer' && <CallTransferPage accent={accent} />}
-          {page === 'post-processing' && <PostProcessingPage accent={accent} onUpgrade={() => setPage('subscription')} />}
+          {page === 'post-processing' && <PostProcessingPage accent={accent} />}
           {page === 'employees' && (
             memberRole === 'member'
-              ? <UpgradeWall feature="Équipe" requiredPlan="administrateur" accent={accent} />
-              : canUseFeature(userPlan, 'team')
-                ? <TeamPage accent={accent} />
-                : <UpgradeWall feature="Gestion d'équipe" requiredPlan="Pro" accent={accent} onUpgrade={() => setPage('subscription')} />
+              ? <div className="flex flex-col items-center justify-center h-72 gap-4 text-center px-6">
+                  <p className="font-semibold text-gray-900">Accès administrateur requis</p>
+                </div>
+              : <TeamPage accent={accent} />
           )}
           {page === 'business-details' && <BusinessDetailsPage accent={accent} uploadLogo={uploadLogo} />}
           {page === 'hours' && <HoursPage accent={accent} />}
@@ -381,9 +328,8 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
   const urgentCalls = calls.filter(c => c.status === 'urgent')
   const pendingCalls = calls.filter(c => c.status === 'pending')
   const recentCalls = calls.slice(0, 5)
-  const isMax = resolvePlanKey(profile?.subscription_plan) === 'max'
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-  const transfersThisMonth = isMax ? calls.filter(c => c.transferred_to && new Date(c.created_at) >= monthStart).length : 0
+  const transfersThisMonth = calls.filter(c => c.transferred_to && new Date(c.created_at) >= monthStart).length
 
   const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   const fmtDate = (iso: string) => {
@@ -423,12 +369,12 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
           {[1,2,3].map(i => <div key={i} className="flex-1 h-20 bg-gray-100 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
-        <div className={`grid gap-3 ${isMax ? 'grid-cols-2' : 'grid-cols-3'}`}>
+        <div className="grid grid-cols-2 gap-3">
           {[
             { label: "Aujourd'hui", value: todayCalls.length, sub: 'appels', color: accent },
             { label: 'À rappeler', value: urgentCalls.length + pendingCalls.length, sub: 'en attente', color: (urgentCalls.length + pendingCalls.length) > 0 ? '#EF4444' : '#10B981' },
             { label: 'Total', value: calls.length, sub: 'depuis toujours', color: '#6B7280' },
-            ...(isMax ? [{ label: 'Transferts', value: transfersThisMonth, sub: 'urgences ce mois', color: transfersThisMonth > 0 ? '#7C3AED' : '#6B7280' }] : []),
+            { label: 'Transferts', value: transfersThisMonth, sub: 'urgences ce mois', color: transfersThisMonth > 0 ? '#7C3AED' : '#6B7280' },
           ].map(s => (
             <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
@@ -442,39 +388,30 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
       {/* ── Utilisation minutes ── */}
       <UsageMeter
         accent={accent}
-        userPlan={resolvePlanKey(profile?.subscription_plan)}
         onUpgrade={() => onNavigate('subscription')}
       />
 
       {/* ── Bannière tarifs ── */}
-      {!profile?.pricing_configured && (() => {
-        const plan = resolvePlanKey(profile?.subscription_plan)
-        const hasPricing = canUseFeature(plan, 'pricing')
-        return (
-          <div className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 border ${hasPricing ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ background: hasPricing ? '#EFF6FF' : '#F3F4F6' }}>
-                <svg className="w-4 h-4" style={{ color: hasPricing ? '#3B82F6' : '#9CA3AF' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M7 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1-4l-3 3m0 0l-3-3m3 3V4" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}/>
-                </svg>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-gray-800 truncate">
-                  {hasPricing ? 'Configurez vos tarifs' : 'Tarifs disponibles avec Pro'}
-                </p>
-                <p className="text-[11px] text-gray-500 truncate">
-                  {hasPricing ? 'Mia pourra répondre aux questions de prix de vos clients' : 'Mia répond aux questions de prix de vos clients'}
-                </p>
-              </div>
+      {!profile?.pricing_configured && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl px-4 py-3.5 border bg-blue-50 border-blue-100">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center" style={{ background: '#EFF6FF' }}>
+              <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M7 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1-4l-3 3m0 0l-3-3m3 3V4" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}/>
+              </svg>
             </div>
-            <button onClick={() => onNavigate(hasPricing ? 'pricing' : 'subscription')}
-              className="text-xs font-semibold px-3 py-1.5 rounded-xl flex-shrink-0 text-white"
-              style={{ background: hasPricing ? '#3B82F6' : '#6B7280' }}>
-              {hasPricing ? 'Configurer' : 'Passer au Pro'}
-            </button>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-gray-800 truncate">Configurez vos tarifs</p>
+              <p className="text-[11px] text-gray-500 truncate">Mia pourra répondre aux questions de prix de vos clients</p>
+            </div>
           </div>
-        )
-      })()}
+          <button onClick={() => onNavigate('pricing')}
+            className="text-xs font-semibold px-3 py-1.5 rounded-xl flex-shrink-0 text-white"
+            style={{ background: '#3B82F6' }}>
+            Configurer
+          </button>
+        </div>
+      )}
 
       {/* ── Urgent alert ── */}
       {urgentCalls.length > 0 && (
@@ -2508,7 +2445,7 @@ function CallTransferPage({ accent }: { accent: string }) {
 // ── Post Processing Page ──────────────────────────────────────────────────────
 function PostProcessingPage({ accent, onUpgrade }: { accent: string; onUpgrade?: () => void }) {
   const { profile, updateProfile } = useProfile()
-  const canWeeklyReport = canUseFeature(resolvePlanKey(profile?.subscription_plan), 'weekly_report')
+  const canWeeklyReport = true
   const [emailEnabled, setEmailEnabled] = useState(profile?.email_notifications_enabled ?? true)
   const [emailValue, setEmailValue] = useState(profile?.email || '')
   const [saving, setSaving] = useState(false)
@@ -2558,9 +2495,6 @@ function PostProcessingPage({ accent, onUpgrade }: { accent: string; onUpgrade?:
     <div className="flex flex-col gap-4">
       <SettingsHeader section="Répondre" title="Post-traitement" />
 
-      {!canWeeklyReport ? (
-        <UpgradeWall feature="Rapport hebdomadaire" requiredPlan="Pro" accent={accent} onUpgrade={onUpgrade} />
-      ) : (
       <>
       <Card>
         <div className="flex items-center justify-between">
@@ -2610,7 +2544,6 @@ function PostProcessingPage({ accent, onUpgrade }: { accent: string; onUpgrade?:
         <ToggleRow label="Niveau d'urgence" desc="Indique si l'appel a été classé comme urgent" defaultOn={true} accent={accent} />
       </Card>
       </>
-      )}
 
       {toast && (
         <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl text-white text-sm font-medium shadow-lg ${toast.type === 'error' ? 'bg-red-500' : 'bg-gray-900'}`}>
@@ -2635,12 +2568,7 @@ function EmployeesPage({ accent }: { accent: string }) {
   const [showModal, setShowModal] = useState(false)
   const [toast, setToast] = useState('')
 
-  // Limite selon le plan
-  const planStr = (profile?.subscription_plan ?? '').toLowerCase()
-  const memberLimit =
-    planStr.includes('max') || planStr.includes('équipe') || planStr.includes('equipe') || planStr.includes('expert') || planStr.includes('team') ? 999
-    : planStr.includes('pro') ? 2
-    : 0 // Solo / essai = patron seul
+  const memberLimit = 999 // toutes les features incluses — pas de limite d'équipe
 
   const load = async () => {
     setLoading(true)
@@ -2723,11 +2651,6 @@ function EmployeesPage({ accent }: { accent: string }) {
       <div className="flex items-end justify-between">
         <div>
           <SettingsHeader section="Répondre" title="Équipe" />
-          {memberLimit !== 999 && (
-            <p className="text-xs text-gray-400 -mt-4 mb-5">
-              {usedSlots}/{memberLimit} artisan{memberLimit > 1 ? 's' : ''} · forfait {planStr.includes('pro') ? 'Pro' : 'Solo'}
-            </p>
-          )}
         </div>
         <div className="flex flex-col items-end gap-1 mb-5">
           <button
@@ -2738,11 +2661,6 @@ function EmployeesPage({ accent }: { accent: string }) {
           >
             + Inviter un artisan
           </button>
-          {atLimit && (
-            <p className="text-xs text-orange-500">
-              Limite atteinte · <button onClick={() => {}} className="underline">Passer au plan supérieur</button>
-            </p>
-          )}
         </div>
       </div>
 
@@ -2863,8 +2781,7 @@ function TeamPage({ accent }: { accent: string }) {
   const [inviting, setInviting] = useState(false)
   const [toast, setToast] = useState('')
 
-  const planStr = (profile?.subscription_plan ?? '').toLowerCase()
-  const memberLimit = planStr.includes('max') || planStr.includes('team') || planStr.includes('equipe') ? 10 : 3
+  const memberLimit = 10
 
   const load = async () => {
     if (!user) return
@@ -3740,7 +3657,7 @@ const GOOGLE_OAUTH_REDIRECT = `${SUPABASE_FUNCTIONS_URL}/google-calendar-callbac
 
 function IntegrationsPage({ accent, onUpgrade }: { accent: string; onUpgrade?: () => void }) {
   const { profile, updateProfile } = useProfile()
-  const canGcal = canUseFeature(resolvePlanKey(profile?.subscription_plan), 'google_calendar')
+  const canGcal = true
   const { user } = useAuth()
   const [apiKey] = useState<string | null>(null)
   const [apiKeyGenerated, setApiKeyGenerated] = useState(false)
@@ -3949,10 +3866,8 @@ function IntegrationsPage({ accent, onUpgrade }: { accent: string; onUpgrade?: (
         </div>
       </Card>
 
-      {/* Google Calendar — Pro/Max uniquement */}
-      <Card>{!canGcal ? (
-        <UpgradeWall feature="Google Calendar" requiredPlan="Pro" accent={accent} onUpgrade={onUpgrade} />
-      ) : (<>
+      {/* Google Calendar */}
+      <Card>{(<>
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-2xl border border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
@@ -4092,32 +4007,27 @@ function SubscriptionPage({ accent }: { accent: string }) {
   const { profile } = useProfile()
   const [callCount, setCallCount] = useState<number | null>(null)
   const [monthCallCount, setMonthCallCount] = useState<number | null>(null)
-  const [selected, setSelected] = useState<number | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
   const [portalLoading, setPortalLoading] = useState(false)
-  const [billing, setBilling] = useState<'monthly'|'annual'>('monthly')
-  const [associates, setAssociates] = useState(2)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [commitmentEnd, setCommitmentEnd] = useState<Date | null>(null)
   const [showCommitmentWarning, setShowCommitmentWarning] = useState(false)
-  const [hasLaunchDiscount, setHasLaunchDiscount] = useState(false)
 
   useEffect(() => {
     if (!profile?.stripe_customer_id) return
     supabase
       .from('subscriptions')
-      .select('commitment_end, has_launch_discount')
+      .select('commitment_end')
       .eq('stripe_customer_id', profile.stripe_customer_id)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()
       .then(({ data }) => {
         if (data?.commitment_end) setCommitmentEnd(new Date(data.commitment_end))
-        setHasLaunchDiscount(data?.has_launch_discount ?? false)
       })
   }, [profile?.stripe_customer_id])
 
@@ -4187,7 +4097,7 @@ function SubscriptionPage({ accent }: { accent: string }) {
     : new Date(user?.created_at ?? Date.now())
   const trialPct = Math.min(100, Math.round(((now.getTime() - trialStart.getTime()) / (trialEndDate.getTime() - trialStart.getTime())) * 100))
 
-  const currentPlanLabel = profile?.subscription_plan ?? (hasPaid ? 'Pro' : 'Essai gratuit')
+  const currentPlanLabel = hasPaid ? 'Fixlyy 497€' : 'Essai gratuit'
 
   useEffect(() => {
     if (!user) return
@@ -4201,78 +4111,32 @@ function SubscriptionPage({ accent }: { accent: string }) {
     })
   }, [user])
 
-  const userPlanKey = resolvePlanKey(profile?.subscription_plan)
   const hasActiveSub = isTrialActive || isActive
 
-  const plans = [
-    { id: 0, planId: 'starter', planKey: 'solo' as const, name: 'Solo',
-      monthly: { price: PLANS.solo.price, priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
-      annual:  { price: PLANS.solo.price, priceId: 'price_1TgNhNBKWw2SqpykxEkXTAma' },
-      desc: "Idéal pour l'artisan indépendant",
-      features: [
-        `${PLANS.solo.included_minutes} minutes incluses`,
-        'Mia répond 24h/24, 7j/7',
-        'SMS récap en 30 secondes',
-        'Qualification des urgences',
-        '1 numéro dédié',
-        `${PLANS.solo.member_limit} utilisateur`,
-        'Support par email',
-      ],
-    },
-    { id: 1, planId: 'pro', planKey: 'pro' as const, name: 'Pro', popular: true,
-      monthly: { price: PLANS.pro.price, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
-      annual:  { price: PLANS.pro.price, priceId: 'price_1TgNhOBKWw2SqpykzY7j1ood' },
-      desc: 'Pour les artisans avec un bon volume',
-      features: [
-        `${PLANS.pro.included_minutes} minutes incluses`,
-        'Tout Solo inclus',
-        'SMS confirmation client automatique',
-        'CRM clients natif',
-        'FAQ tarifaire configurable',
-        `${PLANS.pro.call_reasons_limit} motifs d'appel`,
-        'Rapport hebdomadaire',
-        'Statistiques détaillées',
-        `Jusqu'à ${PLANS.pro.member_limit} utilisateurs`,
-        'Support prioritaire',
-      ],
-    },
-    { id: 2, planId: 'max', planKey: 'max' as const, name: 'Max',
-      monthly: { price: PLANS.max.price, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
-      annual:  { price: PLANS.max.price, priceId: 'price_1TgNhOBKWw2Sqpyku7Rk2ioO' },
-      desc: 'Pour les TPE et petites équipes',
-      features: [
-        `${PLANS.max.included_minutes} minutes incluses`,
-        'Tout Pro inclus',
-        'Multilingue (FR EN AR ES PT)',
-        `${PLANS.max.call_reasons_limit} motifs d'appel`,
-        'Multi-numéros',
-        `Jusqu'à ${PLANS.max.member_limit} utilisateurs`,
-        'Rapports mensuels avancés',
-        'Support dédié',
-      ],
-    },
+  const PLAN_FEATURES = [
+    '1 500 min/mois incluses',
+    'Mia répond 24h/24, 7j/7',
+    'SMS récap artisan en < 30 secondes',
+    'Qualification des urgences + transfert',
+    'CRM clients natif',
+    'Multilingue (FR EN AR ES PT + 5 langues)',
+    'Rapport hebdomadaire',
+    'Statistiques détaillées',
+    'Support email < 4h',
   ]
 
   async function handleCheckout() {
-    if (selected === null) return
     setCheckoutError('')
     setCheckoutLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Non authentifié')
-      const plan = plans[selected]
-      const tier = billing === 'annual' ? plan.annual : plan.monthly
-      const res = await fetch('https://hxkpmmekaotwmzgqxafp.supabase.co/functions/v1/create-checkout-session', {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
         body: JSON.stringify({
-          priceId: tier.priceId,
-          planId: plan.planId,
-          associates_count: 1,
-          billing,
           trade: profile?.company_type ?? '',
           company: profile?.company_name ?? '',
-          email: user?.email ?? '',
         }),
       })
       const result = await res.json()
@@ -4328,23 +4192,6 @@ function SubscriptionPage({ accent }: { accent: string }) {
         </div>
       )}
 
-      {/* ── Bannière réduction lancement ── */}
-      {hasLaunchDiscount && (() => {
-        const plan = (profile?.subscription_plan ?? '').toLowerCase()
-        const reducedPrice = plan === 'pro' ? '98,50' : plan === 'max' ? '242,90' : null
-        const normalPrice  = plan === 'pro' ? '197' : plan === 'max' ? '347' : null
-        if (!reducedPrice || !normalPrice) return null
-        return (
-          <div className="rounded-2xl px-5 py-3 flex items-center gap-3"
-            style={{ background: '#ECFDF5', border: '1px solid #6EE7B7' }}>
-            <span className="text-base">🎉</span>
-            <p className="text-xs text-emerald-700">
-              <strong>Offre lancement appliquée</strong> — {reducedPrice} € ce mois, puis{' '}
-              <strong>{normalPrice} €/mois</strong> à partir du mois prochain
-            </p>
-          </div>
-        )
-      })()}
 
       {/* ── Bannière engagement ── */}
       {commitmentEnd !== null && now < commitmentEnd && isActive && (
@@ -4379,62 +4226,31 @@ function SubscriptionPage({ accent }: { accent: string }) {
       </div>
 
       {/* ── Utilisation minutes du mois (source de vérité : get-usage) ── */}
-      <UsageMeter
-        accent={accent}
-        userPlan={resolvePlanKey(profile?.subscription_plan)}
-        onUpgrade={() => {}}
-      />
+      <UsageMeter accent={accent} onUpgrade={() => {}} />
 
-      {/* ── Séparateur ── */}
-      <div className="text-center pt-2">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-0.5">Tarifs</p>
-        <p className="text-base font-bold text-gray-900">Choisissez votre formule</p>
-        <p className="text-xs text-gray-400 mt-0.5">Engagement 3 mois · puis résiliable à tout moment</p>
-      </div>
-
-      {/* Toggle annuel désactivé — price IDs annuels non créés dans Stripe */}
-
-      {/* ── Plans ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {plans.map((p) => {
-          const isSelected = selected === p.id
-          const isCurrentPlan = hasActiveSub && p.planKey === userPlanKey
-          const tier = billing === 'annual' ? p.annual : p.monthly
-          return (
-            <div key={p.id} onClick={() => setSelected(p.id)}
-              className="bg-white rounded-2xl p-5 cursor-pointer transition-all relative overflow-hidden"
-              style={{
-                border: isCurrentPlan ? `2px solid ${accent}` : isSelected ? `2px solid ${accent}` : '1px solid #F3F4F6',
-                boxShadow: isCurrentPlan || isSelected ? `0 0 0 4px ${accent}12` : '0 1px 3px 0 rgb(0 0 0/0.05)',
-              }}>
-              {isCurrentPlan && (
-                <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
-                  Plan actuel
-                </div>
-              )}
-              {!isCurrentPlan && p.popular && (
-                <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
-                  Recommandé
-                </div>
-              )}
-              <div className={isCurrentPlan || p.popular ? 'pt-5' : ''}>
-                <p className="font-bold text-gray-900 mb-1">{p.name}</p>
-                <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
-                  {tier.price}<span className="text-sm font-normal text-gray-400"> €/mois</span>
-                </p>
-                <p className="text-xs text-gray-400 mb-4">{p.desc}</p>
-                <div className="flex flex-col gap-2">
-                  {p.features.map((f, j) => (
-                    <div key={j} className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: accent + '15', color: accent }}>✓</span>
-                      {f}
-                    </div>
-                  ))}
-                </div>
+      {/* ── Offre unique ── */}
+      <div className="bg-white rounded-2xl p-5 relative overflow-hidden"
+        style={{ border: `2px solid ${accent}`, boxShadow: `0 0 0 4px ${accent}12` }}>
+        {hasActiveSub && (
+          <div className="absolute top-0 left-0 right-0 text-center py-1 text-[10px] font-bold uppercase tracking-wide text-white" style={{ background: accent }}>
+            Abonnement actuel
+          </div>
+        )}
+        <div className={hasActiveSub ? 'pt-5' : ''}>
+          <p className="font-bold text-gray-900 mb-1">Fixlyy</p>
+          <p className="text-[28px] font-bold tracking-tight leading-none mb-1" style={{ color: accent }}>
+            497<span className="text-sm font-normal text-gray-400"> €/mois HT</span>
+          </p>
+          <p className="text-xs text-gray-400 mb-4">Engagement 3 mois · 1 500 min incluses · 0,20 €/min au-delà</p>
+          <div className="flex flex-col gap-2">
+            {PLAN_FEATURES.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
+                <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0" style={{ background: accent + '15', color: accent }}>✓</span>
+                {f}
               </div>
-            </div>
-          )
-        })}
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* ── CTA ── */}
@@ -4484,10 +4300,10 @@ function SubscriptionPage({ accent }: { accent: string }) {
           </div>
           <button
             onClick={handleCheckout}
-            disabled={selected === null || checkoutLoading}
+            disabled={checkoutLoading}
             className="text-sm px-5 py-2.5 rounded-xl text-white font-semibold shadow-sm hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-40"
             style={{ background: accent }}>
-            {checkoutLoading ? 'Redirection…' : selected === null ? 'Choisir un plan' : `Essayer ${plans[selected].name} gratuitement`}
+            {checkoutLoading ? 'Redirection…' : 'Démarrer l\'essai gratuit →'}
           </button>
         </div>
       )}
@@ -5017,11 +4833,7 @@ function StatsPage({ accent }: { accent: string }) {
       </div>
 
       {/* ── Utilisation minutes ── */}
-      <UsageMeter
-        accent={accent}
-        userPlan={resolvePlanKey(profile?.subscription_plan)}
-        compact
-      />
+      <UsageMeter accent={accent} compact />
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
