@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, function_tool
 from livekit.agents import Agent, AgentSession
-from livekit.plugins import deepgram, elevenlabs, groq, silero
+from livekit.plugins import deepgram, cartesia, groq, silero
 
 load_dotenv()
 logger = logging.getLogger("fixlyy.agent")
@@ -28,21 +28,26 @@ LK_URL    = (os.getenv("LIVEKIT_CLOUD_URL", "")
 LK_KEY    = os.getenv("LIVEKIT_CLOUD_API_KEY", "")
 LK_SECRET = os.getenv("LIVEKIT_CLOUD_API_SECRET", "")
 
-VOICE_MAP: dict[str, str] = {
-    "fr": "FFXYdAYPzn8Tw8KiHZqg",
-    "en": "OYTbf65OHHFELVut7v2H",
-    "ar": "VwC51uc4PUblWEJSPzeo",
-    "es": "nbcvT3C2tyOd2OsRAtUf",
-    "pt": "RGymW84CSmfVugnA5tvA",
-}
-_tts_cache: dict[str, elevenlabs.TTS] = {}
+CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY", "")
 
-def _tts_for_lang(lang: str) -> elevenlabs.TTS:
+# Pauline (fr) + voix Cartesia par langue pour le Plan Max multilingue
+VOICE_MAP: dict[str, str] = {
+    "fr": "65b25c5d-ff07-4687-a04c-da2f43ef6fa9",  # Pauline - Helpful Companion
+    "en": "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4",  # Skylar - Friendly Guide
+    "ar": "002622d8-19d0-4567-a16a-f99c7397c062",  # Huda - Approachable Speaker
+    "es": "15d0c2e2-8d29-44c3-be23-d585d5f154a1",  # Pedro - Formal Speaker
+    "pt": "b603811e-54c2-4a0a-8854-09eab9ffa63f",  # Bruno - Reliable Communicator
+}
+_tts_cache: dict[str, cartesia.TTS] = {}
+
+def _tts_for_lang(lang: str) -> cartesia.TTS:
     lang = lang if lang in VOICE_MAP else "fr"
     if lang not in _tts_cache:
-        _tts_cache[lang] = elevenlabs.TTS(
-            voice_id=VOICE_MAP[lang],
-            model="eleven_multilingual_v2",
+        _tts_cache[lang] = cartesia.TTS(
+            api_key=CARTESIA_API_KEY,
+            model="sonic-3.5",
+            voice=VOICE_MAP[lang],
+            language=lang,
         )
     return _tts_cache[lang]
 
@@ -641,7 +646,7 @@ class MiaAgent(Agent):
             yield event
 
     def tts_node(self, text, model_settings):
-        # Sélectionne la voix ElevenLabs selon la langue détectée dans stt_node.
+        # Sélectionne la voix Cartesia selon la langue détectée dans stt_node.
         # On pose self._tts directement : activity.tts lit agent._tts en priorité
         # sur session.tts (cf. agent_activity.py:3895).
         new_tts = _tts_for_lang(self._detected_lang)
