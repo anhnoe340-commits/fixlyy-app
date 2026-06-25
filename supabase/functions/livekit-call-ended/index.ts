@@ -201,7 +201,11 @@ Deno.serve(async (req) => {
     }
 
     // 4b. Appels sortants automatiques
-    const isValidCallerForOutbound = callerNumber !== 'Inconnu' && /^\+[1-9]\d{7,14}$/.test(callerNumber)
+    // Normaliser en E.164 (agent.py envoie "33939247033" sans le +)
+    const e164Caller = callerNumber !== 'Inconnu' && !callerNumber.startsWith('+')
+      ? `+${callerNumber}`
+      : callerNumber
+    const isValidCallerForOutbound = e164Caller !== 'Inconnu' && /^\+[1-9]\d{7,14}$/.test(e164Caller)
 
     if (!isOutbound && isValidCallerForOutbound) {
       // Rappel client manqué : appel < 30 secondes
@@ -211,7 +215,7 @@ Deno.serve(async (req) => {
           .from('outbound_calls')
           .select('id', { count: 'exact', head: true })
           .eq('profile_id', profile.id)
-          .eq('caller_phone', callerNumber)
+          .eq('caller_phone', e164Caller)
           .eq('reason', 'missed_callback')
           .eq('status', 'pending')
           .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
@@ -219,11 +223,11 @@ Deno.serve(async (req) => {
         if ((existingMissed ?? 0) === 0) {
           await supabase.from('outbound_calls').insert({
             profile_id:   profile.id,
-            caller_phone: callerNumber,
+            caller_phone: e164Caller,
             reason:       'missed_callback',
             scheduled_at: scheduledAt,
           }).catch(e => console.error('missed_callback insert failed:', e.message))
-          console.log(`[livekit-call-ended] missed_callback scheduled for ${callerNumber}`)
+          console.log(`[livekit-call-ended] missed_callback scheduled for ${e164Caller}`)
         }
       }
 
@@ -234,7 +238,7 @@ Deno.serve(async (req) => {
           .from('outbound_calls')
           .select('id', { count: 'exact', head: true })
           .eq('profile_id', profile.id)
-          .eq('caller_phone', callerNumber)
+          .eq('caller_phone', e164Caller)
           .eq('reason', 'devis_followup')
           .in('status', ['pending', 'initiated'])
           .gte('created_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
@@ -242,11 +246,11 @@ Deno.serve(async (req) => {
         if ((existingDevis ?? 0) === 0) {
           await supabase.from('outbound_calls').insert({
             profile_id:   profile.id,
-            caller_phone: callerNumber,
+            caller_phone: e164Caller,
             reason:       'devis_followup',
             scheduled_at: scheduledAt,
           }).catch(e => console.error('devis_followup insert failed:', e.message))
-          console.log(`[livekit-call-ended] devis_followup scheduled for ${callerNumber}`)
+          console.log(`[livekit-call-ended] devis_followup scheduled for ${e164Caller}`)
         }
       }
     }
