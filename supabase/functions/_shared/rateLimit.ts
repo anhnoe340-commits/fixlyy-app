@@ -1,15 +1,26 @@
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
 
-export function checkRateLimit(ip: string, maxRequests = 10, windowMs = 60000): boolean {
-  const now = Date.now()
-  const entry = rateLimitMap.get(ip)
+// Supports 3-arg form (ip, maxRequests, windowMs) and 4-arg form (ip, key, maxRequests, windowMs)
+export function checkRateLimit(
+  ip: string,
+  keyOrMax: string | number,
+  maxOrWindow?: number,
+  windowMs?: number,
+): boolean {
+  const isKeyed = typeof keyOrMax === 'string'
+  const mapKey   = isKeyed ? `${ip}:${keyOrMax}` : ip
+  const max      = isKeyed ? (maxOrWindow ?? 10)  : (keyOrMax as number)
+  const window   = isKeyed ? (windowMs ?? 60000)  : (maxOrWindow ?? 60000)
+
+  const now   = Date.now()
+  const entry = rateLimitMap.get(mapKey)
 
   if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs })
+    rateLimitMap.set(mapKey, { count: 1, resetAt: now + window })
     return true
   }
 
-  if (entry.count >= maxRequests) return false
+  if (entry.count >= max) return false
 
   entry.count++
   return true

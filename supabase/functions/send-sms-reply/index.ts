@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { logEvent } from '../_shared/audit.ts'
+import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
@@ -13,6 +14,9 @@ const TWILIO_AUTH = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
+  const ip = getClientIp(req)
+  if (!checkRateLimit(ip, 'sms-reply', 10, 60_000)) return TOO_MANY_REQUESTS(CORS)
 
   try {
     const authHeader = req.headers.get('Authorization')
@@ -118,9 +122,9 @@ serve(async (req) => {
     return new Response(JSON.stringify(updated), {
       status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }
     })
-  } catch (err) {
-    console.error('send-sms-reply error:', err)
-    return new Response(JSON.stringify({ error: String(err) }), {
+  } catch (err: any) {
+    console.error('send-sms-reply error:', err.message ?? err)
+    return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' }
     })
   }

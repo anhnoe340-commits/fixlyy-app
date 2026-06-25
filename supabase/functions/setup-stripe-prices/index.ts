@@ -83,7 +83,8 @@ serve(async (req) => {
       headers: { ...cors, 'Content-Type': 'application/json' },
     });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), {
+    console.error('setup-stripe-prices error:', e.message)
+    return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500,
       headers: { ...cors, 'Content-Type': 'application/json' },
     });

@@ -141,7 +141,7 @@ serve(async (req) => {
         const email       = custDetails?.email?.trim().toLowerCase() ?? ''
         const phone       = (custDetails?.phone ?? '').replace(/\s/g, '')
 
-        console.log(`[webhook] checkout.session.completed (Payment Link) customer=${customerId} email=${email} phone=${phone} custDetails=${JSON.stringify(custDetails)}`)
+        console.log(`[webhook] checkout.session.completed (Payment Link) customer=${customerId} email=${email.slice(0, 3)}*** phone=***${phone.slice(-4)}`)
 
         if (!customerId) {
           console.error('[webhook] checkout: no customerId — skipping orphan insert')

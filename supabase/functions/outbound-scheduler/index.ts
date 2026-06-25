@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
         })
 
         results.initiated++
-        console.log(`[scheduler] initiated ${call.reason} → ${call.caller_phone}`)
+        console.log(`[scheduler] initiated ${call.reason} → ***${call.caller_phone.slice(-4)}`)
       } catch (callErr: any) {
         console.error(`[scheduler] call ${call.id} failed:`, callErr.message)
         await supabase.from('outbound_calls')

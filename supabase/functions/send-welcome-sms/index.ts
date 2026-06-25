@@ -122,7 +122,7 @@ serve(async (req) => {
     })
   } catch (e: any) {
     console.error('send-welcome-sms error:', e.message)
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }

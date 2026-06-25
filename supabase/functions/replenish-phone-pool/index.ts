@@ -199,6 +199,6 @@ Deno.serve(async (req) => {
       output_meta: {},
       error_message: err.message,
     })
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500 })
   }
 })

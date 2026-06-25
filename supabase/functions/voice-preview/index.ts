@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
@@ -16,6 +17,9 @@ const DEFAULT_TEXT = "Bonjour, vous êtes bien chez votre artisan. Je suis votre
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+
+  const ip = getClientIp(req)
+  if (!checkRateLimit(ip, 'voice-preview', 3, 60_000)) return TOO_MANY_REQUESTS(cors)
 
   try {
     const { voice, text } = await req.json()
@@ -60,7 +64,8 @@ serve(async (req) => {
       headers: { ...cors, 'Content-Type': 'audio/mpeg' },
     })
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), {
+    console.error('voice-preview error:', e.message)
+    return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

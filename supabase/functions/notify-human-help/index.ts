@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
@@ -29,6 +30,9 @@ async function sendSms(to: string, body: string) {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+
+  const ip = getClientIp(req)
+  if (!checkRateLimit(ip, 'notify-human-help', 5, 60_000)) return TOO_MANY_REQUESTS(cors)
 
   try {
     const auth = req.headers.get('Authorization')
@@ -91,7 +95,7 @@ serve(async (req) => {
     })
   } catch (e: any) {
     console.error('notify-human-help error:', e.message)
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

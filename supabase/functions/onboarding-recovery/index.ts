@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
     })
   } catch (e: any) {
     console.error('onboarding-recovery error:', e.message)
-    return new Response(JSON.stringify({ error: e.message }), {
+    return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
