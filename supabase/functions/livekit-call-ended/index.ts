@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
     if (!isOutbound && isValidCallerForOutbound) {
       // Rappel client manqué : appel < 30 secondes
       if (durationSecs < 30) {
-        const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+        const scheduledAt = new Date(Date.now() + 60 * 1000).toISOString()
         const { count: existingMissed } = await supabase
           .from('outbound_calls')
           .select('id', { count: 'exact', head: true })
