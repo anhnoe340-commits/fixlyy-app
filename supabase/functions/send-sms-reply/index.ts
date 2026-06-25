@@ -1,5 +1,5 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { logEvent } from '../_shared/audit.ts'
 import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
@@ -12,7 +12,7 @@ const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_AUTH = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   const ip = getClientIp(req)
@@ -35,12 +35,18 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabaseUser.auth.getUser()
     if (authError || !user) return new Response('Unauthorized', { status: 401, headers: CORS })
 
-    const { conversation_id, message } = await req.json()
-    if (!conversation_id || !message?.trim()) {
-      return new Response(JSON.stringify({ error: 'conversation_id and message required' }), {
+    const smsReplySchema = z.object({
+      conversation_id: z.string().uuid(),
+      message:         z.string().min(1).max(1600),
+    })
+    const bodyRaw = await req.json().catch(() => null)
+    const parsed  = smsReplySchema.safeParse(bodyRaw)
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: 'invalid_input', detail: parsed.error.issues[0]?.message }), {
         status: 400, headers: { ...CORS, 'Content-Type': 'application/json' }
       })
     }
+    const { conversation_id, message } = parsed.data
 
     // Fetch conversation (RLS ensures ownership)
     const { data: conv, error: convError } = await supabaseUser

@@ -1,5 +1,5 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { z } from 'https://esm.sh/zod@3';
 import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts';
 
 const supabase = createClient(
@@ -13,9 +13,12 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const schema = z.object({
+  email: z.string().email().max(254),
+  phone: z.string().max(20).optional(),
+});
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
@@ -25,18 +28,21 @@ serve(async (req) => {
   }
 
   try {
-    const { email, phone } = await req.json();
-
-    if (!email || !EMAIL_RE.test(email)) {
+    const body = await req.json().catch(() => null);
+    const result = schema.safeParse(body);
+    if (!result.success) {
       return new Response(JSON.stringify({ error: 'email_invalide' }), {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
       });
     }
 
-    // Sanitiser le téléphone : garder uniquement chiffres, +, espaces et tirets
-    const cleanPhone = phone ? String(phone).replace(/[^\d\s+\-().]/g, '').trim().slice(0, 20) : null;
+    const { email, phone } = result.data;
+    const cleanPhone = phone ? phone.replace(/[^\d\s+\-().]/g, '').trim() : null;
 
-    await supabase.from('demo_leads').insert({ email: email.trim().toLowerCase().slice(0, 254), phone: cleanPhone });
+    await supabase.from('demo_leads').insert({
+      email: email.trim().toLowerCase(),
+      phone: cleanPhone,
+    });
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' },

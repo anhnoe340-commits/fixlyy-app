@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
@@ -33,29 +34,29 @@ Deno.serve(async (req) => {
     return TOO_MANY_REQUESTS(cors)
   }
 
-  let body: { phone?: string; email?: string; metier?: string }
-  try {
-    body = await req.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'invalid_json' }), {
+  const demoSchema = z.object({
+    phone:  z.string().regex(/^\+33[67]\d{8}$/, 'invalid_phone'),
+    email:  z.string().email(),
+    metier: z.string().optional(),
+  })
+
+  const rawBody = await req.json().catch(() => null)
+  const result = demoSchema.safeParse(rawBody)
+  if (!result.success) {
+    const field = result.error.issues[0]?.path[0] ?? 'input'
+    const code  = result.error.issues[0]?.message ?? 'invalid_input'
+    const messages: Record<string, string> = {
+      invalid_phone: 'Numéro français mobile attendu (+33 6/7 XX XX XX XX)',
+      invalid_email: 'Adresse email invalide',
+    }
+    return new Response(JSON.stringify({ error: code, message: messages[code] ?? 'Données invalides', field }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  const phone  = (body.phone  ?? '').trim()
-  const email  = (body.email  ?? '').trim().toLowerCase()
-  const metier = (body.metier ?? 'autre').trim()
-
-  if (!/^\+33[67]\d{8}$/.test(phone)) {
-    return new Response(JSON.stringify({ error: 'invalid_phone', message: 'Numéro français mobile attendu (+33 6/7 XX XX XX XX)' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-  if (!email.includes('@') || !email.includes('.')) {
-    return new Response(JSON.stringify({ error: 'invalid_email' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
+  const phone  = result.data.phone
+  const email  = result.data.email.trim().toLowerCase()
+  const metier = (result.data.metier ?? 'autre').trim()
 
   const supabase = createClient(SB_URL, SB_SERVICE)
 
