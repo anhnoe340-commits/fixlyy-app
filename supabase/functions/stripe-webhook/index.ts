@@ -12,12 +12,13 @@ const supabase = createClient(
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 
-// Source de vérité des price IDs Stripe — créés le 2026-06-09
-// Overage (metered, non activé) : solo/pro price_1TgNiTBKWw2Sqpyku6QVuGor / price_1TgNiUBKWw2SqpykcRv08l7F · max price_1TgNiUBKWw2Sqpyk1QaaW9j2
+// Offre unique 497€/mois — toutes features incluses
+// Anciens price IDs conservés pour les abonnés existants (rétrocompatibilité)
 const PRICE_PLAN_MAP: Record<string, { plan: string; member_limit: number }> = {
-  'price_1TgNhNBKWw2SqpykxEkXTAma': { plan: 'solo', member_limit: 1 },
-  'price_1TgNhOBKWw2SqpykzY7j1ood': { plan: 'pro',  member_limit: 3 },
-  'price_1TgNhOBKWw2Sqpyku7Rk2ioO': { plan: 'max',  member_limit: 10 },
+  'price_1TlxrCBKWw2SqpyktOcCssFu': { plan: 'max', member_limit: 10 }, // 497€/mois — offre unique
+  'price_1TgNhNBKWw2SqpykxEkXTAma': { plan: 'max', member_limit: 10 }, // ancien solo → upgradé max
+  'price_1TgNhOBKWw2SqpykzY7j1ood': { plan: 'max', member_limit: 10 }, // ancien pro → upgradé max
+  'price_1TgNhOBKWw2Sqpyku7Rk2ioO': { plan: 'max', member_limit: 10 }, // ancien max
 }
 
 function getDefaultServicesForTrade(trade: string): { label: string; price_type: string; price_amount: number | null }[] {

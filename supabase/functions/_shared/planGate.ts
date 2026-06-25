@@ -1,55 +1,24 @@
-// Mirror minimal de src/config/plans.ts — synchroniser si les features changent.
-// Source de vérité : src/config/plans.ts
+// Offre unique Fixlyy 497€ — toutes les features incluses pour tous les abonnés actifs.
+// Plus de gate par plan solo/pro/max — une seule offre, tout déverrouillé.
 
 type BooleanFeature =
   | 'sms_confirmation' | 'appointment_booking' | 'crm'
   | 'weekly_report' | 'google_calendar' | 'detailed_stats'
   | 'multilingual' | 'monthly_reports' | 'multi_numbers'
 
-export const PLAN_INCLUDED_MINUTES: Record<string, number> = {
-  solo: 300,
-  pro:  500,
-  max:  1000,
+export function getIncludedMinutes(_plan?: string | null): number {
+  return 1500
 }
 
-export function getIncludedMinutes(plan: string | null | undefined): number {
-  return PLAN_INCLUDED_MINUTES[normalizePlan(plan)] ?? 300
-}
-
-const FEATURES: Record<string, Partial<Record<BooleanFeature, boolean>>> = {
-  solo: {
-    sms_confirmation: false, appointment_booking: false, crm: false,
-    weekly_report: false, google_calendar: false, detailed_stats: false,
-    multilingual: false, monthly_reports: false, multi_numbers: false,
-  },
-  pro: {
-    sms_confirmation: true, appointment_booking: true, crm: true,
-    weekly_report: true, google_calendar: true, detailed_stats: true,
-    multilingual: false, monthly_reports: false, multi_numbers: false,
-  },
-  max: {
-    sms_confirmation: true, appointment_booking: true, crm: true,
-    weekly_report: true, google_calendar: true, detailed_stats: true,
-    multilingual: true, monthly_reports: true, multi_numbers: true,
-  },
-}
-
-export function normalizePlan(raw: string | null | undefined): string {
-  const s = (raw ?? '').toLowerCase()
-  if (s === 'pro') return 'pro'
-  if (
-    s === 'max' ||
-    s.includes('équipe') || s.includes('equipe') ||
-    s.includes('expert') || s.includes('team')
-  ) return 'max'
-  return 'solo'
+export function normalizePlan(_raw?: string | null): string {
+  return 'max'
 }
 
 export function featureAllowed(
-  subscriptionPlan: string | null | undefined,
-  feature: BooleanFeature,
+  _subscriptionPlan: string | null | undefined,
+  _feature: BooleanFeature,
 ): boolean {
-  return !!FEATURES[normalizePlan(subscriptionPlan)]?.[feature]
+  return true
 }
 
 const CORS = {
@@ -57,10 +26,10 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 
-export function planGate403(feature: BooleanFeature, subscriptionPlan: string | null | undefined): Response {
-  const required = FEATURES.pro[feature] ? 'pro' : 'max'
+export function planGate403(_feature: BooleanFeature, _subscriptionPlan?: string | null): Response {
+  // Plus de gate — ne devrait jamais être appelé, mais retourne 403 par sécurité
   return new Response(
-    JSON.stringify({ error: 'plan_feature_unavailable', feature, required_plan: required }),
+    JSON.stringify({ error: 'plan_feature_unavailable' }),
     { status: 403, headers: { ...CORS, 'Content-Type': 'application/json' } },
   )
 }
