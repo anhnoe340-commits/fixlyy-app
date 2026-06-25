@@ -30,13 +30,18 @@ LK_SECRET = os.getenv("LIVEKIT_CLOUD_API_SECRET", "")
 
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY", "")
 
-# Pauline (fr) + voix Cartesia par langue pour le Plan Max multilingue
+# Voix Cartesia sonic-3.5 par langue — 10 langues incluses dans l'offre Fixlyy
 VOICE_MAP: dict[str, str] = {
     "fr": "65b25c5d-ff07-4687-a04c-da2f43ef6fa9",  # Pauline - Helpful Companion
     "en": "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4",  # Skylar - Friendly Guide
     "ar": "002622d8-19d0-4567-a16a-f99c7397c062",  # Huda - Approachable Speaker
     "es": "15d0c2e2-8d29-44c3-be23-d585d5f154a1",  # Pedro - Formal Speaker
     "pt": "b603811e-54c2-4a0a-8854-09eab9ffa63f",  # Bruno - Reliable Communicator
+    "de": "38aabb6a-f52b-4fb0-a3d1-988518f4dc06",  # Alina - Engaging Assistant
+    "it": "0e21713a-5e9a-428a-bed4-90d410b87f13",  # Alessandra - Melodic Guide
+    "nl": "60e94cf5-8069-459f-a91e-3ff852a51107",  # Isa - Empathetic Ear
+    "pl": "ea7b5eee-39d9-40b0-b241-1910cbca9c62",  # Kasia - Natural Conversationalist
+    "ru": "25b7aaa6-1670-42dc-b791-419322400803",  # Daria - Decisive Dispatcher
 }
 _tts_cache: dict[str, cartesia.TTS] = {}
 
@@ -92,7 +97,6 @@ def _build_demo_profile(metier: str) -> dict:
         "company_type":      _DEMO_COMPANY_TYPES.get(metier, "artisan"),
         "assistant_name":    "Mia",
         "greeting_open":     _DEMO_GREETINGS.get(metier, DEFAULT_GREETING),
-        "subscription_plan": "pro",
         "demo_mode":         True,
     }
 
@@ -209,7 +213,7 @@ async def fetch_artisan_profile(user_id: str) -> dict:
     }
     params = {
         "id": f"eq.{user_id}",
-        "select": "company_name,company_type,assistant_name,greeting_open,subscription_plan,phone,transfer_phone,twilio_number",
+        "select": "company_name,company_type,assistant_name,greeting_open,phone,transfer_phone,twilio_number",
         "limit": "1",
     }
     try:
@@ -370,7 +374,7 @@ def build_instructions(
     if is_multilingual:
         lang_rule = (
             "Détecte la langue du client dès sa première phrase et réponds dans cette langue. "
-            "Langues supportées : français, anglais, arabe, espagnol, portugais. "
+            "Langues supportées : français, anglais, allemand, italien, néerlandais, polonais, russe, arabe, espagnol, portugais. "
             "Pour toute autre langue, réponds en français. "
             "Si le client s'expresse dans une autre langue que le français, tu dois immédiatement "
             "et définitivement switcher dans cette langue pour TOUTE la suite de la conversation. "
@@ -449,73 +453,28 @@ def build_instructions(
     return base
 
 
-def is_max_plan(raw: str | None) -> bool:
-    s = (raw or "").lower()
-    return s in ("max",) or any(k in s for k in ("equipe", "équipe", "expert", "team"))
-
-
-def _plan_label(plan: str) -> str:
-    return {"solo": "la formule Solo", "pro": "la formule Pro", "max": "la formule Max"}.get(plan, "votre formule")
-
-
-def _build_onboarding_script(plan: str, assistant_name: str) -> str:
-    plan = plan.lower()
-    label = _plan_label(plan)
-
-    if plan == "solo":
-        minutes = "300"
-        features = ""
-    elif plan == "pro":
-        minutes = "500"
-        features = (
-            ", j'envoie un SMS de confirmation à vos clients, "
-            "je peux prendre des rendez-vous et vous avez accès à un mini-CRM"
-        )
-    else:  # max
-        minutes = "1000"
-        features = (
-            ", je réponds en plusieurs langues, "
-            "je transfère les urgences directement sur votre mobile "
-            "et jusqu'à 20 motifs d'appel personnalisables"
-        )
-
+def _build_onboarding_script(assistant_name: str) -> str:
     return (
         f"Bonjour, je suis {assistant_name}, votre assistante téléphonique Fixlyy. "
         "À partir de maintenant, je réponds à vos appels manqués 24h/24, 7j/7. "
         "Concrètement : quand un client vous appelle et que vous êtes occupé, je décroche, "
         "je qualifie sa demande et je vous envoie un SMS récap en moins de 30 secondes "
         "avec son nom, numéro, adresse et motif d'appel. "
-        f"Avec votre formule {label}, vous avez {minutes} minutes incluses par mois{features}. "
-        "Pour bien démarrer, activez le renvoi d'appel vers votre numéro Mia "
-        "et configurez vos motifs d'appel dans le tableau de bord. "
+        "Vous avez 1 500 minutes incluses par mois, je réponds en 10 langues, "
+        "je transfère les urgences directement sur votre mobile "
+        "et vous accédez à toutes les fonctionnalités depuis votre tableau de bord. "
+        "Pour bien démarrer, activez le renvoi d'appel vers votre numéro Mia. "
         "Je suis prête !"
     )
 
 
-def build_onboarding_instructions(plan: str, company_name: str, assistant_name: str) -> str:
-    plan = plan.lower()
-    label = _plan_label(plan)
-
-    if plan == "solo":
-        minutes = "300"
-        extra = ""
-    elif plan == "pro":
-        minutes = "500"
-        extra = (
-            " J'envoie aussi un SMS de confirmation à vos clients, je peux prendre des rendez-vous, "
-            "vous avez accès à un mini-CRM, des statistiques et jusqu'à 10 motifs d'appel personnalisés."
-        )
-    else:  # max
-        minutes = "1000"
-        extra = (
-            " Je réponds aussi en plusieurs langues, je transfère automatiquement les urgences "
-            "directement sur votre mobile, et jusqu'à 20 motifs d'appel personnalisables."
-        )
-
+def build_onboarding_instructions(company_name: str, assistant_name: str) -> str:
     return (
         f"Tu es {assistant_name}, la réceptionniste téléphonique créée par Fixlyy pour {company_name}. "
         "Tu viens de te présenter à l'artisan. Si il ou elle pose une question, réponds-y naturellement et chaleureusement. "
-        f"Rappelle-leur les points clés de leur formule {label} : {minutes} minutes incluses par mois.{extra} "
+        "Rappelle-leur les points clés de leur offre Fixlyy : 1 500 minutes incluses par mois, "
+        "disponible 24h/24 et 7j/7, SMS récap après chaque appel, transfert des urgences sur mobile, "
+        "10 langues supportées et accès à toutes les fonctionnalités sans restriction. "
         "Encourage-les à activer le renvoi d'appel et à configurer leurs motifs d'appel dans le tableau de bord. "
         "Ton ton est chaleureux, professionnel, comme une vraie réceptionniste. "
         "Ne pose pas de question — attends qu'ils parlent. "
@@ -589,9 +548,9 @@ class MiaAgent(Agent):
         company_type   = profile.get("company_type")   or "artisan"
         assistant_name = profile.get("assistant_name") or "Mia"
         demo_mode      = bool(profile.get("demo_mode", False))
-        can_transfer   = bool(transfer_phone and is_max_plan(profile.get("subscription_plan")))
+        can_transfer   = bool(transfer_phone)
 
-        # Plan Max : greeting neutre bi-langue pour ne pas présupposer la langue
+        # Greeting bi-langue pour ne pas présupposer la langue du client
         if multilingual:
             greeting = (
                 f"Hello / Bonjour — {company_name}, {assistant_name}. "
@@ -658,6 +617,11 @@ class MiaAgent(Agent):
 
     _LANG_NAMES: dict[str, str] = {
         "en": "English",
+        "de": "German",
+        "it": "Italian",
+        "nl": "Dutch",
+        "pl": "Polish",
+        "ru": "Russian",
         "ar": "Arabic",
         "es": "Spanish",
         "pt": "Portuguese",
@@ -694,23 +658,22 @@ class MiaAgent(Agent):
 
 class OnboardingMiaAgent(Agent):
     """Agent utilisé uniquement lors de l'appel de présentation post-onboarding."""
-    def __init__(self, profile: dict, plan: str):
+    def __init__(self, profile: dict):
         company_name   = profile.get("company_name")   or "votre activité"
         assistant_name = profile.get("assistant_name") or "Mia"
 
         super().__init__(
-            instructions=build_onboarding_instructions(plan, company_name, assistant_name),
+            instructions=build_onboarding_instructions(company_name, assistant_name),
             turn_handling={
                 "endpointing": {"min_delay": 0.5},
                 "interruption": {"mode": "disabled"},
             },
         )
         self._assistant_name = assistant_name
-        self._plan = plan
-        self._script = _build_onboarding_script(plan, assistant_name)
+        self._script = _build_onboarding_script(assistant_name)
 
     async def on_enter(self):
-        logger.info(f"[mia] onboarding call — plan={self._plan!r}")
+        logger.info("[mia] onboarding call — starting presentation")
         self.session.say(self._script, allow_interruptions=False)
 
 
@@ -736,11 +699,10 @@ async def entrypoint(ctx: JobContext):
             fetch_artisan_profile(user_id),
             fetch_service_pricing(user_id),
         )
-        multilingual = is_max_plan(profile.get("subscription_plan"))
+        multilingual = True
         if profile:
             logger.info(
                 f"[mia] profile loaded — company={profile.get('company_name')!r} "
-                f"plan={profile.get('subscription_plan')!r} multilingual={multilingual} "
                 f"pricing={len(pricing)} items "
                 f"transfer_phone={'yes' if (profile.get('transfer_phone') or profile.get('phone')) else 'no'}"
             )
@@ -769,7 +731,7 @@ async def entrypoint(ctx: JobContext):
                 meta = json.loads(getattr(p, "metadata", None) or "{}")
                 if meta.get("onboarding_call"):
                     onboarding_meta.update(meta)
-                    logger.info(f"[mia] onboarding call detected — plan={meta.get('plan_id')!r}")
+                    logger.info("[mia] onboarding call detected")
             except Exception:
                 pass
         else:
@@ -792,11 +754,8 @@ async def entrypoint(ctx: JobContext):
         except asyncio.TimeoutError:
             logger.warning("[mia] aucun participant SIP en 30s — démarrage MiaAgent standard")
 
-    if multilingual:
-        stt = deepgram.STT(model="nova-3", language="multi")
-        logger.info("[mia] STT: language=multi (Max plan)")
-    else:
-        stt = deepgram.STT(model="nova-3", language="fr")
+    stt = deepgram.STT(model="nova-3", language="multi")
+    logger.info("[mia] STT: language=multi")
 
     session = AgentSession(
         vad=silero.VAD.load(
@@ -863,9 +822,8 @@ async def entrypoint(ctx: JobContext):
     twilio_from    = profile.get("twilio_number") or None
 
     if onboarding_meta.get("onboarding_call"):
-        plan = onboarding_meta.get("plan_id") or profile.get("subscription_plan") or "solo"
-        agent = OnboardingMiaAgent(profile, plan)
-        logger.info(f"[mia] starting OnboardingMiaAgent — plan={plan!r}")
+        agent = OnboardingMiaAgent(profile)
+        logger.info("[mia] starting OnboardingMiaAgent")
     else:
         agent = MiaAgent(
             profile, pricing, multilingual,
