@@ -160,7 +160,7 @@ serve(async (req) => {
           if (orphanErr) {
             console.error(`[webhook] orphan insert failed customer=${customerId}: ${orphanErr.message}`)
           } else {
-            console.log(`[webhook] orphan created id=${orphanId} customer=${customerId} email=${email} phone=${phone}`)
+            console.log(`[webhook] orphan created id=${orphanId} customer=${customerId} email=${email.slice(0, 3)}*** phone=***${phone.slice(-4)}`)
           }
         }
       }
