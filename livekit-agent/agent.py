@@ -278,6 +278,30 @@ async def generate_summary(transcript: str) -> dict:
     return {}
 
 
+async def _schedule_rdv_confirmation(
+    user_id: str,
+    caller_number: str,
+    rdv_date: str,
+    rdv_time: str | None,
+) -> None:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    url = f"{SUPABASE_URL}/functions/v1/create-outbound-rdv-confirmation"
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(url, headers={
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            }, json={
+                "profile_id":   user_id,
+                "caller_phone": caller_number,
+                "rdv_date":     rdv_date,
+                "rdv_time":     rdv_time,
+            }, timeout=10.0)
+    except Exception as e:
+        logger.warning(f"[mia] _schedule_rdv_confirmation failed: {e}")
+
+
 async def post_call_ended(
     user_id: str,
     caller_number: str,
@@ -286,6 +310,8 @@ async def post_call_ended(
     structured: dict,
     transferred_to: str | None = None,
     transferred_at: str | None = None,
+    has_devis_mention: bool = False,
+    is_outbound: bool = False,
 ) -> None:
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.warning("[mia] post_call_ended: SUPABASE_URL or KEY missing")
@@ -307,8 +333,10 @@ async def post_call_ended(
         "urgency": structured.get("urgency"),
         "full_summary": structured.get("full_summary"),
         "sms_body": structured.get("sms_body"),
-        "appointment_date": structured.get("appointment_date"),
-        "appointment_time": structured.get("appointment_time"),
+        "appointment_date":  structured.get("appointment_date"),
+        "appointment_time":  structured.get("appointment_time"),
+        "has_devis_mention": has_devis_mention,
+        "is_outbound":       is_outbound,
     }
     if transferred_to:
         payload["transferred_to"] = transferred_to
@@ -348,6 +376,9 @@ async def handle_call_ended(
     structured = await generate_summary(transcript)
     logger.info(f"[mia] structured summary: {structured.get('reason', '(vide)')!r}")
 
+    devis_keywords = ("devis", "estimation", "tarif", "prix pour")
+    has_devis = any(kw in transcript.lower() for kw in devis_keywords)
+
     ts = transfer_state or {}
     await post_call_ended(
         user_id=user_id,
@@ -357,7 +388,17 @@ async def handle_call_ended(
         structured=structured,
         transferred_to=ts.get("to"),
         transferred_at=ts.get("at"),
+        has_devis_mention=has_devis,
     )
+
+    appt_date = structured.get("appointment_date")
+    if appt_date and user_id:
+        await _schedule_rdv_confirmation(
+            user_id=user_id,
+            caller_number=caller_number,
+            rdv_date=appt_date,
+            rdv_time=structured.get("appointment_time"),
+        )
 
 
 # ── Agent ─────────────────────────────────────────────────────────────────────
@@ -656,6 +697,84 @@ class MiaAgent(Agent):
         logger.info("[mia] on_enter — session.say() dispatched")
 
 
+OUTBOUND_REASON_LABELS = {
+    "missed_callback":  "rappel client manqué",
+    "rdv_confirmation": "confirmation de rendez-vous",
+    "devis_followup":   "suivi de devis",
+    "client_relance":   "relance client",
+}
+
+
+def _build_outbound_greeting(reason: str, company_name: str, assistant_name: str, rdv_info: str | None = None) -> str:
+    if reason == "missed_callback":
+        return (
+            f"Bonjour ! Vous avez tenté de joindre {company_name} il y a quelques instants. "
+            f"Je suis {assistant_name}, l'assistante de {company_name}. "
+            "Comment puis-je vous aider ?"
+        )
+    elif reason == "rdv_confirmation":
+        rdv_text = rdv_info or "votre prochain rendez-vous"
+        return (
+            f"Bonjour ! J'appelle de la part de {company_name}. "
+            f"Je suis {assistant_name}, leur assistante. "
+            f"Je vous contacte pour confirmer {rdv_text}. "
+            "Est-ce toujours bon pour vous ?"
+        )
+    elif reason == "devis_followup":
+        return (
+            f"Bonjour ! J'appelle de la part de {company_name}. "
+            f"Je suis {assistant_name}. "
+            "Nous voulions savoir si vous avez eu l'occasion de consulter notre devis et si vous avez des questions."
+        )
+    elif reason == "client_relance":
+        return (
+            f"Bonjour ! J'appelle de la part de {company_name}. "
+            f"Je suis {assistant_name}. "
+            "Nous voulions prendre de vos nouvelles et voir si vous avez de nouveaux besoins."
+        )
+    else:
+        return (
+            f"Bonjour ! J'appelle de la part de {company_name}. "
+            f"Je suis {assistant_name}. Comment puis-je vous aider ?"
+        )
+
+
+class OutboundMiaAgent(Agent):
+    """Agent pour les appels sortants automatiques (rappel, RDV, devis, relance)."""
+    def __init__(self, profile: dict, outbound_meta: dict):
+        company_name   = profile.get("company_name")   or "votre artisan"
+        assistant_name = profile.get("assistant_name") or "Mia"
+        reason         = outbound_meta.get("reason") or "missed_callback"
+        rdv_info       = outbound_meta.get("rdv_info")
+
+        greeting = _build_outbound_greeting(reason, company_name, assistant_name, rdv_info)
+
+        instructions = (
+            f"Tu es {assistant_name}, l'assistante téléphonique de {company_name}. "
+            f"Tu as passé cet appel sortant dans le cadre d'un {OUTBOUND_REASON_LABELS.get(reason, 'suivi client')}. "
+            "Tu es chaleureuse, professionnelle et concise. "
+            "Ton objectif : confirmer l'information, répondre aux questions simples, "
+            f"et si la demande est complexe, dire que {company_name} les rappellera directement. "
+            "Ne mentionne jamais que tu es une IA ou un robot. "
+            "Si la personne ne répond pas ou est occupée, dis poliment au revoir et raccroche. "
+            "Durée maximale de l'appel : 3 minutes."
+        )
+
+        super().__init__(
+            instructions=instructions,
+            turn_handling={
+                "endpointing": {"min_delay": 0.6},
+                "interruption": {"mode": "allowed"},
+            },
+        )
+        self._greeting = greeting
+        self._reason   = reason
+
+    async def on_enter(self):
+        logger.info(f"[mia] outbound on_enter — reason={self._reason!r}")
+        self.session.say(self._greeting, allow_interruptions=False)
+
+
 class OnboardingMiaAgent(Agent):
     """Agent utilisé uniquement lors de l'appel de présentation post-onboarding."""
     def __init__(self, profile: dict):
@@ -720,6 +839,7 @@ async def entrypoint(ctx: JobContext):
     logger.info("[mia] connected")
 
     onboarding_meta: dict = {}
+    outbound_meta:   dict = {}
     _sip_seen = asyncio.Event()
 
     def _inspect_sip_participant(p) -> None:
@@ -732,6 +852,9 @@ async def entrypoint(ctx: JobContext):
                 if meta.get("onboarding_call"):
                     onboarding_meta.update(meta)
                     logger.info("[mia] onboarding call detected")
+                elif meta.get("outbound"):
+                    outbound_meta.update(meta)
+                    logger.info(f"[mia] outbound call detected — reason={meta.get('reason')!r}")
             except Exception:
                 pass
         else:
@@ -824,6 +947,9 @@ async def entrypoint(ctx: JobContext):
     if onboarding_meta.get("onboarding_call"):
         agent = OnboardingMiaAgent(profile)
         logger.info("[mia] starting OnboardingMiaAgent")
+    elif outbound_meta.get("outbound"):
+        agent = OutboundMiaAgent(profile, outbound_meta)
+        logger.info(f"[mia] starting OutboundMiaAgent — reason={outbound_meta.get('reason')!r}")
     else:
         agent = MiaAgent(
             profile, pricing, multilingual,

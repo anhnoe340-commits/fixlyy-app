@@ -297,6 +297,7 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
   const { profile } = useProfile()
   const [calls, setCalls] = useState<CallRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [outboundCalls, setOutboundCalls] = useState<any[]>([])
 
   useEffect(() => {
     if (!user || !profile) return
@@ -307,6 +308,15 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
         .then(({ data }) => { setCalls(data || []); setLoading(false) })
 
     loadCalls()
+
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+    supabase.from('outbound_calls')
+      .select('*')
+      .eq('profile_id', ownerId)
+      .gte('created_at', monthStart.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => setOutboundCalls(data || []))
 
     const channel = supabase
       .channel('today-calls')
@@ -374,7 +384,7 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
             { label: "Aujourd'hui", value: todayCalls.length, sub: 'appels', color: accent },
             { label: 'À rappeler', value: urgentCalls.length + pendingCalls.length, sub: 'en attente', color: (urgentCalls.length + pendingCalls.length) > 0 ? '#EF4444' : '#10B981' },
             { label: 'Total', value: calls.length, sub: 'depuis toujours', color: '#6B7280' },
-            { label: 'Transferts', value: transfersThisMonth, sub: 'urgences ce mois', color: transfersThisMonth > 0 ? '#7C3AED' : '#6B7280' },
+            { label: 'Appels sortants', value: outboundCalls.filter(c => c.status !== 'cancelled').length, sub: 'ce mois · max 100', color: outboundCalls.filter(c => c.status !== 'cancelled').length >= 90 ? '#EF4444' : outboundCalls.filter(c => c.status !== 'cancelled').length > 0 ? '#7C3AED' : '#6B7280' },
           ].map(s => (
             <div key={s.label} className="bg-white border border-gray-100 rounded-2xl px-4 py-3 shadow-sm">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{s.label}</p>
@@ -481,6 +491,51 @@ function TodayPage({ accent, onNavigate }: { accent: string; onNavigate: (p: Pag
           </div>
         )}
       </div>
+
+      {/* ── Appels sortants récents ── */}
+      {outboundCalls.filter(c => c.status !== 'cancelled').slice(0, 3).length > 0 && (
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between border-b border-gray-50">
+            <p className="text-sm font-semibold text-gray-900">Appels sortants</p>
+            <span className="text-[10px] font-semibold text-purple-500 bg-purple-50 px-2 py-0.5 rounded-full">
+              {outboundCalls.filter(c => c.status !== 'cancelled').length}/100 ce mois
+            </span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {outboundCalls.filter(c => c.status !== 'cancelled').slice(0, 3).map((c: any) => {
+              const reasonLabel: Record<string, string> = {
+                missed_callback:  'Rappel manqué',
+                rdv_confirmation: 'Confirmation RDV',
+                devis_followup:   'Suivi devis',
+                client_relance:   'Relance client',
+              }
+              const statusColor: Record<string, string> = {
+                pending:   '#F59E0B',
+                initiated: '#3B82F6',
+                completed: '#10B981',
+                failed:    '#EF4444',
+              }
+              return (
+                <div key={c.id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 bg-purple-50">
+                    <svg className="w-3.5 h-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.948V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 8V5z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{c.caller_phone}</p>
+                    <p className="text-[10px] text-gray-400">{reasonLabel[c.reason] ?? c.reason}</p>
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ color: statusColor[c.status] ?? '#6B7280', background: `${statusColor[c.status] ?? '#6B7280'}20` }}>
+                    {c.status}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Assistante active ── */}
       <div className="bg-white border border-gray-100 rounded-2xl shadow-sm px-4 py-4 flex items-center gap-4">

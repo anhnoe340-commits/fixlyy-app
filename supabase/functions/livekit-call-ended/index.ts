@@ -62,8 +62,10 @@ Deno.serve(async (req) => {
   const smsBody       = body.sms_body       as string | null
   const apptDate      = body.appointment_date as string | null
   const apptTime      = body.appointment_time as string | null
-  const transferredTo = body.transferred_to   as string | null
-  const transferredAt = body.transferred_at   as string | null
+  const transferredTo   = body.transferred_to    as string | null
+  const transferredAt   = body.transferred_at    as string | null
+  const hasDevisMention = !!(body.has_devis_mention as boolean | null)
+  const isOutbound      = !!(body.is_outbound      as boolean | null)
 
   if (!userId) {
     return new Response(JSON.stringify({ error: 'missing user_id' }), {
@@ -196,6 +198,57 @@ Deno.serve(async (req) => {
         appointment_time: apptTime ?? 'A confirmer',
         status:           'pending',
       }).catch(e => console.error('appointments insert failed:', e.message))
+    }
+
+    // 4b. Appels sortants automatiques
+    const isValidCallerForOutbound = callerNumber !== 'Inconnu' && /^\+[1-9]\d{7,14}$/.test(callerNumber)
+
+    if (!isOutbound && isValidCallerForOutbound) {
+      // Rappel client manqué : appel < 30 secondes
+      if (durationSecs < 30) {
+        const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+        const { count: existingMissed } = await supabase
+          .from('outbound_calls')
+          .select('id', { count: 'exact', head: true })
+          .eq('profile_id', profile.id)
+          .eq('caller_phone', callerNumber)
+          .eq('reason', 'missed_callback')
+          .eq('status', 'pending')
+          .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+
+        if ((existingMissed ?? 0) === 0) {
+          await supabase.from('outbound_calls').insert({
+            profile_id:   profile.id,
+            caller_phone: callerNumber,
+            reason:       'missed_callback',
+            scheduled_at: scheduledAt,
+          }).catch(e => console.error('missed_callback insert failed:', e.message))
+          console.log(`[livekit-call-ended] missed_callback scheduled for ${callerNumber}`)
+        }
+      }
+
+      // Suivi devis : 48h après si devis mentionné
+      if (hasDevisMention) {
+        const scheduledAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+        const { count: existingDevis } = await supabase
+          .from('outbound_calls')
+          .select('id', { count: 'exact', head: true })
+          .eq('profile_id', profile.id)
+          .eq('caller_phone', callerNumber)
+          .eq('reason', 'devis_followup')
+          .in('status', ['pending', 'initiated'])
+          .gte('created_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+
+        if ((existingDevis ?? 0) === 0) {
+          await supabase.from('outbound_calls').insert({
+            profile_id:   profile.id,
+            caller_phone: callerNumber,
+            reason:       'devis_followup',
+            scheduled_at: scheduledAt,
+          }).catch(e => console.error('devis_followup insert failed:', e.message))
+          console.log(`[livekit-call-ended] devis_followup scheduled for ${callerNumber}`)
+        }
+      }
     }
 
     // 5. SMS artisan — seulement si téléphone + numéro Twilio configurés
