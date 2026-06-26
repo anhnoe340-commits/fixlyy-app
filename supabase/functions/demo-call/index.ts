@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
   }
 
   const vapiData = await vapiRes.json()
-  console.log(`[demo-call] Appel déclenché : ${phone} (${company.name}) callId=${vapiData.id}`)
+  console.log(`[demo-call] Appel déclenché : ***${phone.slice(-4)} (${company.name}) callId=${vapiData.id}`)
 
   // Mettre à jour le lead avec l'ID d'appel
   supabase.from('demo_leads').update({ vapi_call_id: vapiData.id }).eq('phone', phone).eq('email', email).then(() => {}).catch(() => {})

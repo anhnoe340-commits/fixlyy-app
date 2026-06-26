@@ -5,7 +5,7 @@ import { logEvent } from '../_shared/audit.ts'
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 

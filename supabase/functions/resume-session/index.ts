@@ -8,7 +8,7 @@ const SB_ANON    = Deno.env.get('SUPABASE_ANON_KEY')!
 const sb = createClient(SB_URL, SB_SERVICE)
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type, apikey',
 }
 

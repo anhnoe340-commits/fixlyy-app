@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  console.log(`[rdv-confirmation] scheduled for ${callerPhone} on ${rdvDateObj.toISOString()}`)
+  console.log(`[rdv-confirmation] scheduled for ***${callerPhone.slice(-4)} on ${rdvDateObj.toISOString()}`)
 
   return new Response(JSON.stringify({ ok: true, scheduled_at: rdvDateObj.toISOString() }), {
     headers: { ...cors, 'Content-Type': 'application/json' },

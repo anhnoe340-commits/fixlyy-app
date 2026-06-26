@@ -7,7 +7,7 @@ const supabase = createClient(
 )
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 

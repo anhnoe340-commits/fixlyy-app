@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
       severity:     'info',
     })
 
-    console.log(`[outbound] ${profile.twilio_number} → ${targetPhone} room=${roomName}`)
+    console.log(`[outbound] ***${(profile.twilio_number ?? '').slice(-4)} → ***${targetPhone.slice(-4)} room=${roomName}`)
 
     return new Response(JSON.stringify({
       ok:                   true,

@@ -167,6 +167,27 @@ npx vercel deploy --prod --yes
 
 ---
 
+## Test restauration PITR
+
+### Procédure de test restore (à effectuer trimestriellement)
+
+1. **Supabase Dashboard** → Settings → Backups → Point-in-time recovery
+2. Sélectionner une date/heure de restore (ex : J-1 à 23h00)
+3. Cliquer **Restore** sur une instance de test (NE PAS restaurer en prod sans incident)
+4. Vérifier que les tables critiques (`profiles`, `calls`, `sms_conversations`) contiennent les données attendues
+5. Tester une lecture via API : `SELECT count(*) FROM profiles`
+6. Documenter le résultat ci-dessous
+
+### Historique des tests
+
+| Date | Heure restore | Résultat | Testeur |
+|------|--------------|---------|---------|
+| *(aucun test effectué — planifier avant le 2026-09-30)* | — | — | — |
+
+> ⚠️ Un backup jamais restauré n'est pas un backup. Planifier le premier test de restore avant fin septembre 2026.
+
+---
+
 ## Backups
 
 ### Backup manuel (plan Free — pas de PITR)
