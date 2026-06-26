@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
             reason:       'missed_callback',
             scheduled_at: scheduledAt,
           }).catch(e => console.error('missed_callback insert failed:', e.message))
-          console.log(`[livekit-call-ended] missed_callback scheduled for ${e164Caller}`)
+          console.log(`[livekit-call-ended] missed_callback scheduled for ***${e164Caller.slice(-4)}`)
         }
       }
 
@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
             reason:       'devis_followup',
             scheduled_at: scheduledAt,
           }).catch(e => console.error('devis_followup insert failed:', e.message))
-          console.log(`[livekit-call-ended] devis_followup scheduled for ${e164Caller}`)
+          console.log(`[livekit-call-ended] devis_followup scheduled for ***${e164Caller.slice(-4)}`)
         }
       }
     }
