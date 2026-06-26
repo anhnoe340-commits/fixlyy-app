@@ -3,16 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 
-// Miroir minimal de plans.ts — synchroniser si les tarifs changent
-const PLAN_MINUTES: Record<string, number> = { solo: 300, pro: 500, max: 1000 }
-const PLAN_OVERAGE: Record<string, number> = { solo: 0.25, pro: 0.25, max: 0.20 }
-
-function normalizePlan(raw: string | null | undefined): string {
-  const s = (raw ?? '').toLowerCase()
-  if (s === 'pro') return 'pro'
-  if (s === 'max' || s.includes('equipe') || s.includes('expert') || s.includes('team')) return 'max'
-  return 'solo'
-}
+const QUOTA        = 1500  // minutes incluses — offre unique Fixlyy
+const OVERAGE_RATE = 0.20  // €/min au-delà du quota
 
 const cors = {
   'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
@@ -42,9 +34,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    const plan        = normalizePlan(profile.subscription_plan)
-    const quota       = PLAN_MINUTES[plan]
-    const overageRate = PLAN_OVERAGE[plan]
+    const quota       = QUOTA
+    const overageRate = OVERAGE_RATE
 
     // Mois calendaire — bornes en UTC
     const now   = new Date()
@@ -97,7 +88,7 @@ Deno.serve(async (req) => {
       period_start:       periodStart,
       period_end:         periodEnd,
       calls_count:        callsCount,
-      plan,
+      plan:               'max',
     }), { headers: { ...cors, 'Content-Type': 'application/json' } })
 
   } catch (e: any) {

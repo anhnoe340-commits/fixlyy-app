@@ -115,7 +115,11 @@ Extrais ces informations en JSON strict (aucun texte autour, aucun commentaire) 
   "appointment_date": "date si mentionnée ou null",
   "appointment_time": "heure si mentionnée ou null",
   "full_summary": "résumé en 4 points : (1) raison/problème principal, (2) contexte — tentatives ou durée du problème, (3) nom + adresse + téléphone + détail technique, (4) URGENT/NORMAL/PEUT ATTENDRE + action concrète pour l'artisan",
-  "sms_body": "accroche max 80 chars : problème précis + action immédiate"
+  "sms_body": "accroche max 80 chars : problème précis + action immédiate",
+  "bant_budget": "montant mentionné (ex: '300€', 'pas de budget fixé') ou null",
+  "bant_authority": "oui si décideur, non si doit consulter quelqu'un, inconnu si non mentionné",
+  "bant_need": "faible, moyen ou élevé selon l'urgence du besoin exprimé",
+  "bant_timeline": "aujourd'hui, cette semaine, ce mois ou inconnu"
 }}
 IMPORTANT : full_summary et sms_body doivent TOUJOURS être rédigés en français,
 quelle que soit la langue parlée pendant la conversation."""
@@ -337,6 +341,10 @@ async def post_call_ended(
         "appointment_time":  structured.get("appointment_time"),
         "has_devis_mention": has_devis_mention,
         "is_outbound":       is_outbound,
+        "bant_budget":       structured.get("bant_budget"),
+        "bant_authority":    structured.get("bant_authority"),
+        "bant_need":         structured.get("bant_need"),
+        "bant_timeline":     structured.get("bant_timeline"),
     }
     if transferred_to:
         payload["transferred_to"] = transferred_to

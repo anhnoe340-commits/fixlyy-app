@@ -1228,7 +1228,7 @@ function PricingPage({ accent }: { accent: string }) {
           </Field>
           <Field label="Zone d'intervention">
             <input value={profile.intervention_zone || ''} onChange={e => updateProfile({ intervention_zone: e.target.value })}
-              placeholder="Paris et Île-de-France" className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
+              placeholder="France entière" className="w-full border border-gray-100 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-gray-300 bg-gray-50/60" />
           </Field>
           <Field label="Délai d'intervention">
             <input value={profile.intervention_delay || ''} onChange={e => updateProfile({ intervention_delay: e.target.value })}

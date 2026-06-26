@@ -66,6 +66,10 @@ Deno.serve(async (req) => {
   const transferredAt   = body.transferred_at    as string | null
   const hasDevisMention = !!(body.has_devis_mention as boolean | null)
   const isOutbound      = !!(body.is_outbound      as boolean | null)
+  const bantBudget      = body.bant_budget    as string | null
+  const bantAuthority   = body.bant_authority as string | null
+  const bantNeed        = body.bant_need      as string | null
+  const bantTimeline    = body.bant_timeline  as string | null
 
   if (!userId) {
     return new Response(JSON.stringify({ error: 'missing user_id' }), {
@@ -141,7 +145,7 @@ Deno.serve(async (req) => {
           })
           // SMS à l'artisan si numéro disponible
           if (profile.phone && profile.twilio_number) {
-            const alertSms = `[Fixlyy] Attention : vous avez utilise ${totalMinutes} min sur ${includedMinutes} incluses ce mois (${pct}%). Au-dela, chaque minute est facturee 0,25 EUR.`
+            const alertSms = `[Fixlyy] Attention : vous avez utilise ${totalMinutes} min sur ${includedMinutes} incluses ce mois (${pct}%). Au-dela, chaque minute est facturee 0,20 EUR.`
             await sendSms(profile.twilio_number, profile.phone, alertSms).catch(e =>
               console.error('SMS quota_80pct failed:', e.message)
             )
@@ -166,7 +170,7 @@ Deno.serve(async (req) => {
             meta: { user_id: profile.id, total_minutes: totalMinutes, included_minutes: includedMinutes, pct },
           })
           if (profile.phone && profile.twilio_number) {
-            const overSms = `[Fixlyy] Quota depasse : ${totalMinutes} min utilisees ce mois (inclus : ${includedMinutes}). Les minutes supplementaires sont facturees 0,25 EUR/min. Passez au plan superieur pour plus de minutes.`
+            const overSms = `[Fixlyy] Quota depasse : ${totalMinutes} min utilisees ce mois (inclus : ${includedMinutes}). Les minutes supplementaires sont facturees 0,20 EUR/min. Contactez-nous pour plus de minutes.`
             await sendSms(profile.twilio_number, profile.phone, overSms).catch(e =>
               console.error('SMS quota_exceeded failed:', e.message)
             )
@@ -283,6 +287,10 @@ Deno.serve(async (req) => {
     if (callerAddress)  smsParts.push(`Adresse : ${callerAddress}`)
     if (reason)         smsParts.push(`Motif : ${reason}`)
     smsParts.push(isUrgent ? 'Urgence : oui' : 'Urgence : non')
+    if (bantBudget && bantBudget !== 'null')    smsParts.push(`Budget : ${bantBudget}`)
+    if (bantAuthority && bantAuthority !== 'inconnu') smsParts.push(`Decideur : ${bantAuthority}`)
+    if (bantNeed && bantNeed !== 'faible')      smsParts.push(`Besoin : ${bantNeed}`)
+    if (bantTimeline && bantTimeline !== 'inconnu')   smsParts.push(`Delai : ${bantTimeline}`)
     smsParts.push('')
     smsParts.push(bodyText)
     smsParts.push('')
@@ -324,8 +332,10 @@ Deno.serve(async (req) => {
     // SMS confirmation au client
     const isValidCaller = callerNumber !== 'Inconnu' && /^\+[1-9]\d{7,14}$/.test(callerNumber)
     if (isValidCaller) {
-      const company = (profile.company_name || 'votre artisan').slice(0, 60)
-      const clientSms = `Bonjour, votre demande a bien ete transmise a ${company}. Vous serez recontacte rapidement. - Fixlyy`
+      const company = (profile.company_name || 'Fixlyy').slice(0, 50)
+      const clientSms = smsBody
+        ? `${smsBody}\nVous serez recontacte rapidement. - ${company}`
+        : `Votre demande a bien ete transmise a ${company}. Vous serez recontacte rapidement. - Fixlyy`
       await sendSms(profile.twilio_number, callerNumber, clientSms).catch(e =>
         console.log('SMS client echec (non-bloquant):', e.message)
       )

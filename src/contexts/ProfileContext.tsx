@@ -72,7 +72,7 @@ const DEFAULT_PROFILE: Omit<Profile, 'id' | 'email'> = {
   email_notifications_enabled: true,
   timezone: 'Europe/Paris',
   intervention_hours: 'Lundi-Vendredi 8h-18h',
-  intervention_zone: 'Paris et Île-de-France',
+  intervention_zone: 'France',
   intervention_delay: 'Sous 48h, urgences sous 4h',
   travel_fee: '50',
   pricing_display: 'explicit',

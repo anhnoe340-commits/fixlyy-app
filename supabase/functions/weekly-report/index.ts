@@ -1,6 +1,5 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { featureAllowed } from '../_shared/planGate.ts'
+import { featureAllowed, getIncludedMinutes } from '../_shared/planGate.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
@@ -8,14 +7,6 @@ const CRON_SECRET = Deno.env.get('CRON_SECRET') || null
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type, x-cron-secret' }
 
-const PLAN_MINUTES: Record<string, number> = { solo: 300, pro: 500, max: 1000 }
-
-function normalizePlan(raw: string | null | undefined): string {
-  const s = (raw ?? '').toLowerCase()
-  if (s === 'pro') return 'pro'
-  if (s === 'max' || s.includes('equipe') || s.includes('expert') || s.includes('team')) return 'max'
-  return 'solo'
-}
 
 function weekRange(): { from: Date; to: Date; label: string } {
   const now = new Date()
@@ -221,7 +212,7 @@ async function sendEmail(to: string, subject: string, html: string) {
   return res.json()
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   if (CRON_SECRET) {
@@ -308,8 +299,7 @@ serve(async (req) => {
       const rdvCount = rdvRes.count ?? 0
       const prevCallsCount = prevCallsRes.count ?? 0
       const monthMinutes = (monthMinutesRes.data as number | null) ?? 0
-      const plan = normalizePlan(artisan.subscription_plan)
-      const monthQuota = PLAN_MINUTES[plan]
+      const monthQuota = getIncludedMinutes()
 
       const c = calls || []
       const urgentCalls = c.filter(x => x.status === 'urgent').length
