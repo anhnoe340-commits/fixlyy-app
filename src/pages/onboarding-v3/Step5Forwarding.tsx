@@ -1,12 +1,65 @@
 import { useState, useEffect } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
 import { supabase } from '@/lib/supabase'
+import OnboardingVideo from '@/components/OnboardingVideo'
+import { ONBOARDING_VIDEOS } from '@/config/onboarding-videos'
 
-const BRAND = '#3B5BF5'
+const BRAND  = '#3B5BFA'
+const TEXT   = '#1A1A2E'
+const MUTED  = '#6B7280'
+const BORDER = '#E5E7EB'
 
 function formatFrPhone(e164: string): string {
   const local = e164.replace('+33', '0')
   return local.replace(/(\d{2})(?=\d)/g, '$1 ').trim()
+}
+
+interface ForwardingType {
+  id: string
+  title: string
+  subtitle: string
+  badge: { label: string; color: string }
+  getCode: (num: string) => string
+  getDeactivate: () => string
+  tip: string
+}
+
+const FORWARDING_TYPES: ForwardingType[] = [
+  {
+    id: 'immediate',
+    title: 'Renvoi immédiat',
+    subtitle: "Tous tes appels vont directement à Mia",
+    badge: { label: 'RECOMMANDÉ PRO', color: '#059669' },
+    getCode: num => `**21*${num}#`,
+    getDeactivate: () => `##21#`,
+    tip: 'Idéal si tu as un numéro professionnel dédié.',
+  },
+  {
+    id: 'after-delay',
+    title: 'Renvoi après 20 secondes',
+    subtitle: "Ton téléphone sonne d'abord, Mia prend le relais si tu ne décroches pas",
+    badge: { label: 'RECOMMANDÉ PERSO', color: '#D97706' },
+    getCode: num => `**61*${num}*11*20#`,
+    getDeactivate: () => `##61#`,
+    tip: 'Recommandé si tu utilises ton numéro personnel.',
+  },
+  {
+    id: 'if-busy',
+    title: 'Renvoi si occupé',
+    subtitle: "Mia répond uniquement quand tu es déjà en communication",
+    badge: { label: 'COMPLÉMENT', color: '#2563EB' },
+    getCode: num => `**67*${num}#`,
+    getDeactivate: () => `##67#`,
+    tip: 'Peut se combiner avec le renvoi après Xs pour une couverture maximale.',
+  },
+]
+
+const OPERATORS = ['Orange', 'SFR', 'Bouygues', 'Free']
+
+const OPERATOR_NOTES: Record<string, string | null> = {
+  Orange:   null,
+  SFR:      null,
+  Bouygues: null,
+  Free:     'Pour Free Mobile, tu peux aussi passer par l\'app Free Mobile → Gérer mes services → Renvoi d\'appel.',
 }
 
 interface Props {
@@ -16,11 +69,10 @@ interface Props {
 }
 
 export default function Step5Forwarding({ userId, fixlyyNumber, onDone }: Props) {
-  const isMobile    = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-  const [tapped, setTapped]           = useState(false)
-  const [showManual, setShowManual]   = useState(false)
-  const [copied, setCopied]           = useState<string | null>(null)
-  const [twilioNum, setTwilioNum]     = useState<string | null>(fixlyyNumber)
+  const [twilioNum, setTwilioNum] = useState<string | null>(fixlyyNumber)
+  const [openType, setOpenType]   = useState<string | null>(null)
+  const [openOp, setOpenOp]       = useState<Record<string, boolean>>({})
+  const [copied, setCopied]       = useState<string | null>(null)
 
   useEffect(() => {
     if (twilioNum) return
@@ -31,128 +83,169 @@ export default function Step5Forwarding({ userId, fixlyyNumber, onDone }: Props)
     return () => clearInterval(interval)
   }, [userId, twilioNum])
 
-  function handleActivate() {
-    if (!twilioNum) return
-    setTapped(true)
-    window.location.href = `tel:**21*${twilioNum}%23`
-    setTimeout(() => onDone(), 5000)
-  }
-
   function copyCode(code: string) {
     navigator.clipboard.writeText(code)
     setCopied(code)
     setTimeout(() => setCopied(null), 2000)
   }
 
-  const ussdCodes = twilioNum ? [
-    { label: 'Renvoi total', desc: 'Tous vos appels → Mia', code: `**21*${twilioNum}#`, badge: true },
-    { label: 'Si occupé', desc: 'Quand vous êtes déjà en ligne', code: `**67*${twilioNum}#`, badge: false },
-    { label: 'Si sans réponse', desc: 'Quand vous ne décrochez pas', code: `**61*${twilioNum}#`, badge: false },
-  ] : []
+  function toggleOp(typeId: string, op: string) {
+    const key = `${typeId}-${op}`
+    setOpenOp(prev => ({ ...prev, [key]: !prev[key] }))
+  }
 
   if (!twilioNum) {
     return (
       <div className="flex flex-col items-center justify-center gap-6 py-8">
         <div className="w-10 h-10 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BRAND }} />
-        <p className="text-sm text-center" style={{ color: 'rgba(148,163,184,0.8)' }}>Attribution du numéro en cours…</p>
-      </div>
-    )
-  }
-
-  if (tapped) {
-    return (
-      <div className="flex flex-col items-center gap-6 py-8 text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: 'rgba(59,91,245,0.15)', border: `2px solid rgba(59,91,245,0.4)` }}>
-          <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BRAND }} />
-        </div>
-        <div>
-          <p className="font-semibold text-white mb-1">Activation en cours…</p>
-          <p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>Redirection dans quelques secondes</p>
-        </div>
-        <button onClick={onDone} className="text-sm underline underline-offset-2" style={{ color: 'rgba(148,163,184,0.6)' }}>
-          Continuer quand même →
-        </button>
+        <p className="text-sm text-center" style={{ color: MUTED }}>Attribution du numéro en cours…</p>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div>
-        <h2 className="text-2xl font-bold text-white mb-1">Activez le renvoi d'appel</h2>
-        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
-          Quand vous ne pouvez pas décrocher, Mia prend le relais.
-        </p>
+        <h2 className="text-xl font-bold mb-1" style={{ color: TEXT }}>Active le renvoi d'appel</h2>
+        <p className="text-sm" style={{ color: MUTED }}>Quand tu ne peux pas décrocher, Mia prend le relais.</p>
       </div>
 
       {/* Numéro Mia */}
-      <div className="rounded-2xl p-4 text-center" style={{ background: 'rgba(59,91,245,0.10)', border: '2px solid rgba(59,91,245,0.30)' }}>
-        <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'rgba(148,163,184,0.7)' }}>Votre numéro Mia</p>
-        <p className="text-3xl font-black tracking-wide text-white">{formatFrPhone(twilioNum)}</p>
+      <div style={{
+        background: 'rgba(59,91,250,0.06)', border: `1.5px solid rgba(59,91,250,0.2)`,
+        borderRadius: 12, padding: '14px 16px', textAlign: 'center',
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: MUTED, marginBottom: 4 }}>
+          Ton numéro Mia
+        </p>
+        <p style={{ fontSize: 26, fontWeight: 900, color: BRAND, letterSpacing: '0.05em' }}>{formatFrPhone(twilioNum)}</p>
       </div>
 
-      {isMobile ? (
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={handleActivate}
-            className="w-full py-5 rounded-2xl text-white text-base font-bold transition-all active:scale-95 flex items-center justify-center gap-3"
-            style={{ background: 'linear-gradient(135deg, #10B981, #059669)' }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.63A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.18 6.18l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/>
-            </svg>
-            Activer le renvoi maintenant
-          </button>
-          <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.55)' }}>
-            Votre composeur s'ouvre · Appuyez juste sur le bouton vert
-          </p>
-          <button onClick={() => setShowManual(v => !v)} className="text-xs text-center underline underline-offset-2" style={{ color: 'rgba(148,163,184,0.55)' }}>
-            Faire manuellement
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="v3-card rounded-2xl p-5 text-center">
-            <div className="mx-auto mb-3 w-fit p-2 bg-white rounded-xl">
-              <QRCodeSVG value={`**21*${twilioNum}#`} size={112} bgColor="#ffffff" fgColor="#070B1A" level="M" />
-            </div>
-            <p className="text-sm font-medium text-white mb-1">Scannez avec votre téléphone</p>
-            <p className="text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>Pour activer le renvoi depuis votre mobile</p>
-          </div>
-          <button onClick={() => setShowManual(v => !v)} className="text-sm text-center underline underline-offset-2" style={{ color: 'rgba(148,163,184,0.6)' }}>
-            Voir les codes manuels
-          </button>
-        </div>
-      )}
+      {/* Vidéo */}
+      <OnboardingVideo
+        videoUrl={ONBOARDING_VIDEOS.step4}
+        placeholderMessage={`Le renvoi d'appel permet à Mia de répondre à ta place quand tu ne peux pas décrocher.\n\n1. Renvoi immédiat — tous les appels vont directement à Mia (si tu as un numéro pro dédié)\n\n2. Renvoi après X secondes — ton téléphone sonne d'abord, puis Mia prend le relais si tu ne décroches pas (recommandé si tu utilises ton numéro personnel)\n\n3. Renvoi si occupé — Mia répond uniquement quand tu es déjà en communication\n\nSi tu utilises ton numéro personnel, choisis l'option 2 ou 3 pour ne pas rater tes appels personnels.`}
+      />
 
-      {showManual && (
-        <div className="flex flex-col gap-3 pt-2">
-          {ussdCodes.map(opt => (
-            <div key={opt.code} className="v3-card rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-semibold text-white">{opt.label}</p>
-                {opt.badge && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white" style={{ background: BRAND }}>Recommandé</span>}
-              </div>
-              <p className="text-xs mb-2.5" style={{ color: 'rgba(148,163,184,0.6)' }}>{opt.desc}</p>
-              <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                <code className="text-sm font-mono text-white flex-1">{opt.code}</code>
-                <button
-                  onClick={() => copyCode(opt.code)}
-                  className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-all"
-                  style={{ background: copied === opt.code ? '#10b981' : 'rgba(59,91,245,0.3)', color: 'white' }}
-                >
-                  {copied === opt.code ? '✓' : 'Copier'}
-                </button>
-              </div>
-            </div>
-          ))}
-          <p className="text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>
-            Compatible Free, Orange, SFR, Bouygues · Désactivez avec <span className="font-mono">##21#</span>
-          </p>
-        </div>
-      )}
+      {/* 3 cards par type */}
+      <div className="flex flex-col gap-3">
+        {FORWARDING_TYPES.map(ft => {
+          const isOpen = openType === ft.id
+          return (
+            <div key={ft.id} style={{
+              background: '#fff', border: `1px solid ${isOpen ? BRAND : BORDER}`,
+              borderRadius: 12, overflow: 'hidden',
+              boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
+              transition: 'border-color 0.15s',
+            }}>
+              <button
+                type="button"
+                onClick={() => setOpenType(isOpen ? null : ft.id)}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '14px 16px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'flex-start', gap: 12,
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{ft.title}</span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, letterSpacing: '0.06em',
+                      textTransform: 'uppercase', padding: '2px 8px', borderRadius: 20,
+                      background: ft.badge.color, color: '#fff',
+                    }}>
+                      {ft.badge.label}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.4 }}>{ft.subtitle}</p>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                  style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: BRAND, marginTop: 3 }}>
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
 
-      <button onClick={onDone} className="text-sm text-center underline underline-offset-2" style={{ color: 'rgba(148,163,184,0.5)' }}>
+              {isOpen && (
+                <div style={{ borderTop: `1px solid ${BORDER}`, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginBottom: 2 }}>💡 {ft.tip}</p>
+
+                  {OPERATORS.map(op => {
+                    const key = `${ft.id}-${op}`
+                    const isOpOpen = !!openOp[key]
+                    const code  = ft.getCode(twilioNum)
+                    const deact = ft.getDeactivate()
+
+                    return (
+                      <div key={op} style={{ background: '#F9FAFB', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+                        <button type="button" onClick={() => toggleOp(ft.id, op)}
+                          style={{
+                            width: '100%', textAlign: 'left', padding: '10px 14px',
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          }}
+                        >
+                          <span style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{op}</span>
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
+                            style={{ transform: isOpOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: BRAND }}>
+                            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+
+                        {isOpOpen && (
+                          <div style={{ borderTop: `1px solid ${BORDER}`, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div>
+                              <p style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Activer</p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F3F4F6', borderRadius: 8, padding: '8px 12px' }}>
+                                <code style={{ flex: 1, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: TEXT }}>{code}</code>
+                                <button onClick={() => copyCode(code)} style={{
+                                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+                                  border: 'none', cursor: 'pointer',
+                                  background: copied === code ? '#059669' : BRAND, color: '#fff', transition: 'background 0.2s',
+                                }}>
+                                  {copied === code ? '✓' : 'Copier'}
+                                </button>
+                              </div>
+                            </div>
+                            <div>
+                              <p style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Désactiver</p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F3F4F6', borderRadius: 8, padding: '8px 12px' }}>
+                                <code style={{ flex: 1, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: TEXT }}>{deact}</code>
+                                <button onClick={() => copyCode(deact)} style={{
+                                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
+                                  border: 'none', cursor: 'pointer',
+                                  background: copied === deact ? '#059669' : '#6B7280', color: '#fff', transition: 'background 0.2s',
+                                }}>
+                                  {copied === deact ? '✓' : 'Copier'}
+                                </button>
+                              </div>
+                            </div>
+                            {OPERATOR_NOTES[op] && (
+                              <p style={{ fontSize: 11, color: MUTED, lineHeight: 1.5, background: 'rgba(59,91,250,0.06)', borderRadius: 6, padding: '8px 10px' }}>
+                                ℹ️ {OPERATOR_NOTES[op]}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <button
+        onClick={onDone}
+        className="w-full py-4 rounded-xl text-white text-sm font-bold"
+        style={{ background: BRAND, boxShadow: '0 4px 16px rgba(59,91,250,0.25)' }}
+      >
+        Renvoi configuré → Continuer
+      </button>
+
+      <button onClick={onDone} className="text-sm text-center" style={{ color: '#9CA3AF', textDecoration: 'underline' }}>
         Passer cette étape →
       </button>
     </div>

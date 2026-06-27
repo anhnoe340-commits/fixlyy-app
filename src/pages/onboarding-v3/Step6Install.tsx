@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import OnboardingVideo from '@/components/OnboardingVideo'
+import { ONBOARDING_VIDEOS } from '@/config/onboarding-videos'
 
-const BRAND = '#3B5BF5'
+const BRAND = '#3B5BFA'
+const TEXT  = '#1A1A2E'
+const MUTED = '#6B7280'
 
 interface Props {
   userId: string
@@ -9,91 +13,124 @@ interface Props {
   onDone: () => void
 }
 
-export default function Step6Install({ userId, deferredPrompt, onDone }: Props) {
-  const [installing, setInstalling] = useState(false)
-  const [installed, setInstalled]   = useState(false)
+const CHECKLIST = [
+  '✓ Ton équipe et leurs disponibilités',
+  '✓ Tes clients réguliers',
+  '✓ Tes tarifs et tes prestations',
+  '✓ Tes horaires et indisponibilités',
+  '✓ Ta façon de travailler',
+]
 
-  async function markDone() {
-    await supabase.from('profiles').update({
-      onboarding_step: 7,
-      onboarding_completed: true,
-    }).eq('id', userId)
+export default function Step6Install({ userId, onDone }: Props) {
+  const [done, setDone]       = useState(false)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    // Entrée animée
+    const t = setTimeout(() => setVisible(true), 80)
+    return () => clearTimeout(t)
+  }, [])
+
+  async function handleConfigureMia() {
+    if (done) return
+    setDone(true)
+    try {
+      await supabase.from('profiles').update({
+        onboarding_step: 7,
+        onboarding_completed: true,
+      }).eq('id', userId)
+    } catch { /* ignore — not blocking */ }
+    sessionStorage.setItem('ob_v2_setup', '1')
     onDone()
   }
 
-  async function handleInstall() {
-    if (!deferredPrompt) { await markDone(); return }
-    setInstalling(true)
-    try {
-      deferredPrompt.prompt()
-      const { outcome } = await deferredPrompt.userChoice
-      if (outcome === 'accepted') setInstalled(true)
-    } catch { /* ignore */ }
-    setInstalling(false)
-    await markDone()
-  }
-
-  const checklist = [
-    { icon: '📞', label: 'Numéro Mia dédié attribué' },
-    { icon: '✅', label: 'Renvoi d\'appel configuré' },
-    { icon: '📩', label: 'SMS récap activé (30 secondes)' },
-    { icon: '🔒', label: 'CB enregistrée · aucun prélèvement avant 7 jours' },
-  ]
-
   return (
-    <div className="flex flex-col gap-7">
-      <div className="text-center">
-        <div className="w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl" style={{ background: 'rgba(59,91,245,0.15)', border: '2px solid rgba(59,91,245,0.35)' }}>
-          🎉
+    <div
+      className="flex flex-col gap-5"
+      style={{
+        background: '#F0F4FF',
+        borderRadius: 16,
+        padding: '24px 20px',
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(12px)',
+        transition: 'opacity 0.4s ease, transform 0.4s ease',
+      }}
+    >
+      {/* Vidéo */}
+      <OnboardingVideo
+        videoUrl={ONBOARDING_VIDEOS.step5}
+        placeholderMessage={`Bienvenue dans la famille Fixlyy.\nJe te remercie sincèrement de faire confiance à Mia pour ton activité.\n\nMia est maintenant active. Mais pour qu'elle travaille vraiment POUR TOI — pas juste pour n'importe quel artisan — il faut lui présenter ton activité. Ça prend 5 minutes.\n\nEt après ça, Mia connaît ton équipe, tes clients, tes tarifs, ta façon de travailler.\nC'est ce qui fait toute la différence.`}
+      />
+
+      {/* Badge succès */}
+      <div className="flex flex-col items-center gap-2 py-2">
+        <div
+          style={{
+            width: 64, height: 64,
+            borderRadius: '50%',
+            background: 'rgba(5,150,105,0.12)',
+            border: '2px solid rgba(5,150,105,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 28,
+            transform: visible ? 'scale(1)' : 'scale(0)',
+            transition: 'transform 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.15s',
+          }}
+        >
+          ✅
         </div>
-        <h2 className="text-2xl font-bold text-white mb-1">Mia est prête !</h2>
-        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
-          Votre secrétaire IA répond dès maintenant.
+        <p className="text-lg font-bold text-center" style={{ color: TEXT }}>Mia est active sur ton numéro</p>
+        <p className="text-sm text-center" style={{ color: MUTED, maxWidth: 280 }}>
+          Tu fais partie des artisans qui ne ratent plus jamais un appel.
         </p>
       </div>
 
-      {/* Récapitulatif */}
-      <div className="v3-card rounded-2xl p-5 flex flex-col gap-3">
-        {checklist.map(item => (
-          <div key={item.label} className="flex items-center gap-3">
-            <span className="text-base flex-shrink-0">{item.icon}</span>
-            <span className="text-sm text-white/80">{item.label}</span>
-          </div>
-        ))}
-      </div>
+      {/* Card config Mia — OBLIGATOIRE */}
+      <div style={{
+        background: '#fff',
+        border: `2px solid ${BRAND}`,
+        borderRadius: 12,
+        overflow: 'hidden',
+        boxShadow: '0 4px 20px rgba(59,91,250,0.12)',
+      }}>
+        {/* En-tête */}
+        <div style={{ background: BRAND, padding: '14px 18px' }}>
+          <p style={{ color: '#fff', fontWeight: 800, fontSize: 15 }}>🧠 Présente ton activité à Mia</p>
+        </div>
 
-      {/* PWA install */}
-      {deferredPrompt && !installed ? (
-        <div className="flex flex-col gap-3">
-          <div className="rounded-2xl p-4 text-center" style={{ background: 'rgba(59,91,245,0.10)', border: '1px solid rgba(59,91,245,0.25)' }}>
-            <p className="text-sm font-semibold text-white mb-1">📲 Installer Fixlyy sur votre téléphone</p>
-            <p className="text-xs" style={{ color: 'rgba(148,163,184,0.7)' }}>
-              Accédez à vos résumés d'appel en 1 tap, sans navigateur.
-            </p>
+        {/* Corps */}
+        <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ color: MUTED, fontSize: 13, fontStyle: 'italic', lineHeight: 1.5 }}>
+            "Plus Mia te connaît, plus elle travaille comme une vraie secrétaire dédiée à toi."
+          </p>
+
+          <div className="flex flex-col gap-2">
+            {CHECKLIST.map(item => (
+              <p key={item} style={{ fontSize: 13, color: TEXT, lineHeight: 1.4 }}>
+                <span style={{ color: '#059669', fontWeight: 700, marginRight: 4 }}>✓</span>
+                {item.replace('✓ ', '')}
+              </p>
+            ))}
           </div>
+
           <button
-            onClick={handleInstall}
-            disabled={installing}
-            className="w-full py-4 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2"
-            style={{ background: BRAND }}
+            onClick={handleConfigureMia}
+            disabled={done}
+            style={{
+              width: '100%', padding: '14px',
+              background: done ? '#D1D5DB' : BRAND,
+              color: '#fff', borderRadius: 10,
+              border: 'none', fontWeight: 800, fontSize: 14,
+              cursor: done ? 'default' : 'pointer',
+              boxShadow: done ? 'none' : '0 4px 14px rgba(59,91,250,0.3)',
+              marginTop: 4,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
           >
-            {installing && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-            Installer l'app
-          </button>
-          <button onClick={markDone} className="text-sm text-center underline underline-offset-2" style={{ color: 'rgba(148,163,184,0.5)' }}>
-            Accéder au tableau de bord →
+            {done && <div style={{ width: 14, height: 14, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
+            Configurer Mia maintenant →
           </button>
         </div>
-      ) : (
-        <button
-          onClick={markDone}
-          className="w-full py-4 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2"
-          style={{ background: BRAND }}
-        >
-          Accéder au tableau de bord →
-        </button>
-      )}
-
+      </div>
     </div>
   )
 }

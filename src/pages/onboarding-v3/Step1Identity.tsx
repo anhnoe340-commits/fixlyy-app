@@ -2,8 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import SocialProofToast, { useSocialProof } from '@/components/SocialProofToast'
 import ScarcityBadge from '@/components/ScarcityBadge'
+import OnboardingVideo from '@/components/OnboardingVideo'
+import { ONBOARDING_VIDEOS } from '@/config/onboarding-videos'
 
-const BRAND = '#3B5BF5'
+const BRAND  = '#3B5BFA'
+const TEXT   = '#1A1A2E'
+const MUTED  = '#6B7280'
+const BORDER = '#E5E7EB'
 
 const TRADES = [
   { label: '🔧 Plombier',     value: 'Plomberie / Chauffage' },
@@ -25,6 +30,28 @@ function normalizePhone(raw: string): string {
 
 function isValidFrPhone(e164: string): boolean {
   return /^\+33[67]\d{8}$/.test(e164)
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: '#F9FAFB',
+  border: `1px solid ${BORDER}`,
+  borderRadius: 10,
+  padding: '12px 14px',
+  fontSize: 14,
+  color: TEXT,
+  outline: 'none',
+  transition: 'border-color 0.15s',
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: MUTED,
+  marginBottom: 4,
+  display: 'block',
 }
 
 interface Props {
@@ -54,7 +81,7 @@ export default function Step1Identity({ onDone }: Props) {
 
   useEffect(() => {
     if (!companyTouched && fullName.trim()) {
-      const first     = fullName.trim().split(' ')[0]
+      const first      = fullName.trim().split(' ')[0]
       const tradeShort = trade.split('/')[0].trim()
       setCompanyName(`${tradeShort} ${first}`)
     }
@@ -132,18 +159,16 @@ export default function Step1Identity({ onDone }: Props) {
 
   if (phase === 'otp') {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-1">Vérifiez votre mobile</h2>
-          <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
-            Code envoyé au <span className="text-white font-medium">{phone}</span>
+          <h2 className="text-2xl font-bold mb-1" style={{ color: TEXT }}>Vérifiez votre mobile</h2>
+          <p className="text-sm" style={{ color: MUTED }}>
+            Code envoyé au <span className="font-semibold" style={{ color: TEXT }}>{phone}</span>
           </p>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
-            Code à 6 chiffres
-          </label>
+        <div className="flex flex-col gap-1">
+          <label style={labelStyle}>Code à 6 chiffres</label>
           <input
             ref={otpRef}
             type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
@@ -154,19 +179,19 @@ export default function Step1Identity({ onDone }: Props) {
               if (v.length === 6) setTimeout(verifyOtp, 50)
             }}
             placeholder="123456"
-            className="v3-input w-full rounded-xl px-4 py-4 text-2xl font-bold text-center tracking-[0.5em] text-white"
+            style={{ ...inputStyle, fontSize: 24, fontWeight: 700, textAlign: 'center', letterSpacing: '0.5em' }}
           />
         </div>
 
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{error}</p>
+          <p className="text-sm rounded-xl px-4 py-3" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)' }}>{error}</p>
         )}
 
         <button
           onClick={verifyOtp}
           disabled={otp.length !== 6 || loading}
           className="w-full py-4 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
-          style={{ background: BRAND }}
+          style={{ background: BRAND, boxShadow: '0 4px 16px rgba(59,91,250,0.25)' }}
         >
           {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
           Valider →
@@ -177,14 +202,14 @@ export default function Step1Identity({ onDone }: Props) {
             onClick={() => { if (cooldown > 0 || loading) return; sendOtp() }}
             disabled={cooldown > 0 || loading}
             className="text-sm disabled:opacity-40"
-            style={{ color: 'rgba(148,163,184,0.7)' }}
+            style={{ color: MUTED }}
           >
             {cooldown > 0 ? `Renvoyer dans ${cooldown}s` : 'Renvoyer le code'}
           </button>
           <button
             onClick={() => { setPhase('form'); setOtp(''); setError('') }}
             className="text-sm"
-            style={{ color: 'rgba(148,163,184,0.45)' }}
+            style={{ color: '#9CA3AF' }}
           >
             ← Modifier mes informations
           </button>
@@ -195,29 +220,33 @@ export default function Step1Identity({ onDone }: Props) {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Vidéo */}
+      <OnboardingVideo
+        videoUrl={ONBOARDING_VIDEOS.step1}
+        placeholderMessage={"Bienvenue, je suis Noé fondateur de Fixlyy.\nEn 2 minutes on va activer Mia pour ton activité.\nCommence par renseigner tes infos."}
+      />
+
       <div>
-        <h2 className="text-2xl font-bold text-white mb-1">Votre activité</h2>
-        <p className="text-sm" style={{ color: 'rgba(148,163,184,0.85)' }}>
+        <h2 className="text-xl font-bold mb-1" style={{ color: TEXT }}>Votre activité</h2>
+        <p className="text-sm" style={{ color: MUTED }}>
           Mia se présentera avec ces informations à vos clients.
         </p>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
-          Prénom et nom
-        </label>
+      {/* Prénom + nom */}
+      <div className="flex flex-col gap-1">
+        <label style={labelStyle}>Prénom et nom</label>
         <input
           type="text" autoFocus placeholder="Jean Dupont"
           value={fullName}
           onChange={e => setFullName(e.target.value)}
-          className="v3-input w-full rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30"
+          style={inputStyle}
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
-          Votre métier
-        </label>
+      {/* Métier */}
+      <div className="flex flex-col gap-1">
+        <label style={labelStyle}>Votre métier</label>
         <div className="flex flex-wrap gap-2">
           {TRADES.map(t => (
             <button
@@ -226,9 +255,9 @@ export default function Step1Identity({ onDone }: Props) {
               onClick={() => setTrade(t.value)}
               className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
               style={{
-                background: trade === t.value ? 'rgba(59,91,245,0.25)' : 'rgba(255,255,255,0.05)',
-                border: trade === t.value ? '1.5px solid rgba(59,91,245,0.7)' : '1px solid rgba(255,255,255,0.10)',
-                color: trade === t.value ? 'white' : 'rgba(148,163,184,0.8)',
+                background: trade === t.value ? 'rgba(59,91,250,0.10)' : '#F3F4F6',
+                border: trade === t.value ? `1.5px solid rgba(59,91,250,0.6)` : `1px solid ${BORDER}`,
+                color: trade === t.value ? BRAND : TEXT,
               }}
             >
               {t.label}
@@ -237,51 +266,49 @@ export default function Step1Identity({ onDone }: Props) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
-          Nom de l'activité
-        </label>
+      {/* Nom activité */}
+      <div className="flex flex-col gap-1">
+        <label style={labelStyle}>Nom de l'activité</label>
         <input
           type="text" placeholder="Ex : Plomberie Dupont"
           value={companyName}
           onChange={e => { setCompanyName(e.target.value); setCompanyTouched(true) }}
-          className="v3-input w-full rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30"
+          style={inputStyle}
         />
         {companyName && (
-          <p className="text-xs" style={{ color: 'rgba(148,163,184,0.5)' }}>
+          <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
             Mia répondra : « {companyName}, bonjour ! »
           </p>
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
-          Email pro
-        </label>
+      {/* Email */}
+      <div className="flex flex-col gap-1">
+        <label style={labelStyle}>Email pro</label>
         <input
           type="email" inputMode="email"
           placeholder="jean@plomberie-dupont.fr"
           value={email}
           onChange={e => setEmail(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && canSubmit && sendOtp()}
-          className="v3-input w-full rounded-xl px-4 py-3.5 text-sm text-white placeholder:text-white/30"
+          style={inputStyle}
         />
         {email && !emailValid && (
-          <p className="text-xs text-red-400">Adresse email invalide</p>
+          <p className="text-xs mt-1" style={{ color: '#EF4444' }}>Adresse email invalide</p>
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgba(148,163,184,0.7)' }}>
-          Mobile pro
-        </label>
-        <div className="flex overflow-hidden rounded-xl" style={{ border: '1px solid rgba(255,255,255,0.12)' }}>
-          <div
-            className="flex items-center gap-1.5 px-3 py-3.5 flex-shrink-0"
-            style={{ borderRight: '1px solid rgba(255,255,255,0.10)', background: 'rgba(255,255,255,0.04)' }}
-          >
+      {/* Téléphone */}
+      <div className="flex flex-col gap-1">
+        <label style={labelStyle}>Mobile pro</label>
+        <div style={{ display: 'flex', overflow: 'hidden', borderRadius: 10, border: `1px solid ${BORDER}` }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '12px', flexShrink: 0,
+            borderRight: `1px solid ${BORDER}`, background: '#F3F4F6',
+          }}>
             <span>🇫🇷</span>
-            <span className="text-sm" style={{ color: 'rgba(148,163,184,0.8)' }}>+33</span>
+            <span style={{ fontSize: 13, color: MUTED }}>+33</span>
           </div>
           <input
             type="tel" inputMode="tel"
@@ -289,26 +316,26 @@ export default function Step1Identity({ onDone }: Props) {
             value={phone}
             onChange={e => setPhone(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && canSubmit && sendOtp()}
-            className="flex-1 bg-transparent px-3 py-3.5 text-sm text-white placeholder:text-white/30 outline-none"
+            style={{ flex: 1, background: '#F9FAFB', border: 'none', outline: 'none', padding: '12px', fontSize: 14, color: TEXT }}
           />
         </div>
         {phone && !phoneValid && (
-          <p className="text-xs text-red-400">Format attendu : 06 ou 07 XXXXXXXX</p>
+          <p className="text-xs mt-1" style={{ color: '#EF4444' }}>Format attendu : 06 ou 07 XXXXXXXX</p>
         )}
       </div>
 
       {error && (
-        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{error}</p>
+        <p className="text-sm rounded-xl px-4 py-3" style={{ color: '#EF4444', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)' }}>{error}</p>
       )}
 
       <button
         onClick={sendOtp}
         disabled={!canSubmit || loading}
         className="w-full py-4 rounded-xl text-white text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-2"
-        style={{ background: BRAND }}
+        style={{ background: BRAND, boxShadow: canSubmit ? '0 4px 16px rgba(59,91,250,0.25)' : 'none' }}
       >
         {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-        Recevoir mon code SMS →
+        Continuer →
       </button>
 
       <div className="flex justify-center">
@@ -316,9 +343,9 @@ export default function Step1Identity({ onDone }: Props) {
       </div>
       <SocialProofToast onDecrement={decrement} />
 
-      <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
+      <p className="text-xs text-center" style={{ color: '#9CA3AF' }}>
         Déjà inscrit ?{' '}
-        <a href="/connexion" className="underline" style={{ color: 'rgba(148,163,184,0.7)' }}>
+        <a href="/connexion" style={{ color: MUTED, textDecoration: 'underline' }}>
           Se reconnecter
         </a>
       </p>

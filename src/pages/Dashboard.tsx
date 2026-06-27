@@ -39,8 +39,12 @@ async function syncAssistant() {
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { profile, uploadLogo, memberRole } = useProfile()
-  const [page, setPage] = useState<Page>('today')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [page, setPage] = useState<Page>(() =>
+    sessionStorage.getItem('ob_v2_setup') ? 'hours' : 'today'
+  )
+  const [setupMode, setSetupMode]         = useState(() => !!sessionStorage.getItem('ob_v2_setup'))
+  const [reasonsCount, setReasonsCount]   = useState(0)
+  const [sidebarOpen, setSidebarOpen]     = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // Ferme la sidebar mobile à chaque changement de page
@@ -50,6 +54,30 @@ export default function Dashboard() {
   useEffect(() => {
     if (profile) syncAssistant()
   }, [!!profile])
+
+  // Setup mode — fetch inbound_reasons count (re-fetch on page change)
+  useEffect(() => {
+    if (!setupMode || !user) return
+    supabase.from('inbound_reasons').select('id', { count: 'exact', head: true }).eq('user_id', user.id).then(({ count }) => {
+      setReasonsCount(count ?? 0)
+    })
+  }, [setupMode, user?.id, page])
+
+  function finishSetup() {
+    sessionStorage.removeItem('ob_v2_setup')
+    setSetupMode(false)
+    setPage('today')
+  }
+
+  // Vérification setup validé
+  const hoursValid = (() => {
+    try {
+      const parsed = profile?.hours ? JSON.parse(profile.hours) : null
+      if (!parsed || !Array.isArray(parsed)) return false
+      return parsed.some((d: any) => d.on === true)
+    } catch { return false }
+  })()
+  const canFinishSetup = hoursValid && reasonsCount > 0
 
   if (!profile) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -204,6 +232,52 @@ export default function Dashboard() {
         </header>
 
         <main className="flex-1 p-4 md:p-6 overflow-y-auto overflow-x-hidden pb-20 md:pb-6">
+
+          {/* Banner setup Mia — visible uniquement après onboarding */}
+          {setupMode && (
+            <div style={{
+              background: 'rgba(59,91,250,0.06)',
+              border: '1.5px solid rgba(59,91,250,0.2)',
+              borderRadius: 12,
+              padding: '14px 16px',
+              marginBottom: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              fontFamily: 'Inter, system-ui, sans-serif',
+            }}>
+              <p style={{ fontWeight: 700, color: '#1A1A2E', fontSize: 14 }}>🧠 Présente ton activité à Mia</p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => setPage('hours')} style={{
+                  fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                  background: hoursValid ? '#D1FAE5' : 'rgba(59,91,250,0.10)',
+                  color: hoursValid ? '#059669' : '#3B5BFA',
+                }}>
+                  {hoursValid ? '✓' : '○'} Horaires
+                </button>
+                <button onClick={() => setPage('inbound-reasons')} style={{
+                  fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                  background: reasonsCount > 0 ? '#D1FAE5' : 'rgba(59,91,250,0.10)',
+                  color: reasonsCount > 0 ? '#059669' : '#3B5BFA',
+                }}>
+                  {reasonsCount > 0 ? '✓' : '○'} Raisons d'appel
+                </button>
+              </div>
+              <button
+                onClick={canFinishSetup ? finishSetup : undefined}
+                style={{
+                  padding: '10px 16px', borderRadius: 8, border: 'none',
+                  background: canFinishSetup ? '#3B5BFA' : '#D1D5DB',
+                  color: '#fff', fontWeight: 700, fontSize: 13,
+                  cursor: canFinishSetup ? 'pointer' : 'not-allowed',
+                  boxShadow: canFinishSetup ? '0 2px 8px rgba(59,91,250,0.25)' : 'none',
+                }}
+              >
+                {canFinishSetup ? 'Terminer et accéder au dashboard →' : 'Remplis tes horaires et au moins 1 prestation pour continuer.'}
+              </button>
+            </div>
+          )}
+
           {page === 'today' && <TodayPage accent={accent} onNavigate={setPage} />}
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
