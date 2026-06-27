@@ -11,7 +11,6 @@ const MONTHLY_LIMIT  = 100
 
 const supabase = createClient(SB_URL, SB_SERVICE)
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' }
 
 async function lkMakeToken(sipGrant: Record<string, boolean>): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
@@ -43,16 +42,15 @@ async function lkPost(path: string, body: unknown, useCallGrant = false): Promis
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   const auth = req.headers.get('Authorization') ?? ''
   if (auth !== `Bearer ${SB_SERVICE}`) {
-    return new Response('Unauthorized', { status: 401, headers: cors })
+    return new Response('Unauthorized', { status: 401 })
   }
 
   if (!LK_URL || !LK_KEY || !LK_SECRET) {
     return new Response(JSON.stringify({ error: 'livekit_not_configured' }), {
-      status: 503, headers: { ...cors, 'Content-Type': 'application/json' },
+      status: 503, headers: { 'Content-Type': 'application/json' },
     })
   }
 
@@ -67,7 +65,7 @@ Deno.serve(async (req) => {
     if (error) throw error
     if (!pendingCalls || pendingCalls.length === 0) {
       return new Response(JSON.stringify({ ok: true, processed: 0 }), {
-        headers: { ...cors, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       })
     }
 
@@ -158,13 +156,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
     })
 
   } catch (e: any) {
     console.error('[scheduler] error:', e.message)
     return new Response(JSON.stringify({ error: 'internal_server_error' }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
 })

@@ -5,7 +5,6 @@ const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLY
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const CRON_SECRET = Deno.env.get('CRON_SECRET') || null
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type, x-cron-secret' }
 
 
 function weekRange(): { from: Date; to: Date; label: string } {
@@ -213,7 +212,6 @@ async function sendEmail(to: string, subject: string, html: string) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   if (CRON_SECRET) {
     const cronHeader  = req.headers.get('x-cron-secret')
@@ -242,7 +240,7 @@ Deno.serve(async (req) => {
     })
     const testTo = url.searchParams.get('email') || 'anhnoe340@gmail.com'
     await sendEmail(testTo, '📊 [TEST] Rapport hebdo Fixlyy — 12 appels cette semaine', testHtml)
-    return new Response(JSON.stringify({ ok: true, test: true, to: testTo }), { headers: { ...cors, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ ok: true, test: true, to: testTo }), { headers: { 'Content-Type': 'application/json' } })
   }
 
   const { from, to, label: weekLabel } = weekRange()
@@ -265,7 +263,7 @@ Deno.serve(async (req) => {
 
   if (error || !artisans.length) {
     console.error('No artisans or error:', error)
-    return new Response(JSON.stringify({ ok: true, sent: 0 }), { headers: { ...cors, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ ok: true, sent: 0 }), { headers: { 'Content-Type': 'application/json' } })
   }
 
   let sent = 0
@@ -352,6 +350,6 @@ Deno.serve(async (req) => {
 
   return new Response(
     JSON.stringify({ ok: true, sent, errors }),
-    { headers: { ...cors, 'Content-Type': 'application/json' } }
+    { headers: { 'Content-Type': 'application/json' } }
   )
 })

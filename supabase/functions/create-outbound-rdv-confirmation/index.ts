@@ -5,21 +5,19 @@ const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 
 const supabase = createClient(SB_URL, SB_SERVICE)
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   const auth = req.headers.get('Authorization') ?? ''
   if (auth !== `Bearer ${SB_SERVICE}`) {
-    return new Response('Unauthorized', { status: 401, headers: cors })
+    return new Response('Unauthorized', { status: 401 })
   }
 
   let body: Record<string, unknown>
   try {
     body = await req.json()
   } catch {
-    return new Response('Bad Request', { status: 400, headers: cors })
+    return new Response('Bad Request', { status: 400 })
   }
 
   const profileId   = body.profile_id   as string | null
@@ -29,7 +27,7 @@ Deno.serve(async (req) => {
 
   if (!profileId || !callerPhone || !rdvDate) {
     return new Response(JSON.stringify({ error: 'missing_fields' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+      status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
 
@@ -40,7 +38,7 @@ Deno.serve(async (req) => {
 
   if (rdvDateObj < new Date()) {
     return new Response(JSON.stringify({ ok: true, skipped: 'rdv_in_past' }), {
-      headers: { ...cors, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
     })
   }
 
@@ -57,13 +55,13 @@ Deno.serve(async (req) => {
   if (error) {
     console.error('[create-outbound-rdv-confirmation] insert failed:', error.message)
     return new Response(JSON.stringify({ error: 'insert_failed' }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      status: 500, headers: { 'Content-Type': 'application/json' },
     })
   }
 
   console.log(`[rdv-confirmation] scheduled for ***${callerPhone.slice(-4)} on ${rdvDateObj.toISOString()}`)
 
   return new Response(JSON.stringify({ ok: true, scheduled_at: rdvDateObj.toISOString() }), {
-    headers: { ...cors, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   })
 })

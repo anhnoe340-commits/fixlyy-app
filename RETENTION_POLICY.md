@@ -15,6 +15,8 @@
 | Transcriptions | `calls.transcript` | 12 mois | Même base que les appels |
 | Conversations SMS | `sms_conversations` | 12 mois | Suivi client artisan |
 | Données personnelles (nom, téléphone, email) | `profiles` | Durée abonnement + 3 mois | Obligations contractuelles |
+| Contexte activité artisan | `profiles.business_context` | Durée abonnement + 1 an | Données métier (horaires, prestations, équipe). Suppression automatique via `delete-account`. |
+| Indisponibilités ponctuelles | `unavailabilities` | Durée abonnement (cascade) | Suppression automatique via `ON DELETE CASCADE` sur `profile_id`. |
 | Appels sortants programmés | `outbound_calls` | 12 mois | Traçabilité opérationnelle |
 | Fingerprints d'essai | `trial_fingerprints` | 30 jours | Anti-abus essai gratuit |
 | Logs d'audit | `audit_logs` | 24 mois | Obligation légale / CNIL |
