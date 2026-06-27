@@ -135,9 +135,10 @@ export default function Step2Payment({ loading, error, onPay }: Props) {
       <button
         onClick={handlePay}
         disabled={loading}
-        className="w-full py-4 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 transition-all"
+        className="w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
         style={{
-          background: cguAccepted ? BRAND : '#D1D5DB',
+          background: cguAccepted ? BRAND : '#E5E7EB',
+          color: cguAccepted ? '#fff' : '#9CA3AF',
           cursor: cguAccepted ? 'pointer' : 'not-allowed',
           boxShadow: cguAccepted ? '0 4px 16px rgba(59,91,250,0.28)' : 'none',
         }}
