@@ -137,6 +137,7 @@ export default function Dashboard() {
               <NavItem icon={<PhoneInIcon />} label="Raisons d'appel" active={page === 'inbound-reasons'} onClick={() => setPage('inbound-reasons')} accent={accent} />
               <NavItem icon={<PriceTagIcon />} label="Mes tarifs" active={page === 'pricing'} onClick={() => setPage('pricing')} accent={accent} />
               <NavItem icon={<ClockIcon />} label="Horaires" active={page === 'hours'} onClick={() => setPage('hours')} accent={accent} />
+              <NavItem icon={<BrainIcon />} label="Mon activité" active={false} onClick={() => { window.location.href = '/dashboard/mon-activite' }} accent={accent} />
             </div>
           )}
 
@@ -5358,6 +5359,7 @@ const HomeIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 6.5L8 2l
 const PhoneIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5A1.5 1.5 0 014.5 1h.879a1 1 0 01.949.684l.674 2.022A1 1 0 016.657 5l-.74.74a7.05 7.05 0 003.344 3.344l.74-.74a1 1 0 011.293-.345l2.022.674A1 1 0 0114 9.621V10.5A1.5 1.5 0 0112.5 12H12A9.5 9.5 0 012.5 2.5V2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const UserIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.2"/><path d="M2 13c0-3.314 2.686-6 6-6s6 2.686 6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const BotIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="6" cy="7.5" r="1" fill="currentColor"/><circle cx="10" cy="7.5" r="1" fill="currentColor"/><path d="M6 10.5c.5.5 3.5.5 4 0" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/><path d="M8 2.5v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+const BrainIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M8 3c-.55 0-1 .45-1 1v.1A3 3 0 005 7c-.55 0-1 .45-1 1s.45 1 1 1v.1A3 3 0 008 12a3 3 0 003-2.9V9c.55 0 1-.45 1-1s-.45-1-1-1a3 3 0 00-2-2.9V4c0-.55-.45-1-1-1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M5 8H3M11 8h2M8 3V2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const ClockIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/><path d="M8 5v3l2 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const CardIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 8h2M4 10.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1 7h14" stroke="currentColor" strokeWidth="1.2"/></svg>
 const MenuIcon = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M2 4h14M2 9h14M2 14h14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>

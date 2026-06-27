@@ -217,7 +217,7 @@ async def fetch_artisan_profile(user_id: str) -> dict:
     }
     params = {
         "id": f"eq.{user_id}",
-        "select": "company_name,company_type,assistant_name,greeting_open,phone,transfer_phone,twilio_number",
+        "select": "company_name,company_type,assistant_name,greeting_open,phone,transfer_phone,twilio_number,business_context",
         "limit": "1",
     }
     try:
@@ -229,6 +229,249 @@ async def fetch_artisan_profile(user_id: str) -> dict:
     except Exception as e:
         logger.warning(f"[mia] fetch_artisan_profile failed: {e}")
         return {}
+
+
+async def fetch_active_unavailabilities(user_id: str) -> list:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    url = f"{SUPABASE_URL}/rest/v1/unavailabilities"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+    params = {
+        "profile_id": f"eq.{user_id}",
+        "start_at":   f"lte.{now_iso}",
+        "end_at":     f"gte.{now_iso}",
+        "select":     "team_member_name,start_at,end_at",
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params=params, timeout=3.0)
+            resp.raise_for_status()
+            return resp.json() or []
+    except Exception as e:
+        logger.warning(f"[mia] fetch_active_unavailabilities failed: {e}")
+        return []
+
+
+def _fmt_services(services: list) -> str:
+    if not services:
+        return ""
+    lines = []
+    for s in services[:20]:
+        name = s.get("name", "")
+        if not name:
+            continue
+        pmin = s.get("price_min", "")
+        pmax = s.get("price_max", "")
+        dur  = s.get("duration", "")
+        emg  = "urgence possible" if s.get("emergency") else ""
+        parts = [name]
+        if pmin and pmax:
+            parts.append(f"{pmin}–{pmax}€")
+        elif pmin:
+            parts.append(f"à partir de {pmin}€")
+        if dur:
+            parts.append(dur)
+        if emg:
+            parts.append(emg)
+        lines.append(" | ".join(parts))
+    return "\n".join(f"  - {l}" for l in lines)
+
+
+def _fmt_team(team: list) -> str:
+    if not team:
+        return ""
+    lines = []
+    for m in team:
+        name = m.get("name", "")
+        if not name:
+            continue
+        role   = m.get("role", "")
+        active = m.get("active", True)
+        status = "disponible" if active else "indisponible"
+        lines.append(f"  - {name} ({role}) — {status}")
+    return "\n".join(lines)
+
+
+def _fmt_faq(faq: list) -> str:
+    if not faq:
+        return ""
+    lines = []
+    for f in faq[:15]:
+        q = f.get("question", "")
+        a = f.get("answer", "")
+        if q and a:
+            lines.append(f"  Q: {q}\n  R: {a}")
+    return "\n".join(lines)
+
+
+def _fmt_regular_clients(clients: list) -> str:
+    if not clients:
+        return ""
+    names = [c.get("name", "") for c in clients if c.get("name")]
+    return "  " + ", ".join(names[:20])
+
+
+def _fmt_blacklist(bl: list) -> str:
+    if not bl:
+        return ""
+    entries = []
+    for b in bl:
+        name  = b.get("name", "")
+        phone = b.get("phone", "")
+        if name or phone:
+            entries.append(f"{name} {phone}".strip())
+    return "  " + " | ".join(entries[:20])
+
+
+def _fmt_zones(zones: dict) -> str:
+    if not zones:
+        return ""
+    inc = zones.get("included", [])
+    exc = zones.get("excluded", [])
+    parts = []
+    if inc:
+        parts.append("Zones couvertes : " + ", ".join(inc))
+    if exc:
+        parts.append("Zones exclues : " + ", ".join(exc))
+    notes = zones.get("notes", "")
+    if notes:
+        parts.append(notes)
+    return "\n".join(f"  {p}" for p in parts)
+
+
+def build_business_context_block(bc: dict, unavailabilities: list) -> str:
+    if not bc:
+        return ""
+
+    parts: list[str] = []
+
+    # Horaires
+    schedule = bc.get("schedule", {})
+    days = schedule.get("days", [])
+    open_days = [d["day"] for d in days if d.get("on")]
+    if open_days:
+        day_lines = []
+        for d in days:
+            if d.get("on"):
+                day_lines.append(f"{d['day']} {d.get('open','08:00')}–{d.get('close','18:00')}")
+        parts.append("HORAIRES DE L'ARTISAN :\n  " + " | ".join(day_lines))
+        delay = schedule.get("callback_delay", "")
+        if delay:
+            parts.append(f"  Délai de rappel habituel : {delay}")
+        notes = schedule.get("notes", "")
+        if notes:
+            parts.append(f"  Note horaires : {notes}")
+
+    # Indisponibilités actives
+    if unavailabilities:
+        who_list = []
+        for u in unavailabilities:
+            who = u.get("team_member_name") or "l'artisan"
+            who_list.append(who)
+        parts.append(
+            "INDISPONIBILITÉS EN CE MOMENT : " + ", ".join(set(who_list)) +
+            "\n  → Si quelqu'un est indisponible, propose le prochain créneau libre. "
+            "Ne donne jamais la raison de l'indisponibilité."
+        )
+
+    # Prestations
+    services = bc.get("services", [])
+    svc_block = _fmt_services(services)
+    if svc_block:
+        parts.append("PRESTATIONS ET TARIFS :\n" + svc_block)
+
+    # Équipe
+    team = bc.get("team", [])
+    team_block = _fmt_team(team)
+    if team_block:
+        parts.append("ÉQUIPE :\n" + team_block)
+
+    # Clients réguliers
+    clients = _fmt_regular_clients(bc.get("regular_clients", []))
+    if clients:
+        parts.append("CLIENTS RÉGULIERS (traiter en priorité) :\n" + clients)
+
+    # FAQ
+    faq_block = _fmt_faq(bc.get("faq", []))
+    if faq_block:
+        parts.append("QUESTIONS FRÉQUENTES — utilise ces réponses exactes :\n" + faq_block)
+
+    # Ton
+    tone = bc.get("tone", {})
+    if tone:
+        tuto   = "tutoiement" if tone.get("tutoiement") else "vouvoiement"
+        style  = tone.get("style", "")
+        instrs = tone.get("instructions", "")
+        tone_parts = [f"Utilise le {tuto}."]
+        if style:
+            tone_parts.append(f"Ton : {style}.")
+        if instrs:
+            tone_parts.append(instrs)
+        parts.append("TON ET STYLE :\n  " + " ".join(tone_parts))
+
+    # Zones
+    zones_block = _fmt_zones(bc.get("zones", {}))
+    if zones_block:
+        parts.append("ZONES D'INTERVENTION :\n" + zones_block)
+
+    # Blacklist
+    bl_block = _fmt_blacklist(bc.get("blacklist", []))
+    if bl_block:
+        parts.append(
+            "CONTACTS BLACKLISTÉS — si ces personnes appellent, dis que l'artisan n'est pas disponible :\n" + bl_block
+        )
+
+    # Concurrents
+    competitors = bc.get("competitors", "").strip()
+    if competitors:
+        parts.append(
+            "NE JAMAIS MENTIONNER ces concurrents ni commenter :\n  " + competitors
+        )
+
+    # Situations difficiles
+    diff = bc.get("difficult_situations", {})
+    diff_lines = []
+    if diff.get("aggressive"):
+        diff_lines.append(f"  Client agressif → {diff['aggressive']}")
+    if diff.get("complaint"):
+        diff_lines.append(f"  Réclamation → {diff['complaint']}")
+    if diff.get("threat"):
+        diff_lines.append(f"  Menace d'avis → {diff['threat']}")
+    if diff_lines:
+        parts.append("GESTION SITUATIONS DIFFICILES :\n" + "\n".join(diff_lines))
+
+    # Objectifs commerciaux
+    goals = bc.get("commercial_goals", {})
+    prio   = goals.get("priority", [])
+    refuse = goals.get("refuse", [])
+    g_instr = goals.get("instructions", "").strip()
+    goal_lines = []
+    if prio:
+        goal_lines.append("  À privilégier : " + ", ".join(prio))
+    if refuse:
+        goal_lines.append("  À refuser : " + ", ".join(refuse))
+    if g_instr:
+        goal_lines.append("  " + g_instr)
+    if goal_lines:
+        parts.append("OBJECTIFS COMMERCIAUX :\n" + "\n".join(goal_lines))
+
+    # Infos spéciales
+    special = bc.get("special_info", "").strip()
+    if special:
+        parts.append("INFORMATIONS SPÉCIALES :\n  " + special)
+
+    if not parts:
+        return ""
+
+    return (
+        "\n\n--- CONTEXTE DE L'ACTIVITÉ DE L'ARTISAN ---\n"
+        + "\n\n".join(parts)
+        + "\n--- FIN DU CONTEXTE ---"
+    )
 
 
 async def fetch_service_pricing(user_id: str) -> list:
@@ -592,6 +835,8 @@ class MiaAgent(Agent):
         room_name: str = "",
         sip_ref: dict | None = None,
         user_id: str = "",
+        business_context: dict | None = None,
+        unavailabilities: list | None = None,
     ):
         company_name   = profile.get("company_name")   or "votre artisan"
         company_type   = profile.get("company_type")   or "artisan"
@@ -618,11 +863,18 @@ class MiaAgent(Agent):
         else:
             tools = []
 
+        base_instructions = build_instructions(
+            assistant_name, company_name, company_type,
+            pricing, multilingual, demo_mode, can_transfer,
+        )
+        ctx_block = build_business_context_block(
+            business_context or {},
+            unavailabilities or [],
+        )
+        instructions = base_instructions + ctx_block
+
         super().__init__(
-            instructions=build_instructions(
-                assistant_name, company_name, company_type,
-                pricing, multilingual, demo_mode, can_transfer,
-            ),
+            instructions=instructions,
             tools=tools,
             turn_handling={
                 "endpointing": {"min_delay": 0.3},
@@ -819,18 +1071,25 @@ async def entrypoint(ctx: JobContext):
     # Container mutable partagé entre entrypoint et MiaAgent
     sip_ref = {"identity": None, "caller_number": "", "transferred_to": None, "transferred_at": None}
 
+    business_context: dict = {}
+    unavailabilities: list = []
+
     if room_name.startswith("artisan-"):
         user_id = room_name[len("artisan-"):]
         logger.info(f"[mia] fetching profile for user_id={user_id}")
-        profile, pricing = await asyncio.gather(
+        profile, pricing, unavailabilities = await asyncio.gather(
             fetch_artisan_profile(user_id),
             fetch_service_pricing(user_id),
+            fetch_active_unavailabilities(user_id),
         )
+        business_context = profile.pop("business_context", None) or {}
         multilingual = True
         if profile:
             logger.info(
                 f"[mia] profile loaded — company={profile.get('company_name')!r} "
                 f"pricing={len(pricing)} items "
+                f"business_context={'yes' if business_context else 'no'} "
+                f"unavailabilities={len(unavailabilities)} "
                 f"transfer_phone={'yes' if (profile.get('transfer_phone') or profile.get('phone')) else 'no'}"
             )
         else:
@@ -966,6 +1225,8 @@ async def entrypoint(ctx: JobContext):
             room_name=room_name,
             sip_ref=sip_ref,
             user_id=user_id,
+            business_context=business_context,
+            unavailabilities=unavailabilities,
         )
 
     await session.start(agent, room=ctx.room)

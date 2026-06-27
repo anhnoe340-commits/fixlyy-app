@@ -5,6 +5,7 @@ import OnboardingV2 from '@/pages/onboarding-v2/OnboardingV2'
 import OnboardingV3 from '@/pages/onboarding-v3/OnboardingV3'
 import LoginPage from '@/pages/LoginPage'
 import Dashboard from '@/pages/Dashboard'
+import BusinessContext from '@/pages/BusinessContext'
 import AcceptQuotePage from '@/pages/AcceptQuotePage'
 import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import JoinTeam from '@/pages/JoinTeam'
@@ -118,5 +119,6 @@ export default function App() {
   if (window.location.pathname === '/join' && new URLSearchParams(window.location.search).has('token')) return <JoinDashboard />
   if (window.location.pathname.startsWith('/join/')) return <JoinTeam />
   if (window.location.pathname.startsWith('/r/')) return <ResumePage />
+  if (window.location.pathname === '/dashboard/mon-activite') return <AuthProvider><BusinessContext /></AuthProvider>
   return <AuthProvider><AppContent /></AuthProvider>
 }

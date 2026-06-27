@@ -40,8 +40,7 @@ export default function Step6Install({ userId, onDone }: Props) {
         onboarding_completed: true,
       }).eq('id', userId)
     } catch { /* ignore — not blocking */ }
-    sessionStorage.setItem('ob_v2_setup', '1')
-    onDone()
+    window.location.href = '/dashboard/mon-activite?from=onboarding'
   }
 
   return (
