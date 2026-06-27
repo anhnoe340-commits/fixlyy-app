@@ -37,22 +37,29 @@ export default function ScarcityBadge({ remaining, loading = false }: Props) {
         }
       `}</style>
       <div style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        padding: '8px 14px', borderRadius: 8,
-        background: 'rgba(251,146,60,0.12)', border: '1px solid rgba(251,146,60,0.40)',
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '12px 16px', borderRadius: 10,
+        background: 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)',
+        border: '2px solid #FB923C',
+        boxShadow: '0 2px 12px rgba(251,146,60,0.25)',
         animation: 'scarcityPulse 2.5s ease-in-out infinite',
+        width: '100%',
       }}>
-        <span style={{ fontSize: 14 }}>⚠️</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#FB923C', lineHeight: 1.3 }}>
+        <span style={{ fontSize: 20, flexShrink: 0 }}>🔥</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#C2410C', lineHeight: 1.4 }}>
           Il ne reste que{' '}
           <span style={{
             animation: flash ? 'scarcityFlash 0.4s ease' : 'none',
             display: 'inline-block',
+            color: '#DC2626',
+            fontSize: 15,
           }}>
             {display}
           </span>
-          {' '}place{display > 1 ? 's' : ''} ce mois-ci —{' '}
-          Prix fondateurs <strong style={{ color: '#fff' }}>197€</strong>
+          {' '}place{display > 1 ? 's' : ''} ce mois-ci{' '}
+          —{' '}Prix fondateurs{' '}
+          <strong style={{ color: '#C2410C', fontSize: 14 }}>197€</strong>
+          {' '}<span style={{ fontSize: 12, fontWeight: 400, color: '#9A3412' }}>(au lieu de 497€)</span>
         </span>
       </div>
     </>
