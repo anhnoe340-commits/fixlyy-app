@@ -47,6 +47,7 @@ serve(async (req) => {
       customer: customer.id,
       mode: 'subscription',
       line_items: [{ price: PRICE_ID, quantity: 1 }],
+      discounts: [{ coupon: 'FONDATEURS' }],
       metadata: {
         supabase_uid: user.id,
         company: company ?? '',
@@ -61,7 +62,6 @@ serve(async (req) => {
       },
       success_url: `${APP_BASE}/commencer?checkout=success`,
       cancel_url:  `${APP_BASE}/commencer`,
-      allow_promotion_codes: true,
       billing_address_collection: 'auto',
       locale: 'fr',
     });

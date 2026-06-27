@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import SocialProofToast, { useSocialProof } from '@/components/SocialProofToast'
+import ScarcityBadge from '@/components/ScarcityBadge'
 
 const BRAND = '#3B5BF5'
 
@@ -30,6 +32,7 @@ interface Props {
 }
 
 export default function Step1Identity({ onDone }: Props) {
+  const { remaining, loading: slotsLoading, decrement } = useSocialProof()
   const [phase, setPhase]                   = useState<'form' | 'otp'>('form')
   const [fullName, setFullName]             = useState('')
   const [trade, setTrade]                   = useState(TRADES[0].value)
@@ -307,6 +310,11 @@ export default function Step1Identity({ onDone }: Props) {
         {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
         Recevoir mon code SMS →
       </button>
+
+      <div className="flex justify-center">
+        <ScarcityBadge remaining={remaining} loading={slotsLoading} />
+      </div>
+      <SocialProofToast onDecrement={decrement} />
 
       <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
         Déjà inscrit ?{' '}

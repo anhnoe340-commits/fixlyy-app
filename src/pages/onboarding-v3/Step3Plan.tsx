@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Check } from 'lucide-react'
+import SocialProofToast, { useSocialProof } from '@/components/SocialProofToast'
+import ScarcityBadge from '@/components/ScarcityBadge'
 
 const BRAND = '#3B5BF5'
 
@@ -48,6 +50,7 @@ interface Props {
 }
 
 export default function Step3Plan({ userId, onDone }: Props) {
+  const { remaining, loading: slotsLoading, decrement } = useSocialProof()
   const [selected, setSelected] = useState<PlanId>('pro')
   const [loading, setLoading]   = useState(false)
 
@@ -152,9 +155,18 @@ export default function Step3Plan({ userId, onDone }: Props) {
         Démarrer l'essai gratuit →
       </button>
 
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-xs text-center font-semibold" style={{ color: 'rgba(203,213,225,0.8)' }}>
+          🔒 Prix fondateurs <strong style={{ color: '#fff' }}>197€</strong> le 1er mois — puis 497€/mois
+        </p>
+        <ScarcityBadge remaining={remaining} loading={slotsLoading} />
+      </div>
+
       <p className="text-xs text-center" style={{ color: 'rgba(148,163,184,0.45)' }}>
         Aucun prélèvement pendant 7 jours · CB demandée uniquement à l'activation
       </p>
+
+      <SocialProofToast onDecrement={decrement} />
     </div>
   )
 }
