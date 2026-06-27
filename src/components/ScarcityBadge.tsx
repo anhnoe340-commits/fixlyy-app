@@ -5,19 +5,23 @@ interface Props {
   loading?: boolean
 }
 
+const MIN_DISPLAY = 5
+
 export default function ScarcityBadge({ remaining, loading = false }: Props) {
-  const [display, setDisplay] = useState(remaining)
+  const clamped = Math.max(remaining, MIN_DISPLAY)
+  const [display, setDisplay] = useState(clamped)
   const [flash, setFlash]     = useState(false)
-  const prevRef               = useRef(remaining)
+  const prevRef               = useRef(clamped)
 
   useEffect(() => {
-    if (remaining !== prevRef.current) {
+    const next = Math.max(remaining, MIN_DISPLAY)
+    if (next !== prevRef.current) {
       setFlash(true)
-      const t = setTimeout(() => { setDisplay(remaining); setFlash(false) }, 200)
-      prevRef.current = remaining
+      const t = setTimeout(() => { setDisplay(next); setFlash(false) }, 200)
+      prevRef.current = next
       return () => clearTimeout(t)
     } else {
-      setDisplay(remaining)
+      setDisplay(next)
     }
   }, [remaining])
 
