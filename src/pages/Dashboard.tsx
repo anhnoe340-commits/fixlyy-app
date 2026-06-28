@@ -4,6 +4,8 @@ import { useProfile } from '@/contexts/ProfileContext'
 import { supabase } from '@/lib/supabase'
 import AddMemberModal from '@/components/team/AddMemberModal'
 import TrialBanner from '@/components/TrialBanner'
+import PushNotificationBanner from '@/components/PushNotificationBanner'
+import NotificationsPage from '@/pages/NotificationsPage'
 import UsageMeter from '@/components/UsageMeter'
 import { CallsEvolutionChart, HourlyChart, ReasonsChart, type DayPoint, type ReasonPoint, type HourPoint } from '@/components/StatsCharts'
 
@@ -11,7 +13,7 @@ type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
-  | 'subscription' | 'pricing'
+  | 'subscription' | 'pricing' | 'notifications'
 
 const BRAND = '#2850c8'
 
@@ -149,6 +151,7 @@ export default function Dashboard() {
               <NavItem icon={<TeamIcon />} label="Équipe" active={page === 'employees'} onClick={() => setPage('employees')} accent={accent} />
               <NavItem icon={<PuzzleIcon />} label="Intégrations" active={page === 'integrations'} onClick={() => setPage('integrations')} accent={accent} />
               <NavItem icon={<CardIcon />} label="Abonnement" active={page === 'subscription'} onClick={() => setPage('subscription')} accent={accent} />
+              <NavItem icon={<BellIcon />} label="Notifications" active={page === 'notifications'} onClick={() => setPage('notifications')} accent={accent} />
             </div>
           )}
 
@@ -279,6 +282,7 @@ export default function Dashboard() {
             </div>
           )}
 
+          {page === 'today' && <PushNotificationBanner />}
           {page === 'today' && <TodayPage accent={accent} onNavigate={setPage} />}
           {page === 'calls' && <CallsPage accent={accent} />}
           {page === 'contacts' && <ContactsPage accent={accent} />}
@@ -305,6 +309,7 @@ export default function Dashboard() {
           {page === 'integrations' && <IntegrationsPage accent={accent} onUpgrade={() => setPage('subscription')} />}
           {page === 'timezone' && <TimezonePage accent={accent} />}
           {page === 'subscription' && <SubscriptionPage accent={accent} />}
+          {page === 'notifications' && <NotificationsPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -333,6 +338,7 @@ const PAGE_LABELS: Record<Page, string> = {
   timezone: 'Fuseau horaire',
   subscription: 'Abonnement',
   pricing: 'Mes tarifs',
+  notifications: 'Notifications',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
@@ -5377,4 +5383,5 @@ const CalendarIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y=
 const GlobeIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 1.5C8 1.5 5.5 4 5.5 8s2.5 6.5 2.5 6.5M8 1.5C8 1.5 10.5 4 10.5 8S8 14.5 8 14.5M1.5 8h13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10.5 11l3-3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13.5 8H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
 const PriceTagIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 2h6l5.5 5.5a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L2 8V2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor"/></svg>
+const BellIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a5 5 0 00-5 5v2.5L2 11h12l-1-1.5V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M6.5 11c0 .828.672 1.5 1.5 1.5s1.5-.672 1.5-1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 2V1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const SmsIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6l-3 2.5V11H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8" cy="6.5" r="0.8" fill="currentColor"/><circle cx="10.5" cy="6.5" r="0.8" fill="currentColor"/></svg>

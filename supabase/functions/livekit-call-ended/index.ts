@@ -7,6 +7,7 @@ const SB_SERVICE  = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 const TWILIO_SID   = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
 const TWILIO_AUTH  = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)
+const FCM_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') ?? ''
 
 const supabase = createClient(SB_URL, SB_SERVICE)
 
@@ -14,6 +15,55 @@ const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
+
+// ── FCM helpers ──────────────────────────────────────────────────────────────
+
+async function _fcmAccessToken(): Promise<string | null> {
+  const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT_KEY')
+  if (!raw || !FCM_PROJECT_ID) return null
+  try {
+    const sa   = JSON.parse(raw)
+    const now  = Math.floor(Date.now() / 1000)
+    const clms = { iss: sa.client_email, sub: sa.client_email, aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600, scope: 'https://www.googleapis.com/auth/firebase.messaging' }
+    const enc  = (s: string) => btoa(s).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')
+    const hdr  = enc(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+    const bdy  = enc(JSON.stringify(clms))
+    const pem  = sa.private_key.replace(/-----[A-Z ]+-----/g,'').replace(/\n/g,'')
+    const der  = Uint8Array.from(atob(pem), c => c.charCodeAt(0))
+    const key  = await crypto.subtle.importKey('pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign'])
+    const sig  = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${hdr}.${bdy}`))
+    const jwt  = `${hdr}.${bdy}.${enc(String.fromCharCode(...new Uint8Array(sig)))}`
+    const res  = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }),
+    })
+    const td = await res.json()
+    return td.access_token ?? null
+  } catch (e) { console.error('[fcm] token error:', e); return null }
+}
+
+async function sendPushNotification(token: string, title: string, body: string, data: Record<string, string>): Promise<void> {
+  const accessToken = await _fcmAccessToken()
+  if (!accessToken) return
+  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID}/messages:send`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: {
+      token,
+      notification: { title, body },
+      data,
+      android: { priority: 'high' },
+      apns: { payload: { aps: { sound: 'default', badge: 1 } } },
+    }}),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(`FCM ${res.status}: ${JSON.stringify(err)}`)
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 async function sendSms(from: string, to: string, body: string): Promise<void> {
   const res = await fetch(
@@ -81,7 +131,7 @@ Deno.serve(async (req) => {
     // 1. Récupérer le profil artisan
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, phone, twilio_number, assistant_name, company_name, subscription_plan')
+      .select('id, phone, twilio_number, assistant_name, company_name, subscription_plan, fcm_token, push_notifications_enabled')
       .eq('id', userId)
       .single()
 
@@ -302,6 +352,22 @@ Deno.serve(async (req) => {
 
     await sendSms(profile.twilio_number, profile.phone, smsText)
     console.log('[livekit-call-ended] SMS artisan sent')
+
+    // 5b. Push notification FCM — complément du SMS, jamais bloquant
+    if (profile.fcm_token && profile.push_notifications_enabled) {
+      const pushTitle = isUrgent
+        ? `🚨 URGENT — ${callerName || 'Client inconnu'}`
+        : `📞 Nouvel appel — ${callerName || 'Client inconnu'}`
+      const pushBody  = reason || fullSummary?.slice(0, 100) || 'Consultez le récap dans votre dashboard.'
+      const maskedPhone = effectivePhone?.replace(/\d(?=\d{4})/g, '*') ?? 'Inconnu'
+      await sendPushNotification(
+        profile.fcm_token,
+        pushTitle,
+        pushBody,
+        { type: 'call_recap', urgency: urgency || 'normal', caller_phone: maskedPhone },
+      ).catch(e => console.error('[livekit-call-ended] FCM push failed (non-blocking):', e.message))
+      console.log('[livekit-call-ended] push notification sent')
+    }
 
     // Relay SMS membres d'équipe
     try {
