@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import OnboardingVideo from '@/components/OnboardingVideo'
 import { ONBOARDING_VIDEOS } from '@/config/onboarding-videos'
-import { requestFCMToken } from '@/lib/firebase'
-
 const BRAND  = '#3B5BFA'
 const TEXT   = '#1A1A2E'
 const MUTED  = '#6B7280'
@@ -69,28 +67,11 @@ interface Props {
   onDone: () => void
 }
 
-async function activatePushNotifications(userId: string): Promise<boolean> {
-  try {
-    if (!('Notification' in window)) return false
-    const permission = await Notification.requestPermission()
-    if (permission !== 'granted') return false
-    const token = await requestFCMToken()
-    if (!token) return false
-    await supabase.from('profiles').update({
-      fcm_token: token,
-      push_notifications_enabled: true,
-    }).eq('id', userId)
-    return true
-  } catch { return false }
-}
-
 export default function Step5Forwarding({ userId, fixlyyNumber, onDone }: Props) {
   const [twilioNum, setTwilioNum] = useState<string | null>(fixlyyNumber)
   const [openType, setOpenType]   = useState<string | null>(null)
   const [openOp, setOpenOp]       = useState<Record<string, boolean>>({})
   const [copied, setCopied]       = useState<string | null>(null)
-  const [pushActivating, setPushActivating] = useState(false)
-  const [pushDone, setPushDone]             = useState(false)
 
   useEffect(() => {
     if (twilioNum) return
@@ -255,84 +236,38 @@ export default function Step5Forwarding({ userId, fixlyyNumber, onDone }: Props)
         })}
       </div>
 
-      {/* Deux façons de ne jamais rater un appel */}
-      <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
-        <div style={{ background: BRAND, padding: '10px 16px' }}>
-          <p style={{ color: '#fff', fontWeight: 800, fontSize: 13 }}>Deux façons de ne jamais rater un appel</p>
-        </div>
-        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 8, background: 'rgba(59,91,250,0.10)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0,
-            }}>A</div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 2 }}>Tu as un numéro pro</p>
-              <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
-                Fais le renvoi depuis ton numéro pro vers ton numéro Fixlyy. Tes appels perso ne sont pas affectés.
-              </p>
-            </div>
-          </div>
-          <div style={{ height: 1, background: BORDER }} />
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 8, background: 'rgba(59,91,250,0.10)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0,
-            }}>B</div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 2 }}>Tu n'as que ton numéro perso</p>
-              <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
-                Mets directement ton numéro Fixlyy sur Google, Pages Jaunes ou ton site. Tes clients appellent Mia directement. Zéro renvoi, zéro friction.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Comment recevoir tes récaps Mia ? */}
+      <div style={{ background: '#F0F4FF', border: '1px solid rgba(59,91,250,0.18)', borderRadius: 12, padding: '14px 16px' }}>
+        <p style={{ fontSize: 13, fontWeight: 800, color: TEXT, marginBottom: 12 }}>Comment recevoir tes récaps Mia ?</p>
+        <p style={{ fontSize: 12, color: MUTED, marginBottom: 12, fontWeight: 600 }}>Deux façons de ne jamais rater un appel :</p>
 
-      {/* Tes récaps d'appels */}
-      <div style={{ background: 'rgba(59,91,250,0.04)', border: `1px solid rgba(59,91,250,0.15)`, borderRadius: 12, padding: '14px 16px' }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 10 }}>Tes récaps d'appels</p>
-        <p style={{ fontSize: 12, color: MUTED, marginBottom: 12 }}>Après chaque appel, tu reçois :</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-          {[
-            { icon: '📱', label: 'Notification sur l\'app Fixlyy', desc: 'Tap pour ouvrir le détail de l\'appel' },
-            { icon: '💬', label: 'SMS récap',                       desc: 'Backup automatique — même hors connexion' },
-          ].map(({ icon, label, desc }) => (
-            <div key={label} style={{ display: 'flex', gap: 10 }}>
-              <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{label}</p>
-                <p style={{ fontSize: 12, color: MUTED }}>{desc}</p>
-              </div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, background: 'rgba(59,91,250,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: BRAND, flexShrink: 0,
+          }}>📱</div>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 2 }}>Option A — Tu as un numéro pro</p>
+            <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+              Fais le renvoi depuis ton numéro pro vers ton numéro Fixlyy.{'\n'}Tes appels perso ne sont pas affectés.
+            </p>
+          </div>
         </div>
 
-        {!pushDone ? (
-          <button
-            onClick={async () => {
-              setPushActivating(true)
-              const ok = await activatePushNotifications(userId)
-              setPushActivating(false)
-              setPushDone(ok)
-            }}
-            disabled={pushActivating}
-            style={{
-              width: '100%', padding: '12px', borderRadius: 10,
-              background: pushActivating ? '#D1D5DB' : BRAND,
-              color: '#fff', fontSize: 13, fontWeight: 800,
-              border: 'none', cursor: pushActivating ? 'default' : 'pointer',
-              boxShadow: pushActivating ? 'none' : '0 2px 10px rgba(59,91,250,0.25)',
-            }}
-          >
-            {pushActivating ? 'Activation…' : 'Activer les notifications maintenant →'}
-          </button>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(5,150,105,0.08)', borderRadius: 10, border: '1px solid rgba(5,150,105,0.25)' }}>
-            <span>✅</span>
-            <p style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>Notifications activées sur cet appareil</p>
+        <div style={{ height: 1, background: 'rgba(59,91,250,0.12)', marginBottom: 10 }} />
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, background: 'rgba(59,91,250,0.12)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: BRAND, flexShrink: 0,
+          }}>👤</div>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 2 }}>Option B — Tu utilises ton numéro perso</p>
+            <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
+              Mets directement ton numéro Fixlyy sur Google, Pages Jaunes, ou ton site.{'\n'}Tes clients appellent Mia directement. Zéro renvoi. Zéro friction.
+            </p>
           </div>
-        )}
+        </div>
       </div>
 
       <button

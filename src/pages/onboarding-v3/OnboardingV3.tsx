@@ -5,19 +5,20 @@ import Step2Payment from './Step2Payment'
 import Step3Provisioning from './Step3Provisioning'
 import Step4Number from './Step4Number'
 import Step5Forwarding from './Step5Forwarding'
+import StepAppInstall from './StepAppInstall'
 import Step6Install from './Step6Install'
 import { trackEvent } from '@/utils/pixel'
 
 const BRAND = '#3B5BFA'
-const TOTAL = 5
+const TOTAL = 6
 
-const STEP_LABELS = ['Identité', 'Paiement', 'Numéro', 'Renvoi', 'Prêt']
+const STEP_LABELS = ['Identité', 'Paiement', 'Numéro', 'Renvoi', 'App', 'Prêt']
 
 // Maps internal state → visible progress step (provisioning = step 3 is transparent)
 function progressStep(step: number): number {
   if (step <= 2) return step
   if (step === 3) return 2   // provisioning → still shows step 2 in progress
-  return step - 1            // 4→3, 5→4, 6→5
+  return step - 1            // 4→3, 5→4, 6→5, 7→6
 }
 
 function labelIndex(step: number): number {
@@ -220,8 +221,16 @@ export default function OnboardingV3({ onDone }: Props) {
             />
           )}
 
-          {/* Step 6 — Remerciement + Config Mia */}
+          {/* Step 6 — Installation app + permissions push */}
           {state.step === 6 && (
+            <StepAppInstall
+              userId={state.userId!}
+              onDone={() => next()}
+            />
+          )}
+
+          {/* Step 7 — Remerciement + Config Mia */}
+          {state.step === 7 && (
             <Step6Install
               userId={state.userId!}
               deferredPrompt={deferredPrompt}
