@@ -81,6 +81,34 @@ async function livekitAdminToken(): Promise<string> {
   return `${input}.${sigB64}`
 }
 
+// Extrait l'ID de trunk en conflit depuis le message d'erreur LiveKit
+function extractConflictingTrunkId(errBody: string): string | null {
+  const m = errBody.match(/"(ST_[A-Za-z0-9]+)"/)
+  return m ? m[1] : null
+}
+
+// Supprime un trunk orphelin de LiveKit seulement s'il n'est dans aucun profil
+async function deleteOrphanLivekitTrunk(trunkId: string): Promise<boolean> {
+  const { data } = await sb.from('profiles').select('id').eq('livekit_trunk_id', trunkId).limit(1)
+  if (data && data.length > 0) {
+    console.warn(`[assign-number-from-pool] Trunk ${trunkId} encore en use dans profiles — skip delete`)
+    return false
+  }
+  try {
+    const token = await livekitAdminToken()
+    const res = await fetchWithTimeout(`${LK_URL}/twirp/livekit.SIP/DeleteSIPTrunk`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sipTrunkId: trunkId }),
+    }, 10000)
+    console.log(`[assign-number-from-pool] Trunk orphelin ${trunkId} supprimé: ${res.status}`)
+    return res.ok
+  } catch (e) {
+    console.error(`[assign-number-from-pool] Erreur delete trunk orphelin ${trunkId}:`, e)
+    return false
+  }
+}
+
 async function createLivekitSipTrunk(userId: string, phoneNumber: string): Promise<string> {
   const token = await livekitAdminToken()
   const res = await fetchWithTimeout(
@@ -97,6 +125,38 @@ async function createLivekitSipTrunk(userId: string, phoneNumber: string): Promi
   if (!res.ok) {
     const body = await res.text()
     console.error(`[assign-number-from-pool] LiveKit CreateSIPInboundTrunk error: status=${res.status} body=${body}`)
+
+    // Si conflit de trunk → tenter de nettoyer le trunk orphelin et réessayer une fois
+    if (res.status === 400 && body.includes('Conflicting inbound SIP Trunks')) {
+      const conflictId = extractConflictingTrunkId(body)
+      if (conflictId) {
+        console.log(`[assign-number-from-pool] Conflit trunk ${conflictId} sur ${phoneNumber} — tentative nettoyage`)
+        const deleted = await deleteOrphanLivekitTrunk(conflictId)
+        if (deleted) {
+          // Retry
+          const token2 = await livekitAdminToken()
+          const res2 = await fetchWithTimeout(
+            `${LK_URL}/twirp/livekit.SIP/CreateSIPInboundTrunk`,
+            {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token2}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                trunk: { name: `artisan-${userId.slice(0, 8)}`, numbers: [phoneNumber] },
+              }),
+            },
+            12000,
+          )
+          if (res2.ok) {
+            const data2 = await res2.json()
+            const id2 = data2?.sip_trunk_id ?? data2?.sipTrunkId ?? data2?.trunk?.sip_trunk_id ?? data2?.trunk?.sipTrunkId
+            if (id2) return id2 as string
+          }
+          const body2 = await res2.text().catch(() => '')
+          console.error(`[assign-number-from-pool] Retry LiveKit trunk failed: ${body2}`)
+        }
+      }
+    }
+
     throw new Error(`LiveKit CreateSIPInboundTrunk ${res.status}: ${body}`)
   }
   const data = await res.json()

@@ -38,6 +38,10 @@ export default function Step3Provisioning({ userId, onDone }: Props) {
         clearInterval(poll)
         trackEvent('CompleteRegistration')
         onDone(data.twilio_number)
+      } else if (data?.provisioning_status === 'failed') {
+        // Ne pas attendre le timeout — échouer immédiatement
+        clearInterval(poll)
+        setTimedOut(true)
       }
     }, POLL_INTERVAL)
 
