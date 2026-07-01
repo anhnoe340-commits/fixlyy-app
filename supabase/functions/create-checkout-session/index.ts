@@ -62,6 +62,7 @@ serve(async (req) => {
       },
       success_url: `${APP_BASE}/commencer?checkout=success`,
       cancel_url:  `${APP_BASE}/commencer`,
+      payment_method_collection: 'always',
       billing_address_collection: 'auto',
       locale: 'fr',
     });
