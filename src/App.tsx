@@ -48,7 +48,7 @@ function OnboardingV3Entry() {
   }, [user, loading])
 
   if (loading || !checked) return <Spinner />
-  return <OnboardingV3 onDone={() => { window.location.replace('/') }} />
+  return <OnboardingV3 onDone={() => { window.location.replace('/dashboard/mon-activite?from=onboarding') }} />
 }
 
 type AppStatus = 'loading' | 'auth' | 'onboarding' | 'provisioning' | 'dashboard'
