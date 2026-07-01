@@ -18,7 +18,7 @@
 | Contexte activité artisan | `profiles.business_context` | Durée abonnement + 1 an | Données métier (horaires, prestations, équipe). Suppression automatique via `delete-account`. |
 | Indisponibilités ponctuelles | `unavailabilities` | Durée abonnement (cascade) | Suppression automatique via `ON DELETE CASCADE` sur `profile_id`. |
 | Appels sortants programmés | `outbound_calls` | 12 mois | Traçabilité opérationnelle |
-| Fingerprints d'essai | `trial_fingerprints` | 30 jours | Anti-abus essai gratuit |
+| Fingerprints d'essai | `trial_fingerprints` | 90 jours | Anti-abus essai gratuit |
 | Logs d'audit | `audit_logs` | 24 mois | Obligation légale / CNIL |
 | Leads marketing | `demo_leads` | 12 mois | Suivi commercial |
 | Logs edge functions | `edge_function_logs` | 6 mois | Débogage opérationnel |
@@ -38,7 +38,7 @@
 ## Procédure d'automatisation
 
 **rgpd-purge** s'exécute chaque **dimanche à 3h UTC** (cron `0 3 * * 0`) :
-- Purge `trial_fingerprints` > 30 jours
+- Purge `trial_fingerprints` > 90 jours
 - Purge `calls` > 12 mois
 - Purge `sms_conversations` > 12 mois
 
