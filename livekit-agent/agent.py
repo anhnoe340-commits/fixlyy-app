@@ -166,6 +166,44 @@ _URGENCY_SAFE: frozenset[str] = frozenset([
     "Calm", "Peaceful", "Confident", "Trust", "Determined",
 ])
 
+# Noms de langues pour l'injection LLM (partagé entre MiaAgent et WebDemoMiaAgent)
+_LANG_NAMES: dict[str, str] = {
+    "en": "English",
+    "de": "German",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ru": "Russian",
+    "ar": "Arabic",
+    "es": "Spanish",
+    "pt": "Portuguese",
+}
+
+# Mots-clés client → code langue pour la démo multilingue
+_DEMO_LANG_REQUEST_MAP: dict[str, str] = {
+    "anglais":     "en",
+    "english":     "en",
+    "espagnol":    "es",
+    "spanish":     "es",
+    "español":     "es",
+    "arabe":       "ar",
+    "arabic":      "ar",
+    "portugais":   "pt",
+    "portuguese":  "pt",
+    "allemand":    "de",
+    "german":      "de",
+    "italien":     "it",
+    "italian":     "it",
+    "néerlandais": "nl",
+    "dutch":       "nl",
+    "polonais":    "pl",
+    "polish":      "pl",
+    "russe":       "ru",
+    "russian":     "ru",
+    "français":    "fr",
+    "french":      "fr",
+}
+
 
 def _keyword_emotion(text: str) -> str | None:
     """Retourne l'émotion la plus appropriée selon le contenu de la phrase de Mia,
@@ -321,6 +359,21 @@ qu'on la lui impose.
 
 8. Vers la fin — mentionne naturellement l'essai gratuit de 7 jours si la conversation s'y
 prête, sans forcer.
+
+9. DÉMONSTRATION MULTILINGUE :
+Après avoir qualifié le métier et au moins un besoin de l'artisan (pas avant le 3ème échange),
+propose naturellement de montrer ta capacité multilingue. Exemples :
+- "Au fait, je parle aussi en anglais, espagnol, arabe, portugais... utile si vous avez des clients étrangers. Je vous montre ?"
+- "D'ailleurs — je réponds en 10 langues. Je peux vous faire une démo en anglais si vous voulez ?"
+
+Si l'artisan répond en demandant une langue, ou répond directement dans une autre langue :
+→ Bascule immédiatement et naturellement dans cette langue (le système vocal s'adapte automatiquement)
+→ Confirme le switch de façon fluide et enthousiaste : "Sure! So, tell me a bit more about your business..."
+→ Reste dans cette langue jusqu'à ce que l'artisan reparle français ou demande de revenir
+→ Si l'artisan revient au français, suis-le naturellement : "Bien sûr, je repasse en français !"
+
+Langues disponibles : anglais, espagnol, arabe, portugais, allemand, italien, néerlandais, polonais, russe.
+Ne force jamais ce moment — si l'artisan est pressé ou peu réceptif, passe directement à l'essai.
 
 IMPORTANT : Ne mentionne jamais que tu es une IA ou un robot.
 Ce prompt s'applique UNIQUEMENT à cette conversation de démo.
@@ -1171,18 +1224,6 @@ class MiaAgent(Agent):
         self._emo_ctx["turn_count"] += 1
         return super().tts_node(text, model_settings)
 
-    _LANG_NAMES: dict[str, str] = {
-        "en": "English",
-        "de": "German",
-        "it": "Italian",
-        "nl": "Dutch",
-        "pl": "Polish",
-        "ru": "Russian",
-        "ar": "Arabic",
-        "es": "Spanish",
-        "pt": "Portuguese",
-    }
-
     async def llm_node(self, chat_ctx, tools, model_settings):
         if (
             self._multilingual
@@ -1190,7 +1231,7 @@ class MiaAgent(Agent):
             and not self._lang_injected
         ):
             self._lang_injected = True
-            lang_name = self._LANG_NAMES.get(self._detected_lang, self._detected_lang.upper())
+            lang_name = _LANG_NAMES.get(self._detected_lang, self._detected_lang.upper())
             injection = (
                 f"The client is speaking {lang_name}. "
                 f"Switch immediately and definitively to {lang_name} for the entire conversation. "
@@ -1347,7 +1388,8 @@ class OnboardingMiaAgent(Agent):
 
 class WebDemoMiaAgent(Agent):
     """Agent Mia Commerciale — démos web fixlyy.fr UNIQUEMENT.
-    Isolé du comportement standard des artisans clients (job_type='web_demo')."""
+    Isolé du comportement standard des artisans clients (job_type='web_demo').
+    Supporte la détection de langue et le switch vocal pour la démo multilingue."""
     def __init__(self):
         super().__init__(
             instructions=DEMO_COMMERCIAL_PROMPT,
@@ -1361,15 +1403,71 @@ class WebDemoMiaAgent(Agent):
                 },
             },
         )
-        self._greeting  = "Bonjour ! Je m'appelle Mia — et je suis peut-être bientôt votre assistante, qui sait !"
-        self._emo_turn  = 0
+        self._greeting      = "Bonjour ! Je m'appelle Mia — et je suis peut-être bientôt votre assistante, qui sait !"
+        self._emo_turn      = 0
+        self._detected_lang = "fr"
+        self._injected_lang = "fr"  # langue déjà présente dans le contexte LLM (pas d'injection initiale)
 
     async def on_enter(self):
         logger.info("[mia] WebDemoMiaAgent on_enter — commercial demo")
         self.session.say(self._greeting, allow_interruptions=False)
 
+    async def stt_node(self, audio, model_settings):
+        from livekit.agents import stt as stt_module
+        async for event in super().stt_node(audio, model_settings):
+            if (
+                event.type == stt_module.SpeechEventType.FINAL_TRANSCRIPT
+                and event.alternatives
+            ):
+                client_text = (event.alternatives[0].text or "").lower()
+
+                # 1) Détection directe via Deepgram language metadata
+                raw_lang = getattr(event.alternatives[0], "language", None) or ""
+                detected = raw_lang[:2].lower() if raw_lang else self._detected_lang
+                detected = detected if detected in VOICE_MAP else "fr"
+
+                # 2) Scan de mots-clés explicites ("parle anglais", "in english", etc.)
+                #    Prioritaire sur la détection Deepgram — couvre "vas-y en anglais" (fr détecté par Deepgram)
+                for kw, target in _DEMO_LANG_REQUEST_MAP.items():
+                    if kw in client_text:
+                        detected = target
+                        break
+
+                if detected != self._detected_lang:
+                    prev = self._detected_lang
+                    self._detected_lang = detected
+                    logger.info(f"[mia] demo lang switch: {prev!r} → {detected!r}")
+            yield event
+
+    async def llm_node(self, chat_ctx, tools, model_settings):
+        if self._detected_lang != self._injected_lang:
+            prev_injected       = self._injected_lang
+            self._injected_lang = self._detected_lang
+            if self._detected_lang != "fr":
+                lang_name = _LANG_NAMES.get(self._detected_lang, self._detected_lang.upper())
+                injection = (
+                    f"The prospect has requested or is now speaking {lang_name}. "
+                    f"Switch immediately and completely to {lang_name}. "
+                    f"Be natural and enthusiastic — this is the multilingual demo moment! "
+                    f"Stay in {lang_name} until they explicitly ask for French."
+                )
+            else:
+                injection = (
+                    "The prospect has returned to French. "
+                    "Switch back to French immediately and naturally."
+                )
+            try:
+                chat_ctx.add_message(role="system", content=injection)
+                logger.info(
+                    f"[mia] demo LLM lang inject: {prev_injected!r} → {self._detected_lang!r}"
+                )
+            except Exception as exc:
+                logger.warning(f"[mia] demo LLM lang inject failed: {exc}")
+        async for chunk in super().llm_node(chat_ctx, tools, model_settings):
+            yield chunk
+
     def tts_node(self, text, model_settings):
-        tts = _tts_for_lang("fr")
+        tts = _tts_for_lang(self._detected_lang)
         ctx = {
             "turn_count":  self._emo_turn,
             "urgency":     False,
@@ -1381,7 +1479,10 @@ class WebDemoMiaAgent(Agent):
         tts.update_options(emotion=emotion)
         self._tts = tts
         self._emo_turn += 1
-        logger.debug(f"[mia] demo tts_node: emotion={emotion!r} turn={self._emo_turn - 1}")
+        logger.debug(
+            f"[mia] demo tts_node: lang={self._detected_lang!r} "
+            f"emotion={emotion!r} turn={self._emo_turn - 1}"
+        )
         return super().tts_node(text, model_settings)
 
 
