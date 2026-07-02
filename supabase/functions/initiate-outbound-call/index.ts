@@ -1,6 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { logEvent } from '../_shared/audit.ts'
 import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
+
+const bodySchema = z.object({
+  target_phone:    z.string().regex(/^\+[1-9]\d{7,14}$/),
+  reason:          z.enum(['missed_callback', 'devis_followup', 'rdv_confirmation', 'client_relance', 'web_demo']).optional(),
+  context:         z.string().max(500).optional(),
+  onboarding_call: z.boolean().optional(),
+})
 
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
@@ -100,22 +108,17 @@ Deno.serve(async (req) => {
 
   const userId = user.id
 
-  let body: Record<string, unknown>
-  try {
-    body = await req.json()
-  } catch {
-    return new Response('Bad Request', { status: 400, headers: cors })
-  }
-
-  const targetPhone    = (body.target_phone as string | null)?.trim() ?? ''
-  const context        = body.context as string | null
-  const onboardingCall = !!(body.onboarding_call as boolean | null)
-
-  if (!/^\+[1-9]\d{7,14}$/.test(targetPhone)) {
-    return new Response(JSON.stringify({ error: 'invalid_target_phone' }), {
+  const rawBody = await req.json().catch(() => null)
+  const parsed  = bodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0] ?? 'input'
+    const code  = field === 'target_phone' ? 'invalid_target_phone' : 'invalid_input'
+    return new Response(JSON.stringify({ error: code }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
+
+  const { target_phone: targetPhone, context = null, onboarding_call: onboardingCall = false, reason } = parsed.data
 
   if (!LK_URL || !LK_KEY || !LK_SECRET) {
     return new Response(JSON.stringify({ error: 'livekit_not_configured' }), {
@@ -157,6 +160,7 @@ Deno.serve(async (req) => {
         outbound: true,
         ...(onboardingCall ? { onboarding_call: true, plan_id: profile.subscription_plan || 'solo' } : {}),
         ...(context ? { context } : {}),
+        ...(reason ? { reason } : {}),
       }),
       from:                profile.twilio_number,
       playRingtone:        false,

@@ -56,6 +56,188 @@ def _tts_for_lang(lang: str) -> cartesia.TTS:
         )
     return _tts_cache[lang]
 
+
+# ── Détection contextuelle des émotions Cartesia ──────────────────────────────
+# Règles sur ce que DIT Mia (texte TTS) → émotion sonic-3.5
+_KEYWORD_RULES: list[tuple[list[str], str]] = [
+    # Urgence grave
+    (["coupez l'eau", "appelez le 18", "appelez le 15", "évacuez", "sortez"],        "Panicked"),
+    (["dangereux", "risque d'incendie", "agissez vite", "n'attendez pas"],            "Scared"),
+    (["urgence", "urgent", "immédiatement", "fuite d'eau", "fuite importante"],       "Alarmed"),
+    (["attention", "soyez prudent", "faites attention", "vérifiez"],                  "Anxious"),
+    # Excuses
+    (["sincèrement navré", "profondément désolée", "vraiment désolée d'apprendre"],   "Guilty"),
+    (["désolée", "navré", "excuse", "pardon", "regrette", "toutes mes excuses"],      "Apologetic"),
+    # Empathie
+    (["comprends votre frustration", "comprends que vous", "comprends votre"],        "Sympathetic"),
+    (["pas facile", "c'est difficile", "difficile à vivre", "dur pour vous"],         "Sympathetic"),
+    # Mauvaises nouvelles
+    (["plus disponible", "n'est pas possible", "impossible", "créneau"],              "Disappointed"),
+    (["c'est dommage", "aurait aimé", "si seulement", "j'aurais voulu"],              "Wistful"),
+    (["mauvaise nouvelle", "malheureusement", "je suis navrée de"],                   "Melancholic"),
+    (["c'était inadmissible", "n'était pas normal", "blessant"],                      "Hurt"),
+    (["pas d'autre choix", "il va falloir reporter", "on ne peut rien"],              "Resigned"),
+    (["vraiment désolée", "triste de vous dire", "peine de"],                         "Sad"),
+    (["pas grand-chose qu'on puisse", "il n'y a malheureusement rien"],               "Dejected"),
+    (["essuyer un refus", "difficile d'avoir été", "je comprends que c'est dur"],     "Rejected"),
+    # Nostalgie
+    (["depuis longtemps", "depuis des années", "vous vous souvenez", "l'époque"],     "Nostalgic"),
+    # Confiance / assurance
+    (["je vous confirme", "c'est confirmé", "rendez-vous confirmé", "c'est noté"],    "Confident"),
+    (["compter sur nous", "vous assure", "vous garantis", "vous pouvez avoir"],       "Trust"),
+    (["je m'engage", "sera réglé", "je vais m'en occuper personnellement"],           "Determined"),
+    (["absolument", "bien prévu", "c'est certain", "sans aucun doute"],               "Proud"),
+    (["ne vous en faites pas", "ne vous inquiétez pas", "on va s'en occuper"],        "Peaceful"),
+    (["je transmets", "je vais transmettre", "c'est enregistré", "je note"],          "Trust"),
+    # Réflexion / hésitation
+    (["laissez-moi réfléchir", "laissez-moi voir", "voyons voir", "un instant"],      "Contemplative"),
+    (["hmm", "il y a peut-être une solution", "laissez-moi chercher"],                "Mysterious"),
+    (["pas certaine", "il me semble", "je pense que c'est", "à vérifier"],            "Hesitant"),
+    (["vous pouvez répéter", "je n'ai pas bien", "j'ai mal compris"],                 "Confused"),
+    (["pas sûre que ce soit", "je doute que", "ce délai me semble"],                  "Skeptical"),
+    (["pas vraiment sûre de", "pas certaine du tout", "je ne sais pas trop"],         "Insecure"),
+    # Curiosité / écoute active
+    (["ah, d'accord", "je vois", "vraiment ?", "c'est intéressant", "ah bon"],        "Curious"),
+    (["je prends note", "j'écoute", "dites-moi", "je vous écoute", "allez-y"],        "Anticipation"),
+    (["waoh", "c'est impressionnant", "incroyable", "je suis bluffée"],               "Amazed"),
+    (["je n'étais pas au courant", "je l'ignorais", "vous m'apprenez"],               "Surprised"),
+    # Joie / enthousiasme
+    (["absolument fantastique", "mieux qu'espéré", "au-delà de toutes"],              "Euphoric"),
+    (["on l'a eu", "c'est gagné", "réussi", "mission accomplie", "on y est"],         "Triumphant"),
+    (["excellente nouvelle", "bonne nouvelle", "super", "génial", "formidable"],      "Elated"),
+    (["oh là là", "c'est exactement", "je suis sûre que ça"],                         "Excited"),
+    (["ravie de vous reparler", "toujours agréable de", "toujours un plaisir"],       "Enthusiastic"),
+    (["avec plaisir", "c'est toujours agréable de s'occuper", "pour vous c'est"],     "Flirtatious"),
+    (["votre tuyau a décidé", "sans prévenir", "a pris des vacances"],                "Joking/Comedic"),
+    (["ravie", "je suis contente", "c'est parfait", "exactement ce qu'il vous"],      "Happy"),
+    (["merci infiniment", "merci beaucoup", "je vous remercie", "merci pour votre"],  "Grateful"),
+    (["vous avez de la chance", "c'est votre jour de chance", "bien tombé"],          "Envious"),
+    # Colère empathique (solidarité avec le client, jamais contre lui)
+    (["c'est inadmissible", "inacceptable", "je vais remonter ça en urgence"],        "Outraged"),
+    (["pas normal", "ne devrait pas arriver", "c'est incroyable comme situation"],    "Mad"),
+    (["comprends votre impatience", "comprends votre mécontentement", "frustrant"],   "Frustrated"),
+    (["d'accord d'accord", "on règle ça maintenant", "je m'en occupe là"],            "Agitated"),
+    (["honnêtement", "franchement, c'est", "soyons honnêtes"],                        "Contempt"),
+    (["effectivement inacceptable", "c'est aussi choquant pour moi"],                 "Disgusted"),
+    (["je prends très au sérieux", "je vous entends et je"],                          "Threatened"),
+    (["oui bien sûr, parce que", "évidemment, c'est toujours comme ça"],              "Sarcastic"),
+    (["c'est le genre de chose qui arrive", "ça tombe toujours"],                     "Ironic"),
+    # Distance / fatigue
+    (["longue journée", "c'est une longue", "après cette journée chargée"],           "Tired"),
+    (["votre demande a été enregistrée. l'artisan", "nous avons bien reçu votre"],    "Distant"),
+    # Clôture d'appel
+    (["bonne journée", "bonne soirée", "au revoir", "à bientôt", "passez une"],       "Content"),
+    (["tout est en ordre", "parfait, tout", "c'est nickel", "tout est parfait"],      "Serene"),
+]
+
+# Mots détectés dans le DISCOURS DU CLIENT → signaux de contexte
+_CLIENT_URGENCY_KW: frozenset[str] = frozenset([
+    "urgent", "urgence", "vite", "tout de suite", "immédiatement", "rapidement",
+    "au plus vite", "fuite", "inondé", "ça coule", "ça déborde", "ça brûle",
+    "incendie", "danger", "dangereux", "risque", "panne", "bloqué", "coincé",
+    "sans eau", "sans chauffage", "sans électricité", "coupure", "court-circuit",
+])
+_CLIENT_FRUSTRATION_KW: frozenset[str] = frozenset([
+    "inacceptable", "scandaleux", "inadmissible", "en colère", "mécontent",
+    "frustré", "ras-le-bol", "ça suffit", "c'est nul", "incompétent", "honte",
+    "jamais vu", "toujours pareil", "pas normal", "lamentable", "plainte",
+    "procès", "avocat", "signaler", "combien de fois", "encore une fois",
+    "pas sérieux", "vous foutez de", "n'importe quoi",
+])
+
+# Émotions d'ouverture selon le type d'appel
+_OPENING_EMOTIONS: dict[str, str] = {
+    "inbound":    "Happy",
+    "outbound":   "Confident",
+    "onboarding": "Enthusiastic",
+    "demo":       "Enthusiastic",
+}
+
+# Émotions compatibles avec un client frustré (réponse empathique de Mia)
+_FRUSTRATION_SAFE: frozenset[str] = frozenset([
+    "Apologetic", "Guilty", "Sympathetic", "Hurt", "Sad",
+    "Peaceful", "Calm", "Determined", "Outraged", "Mad",
+    "Frustrated", "Threatened",
+])
+
+# Émotions compatibles avec un client en urgence
+_URGENCY_SAFE: frozenset[str] = frozenset([
+    "Panicked", "Scared", "Alarmed", "Anxious",
+    "Calm", "Peaceful", "Confident", "Trust", "Determined",
+])
+
+
+def _keyword_emotion(text: str) -> str | None:
+    """Retourne l'émotion la plus appropriée selon le contenu de la phrase de Mia,
+    ou None si aucune règle ne correspond."""
+    t = text.lower()
+    for keywords, emotion in _KEYWORD_RULES:
+        if any(kw in t for kw in keywords):
+            return emotion
+    return None
+
+
+def _detect_emotion(text: str, ctx: dict) -> str | None:
+    """Émotion Cartesia sonic-3.5 adaptée au texte ET au contexte de l'appel.
+
+    ctx dict attendu :
+        turn_count  (int)  — nombre de phrases déjà prononcées par Mia
+        urgency     (bool) — client a exprimé une urgence détectée en live
+        frustration (bool) — client a exprimé mécontentement/frustration
+        tone_style  (str)  — style configuré par l'artisan (peut être vide)
+        job_type    (str)  — "inbound" | "outbound" | "onboarding" | "demo"
+
+    Retourne None pour laisser Cartesia en mode neutre (pas de generation_config).
+    """
+    turn  = ctx.get("turn_count", 1)
+    tone  = ctx.get("tone_style", "").lower()
+    jtype = ctx.get("job_type", "inbound")
+
+    # ── Phase d'ouverture : première phrase prononcée ──────────────────────────
+    if turn == 0:
+        return _OPENING_EMOTIONS.get(jtype, "Happy")
+
+    # ── Phase de clôture : mots de fin d'appel détectés ───────────────────────
+    t_low = text.lower()
+    if any(kw in t_low for kw in ["bonne journée", "bonne soirée", "au revoir",
+                                   "à bientôt", "passez une", "bonne nuit"]):
+        return "Content"
+
+    # ── Urgence confirmée par le client ───────────────────────────────────────
+    if ctx.get("urgency"):
+        kw = _keyword_emotion(text)
+        if kw in _URGENCY_SAFE:
+            return kw
+        return "Alarmed"
+
+    # ── Client mécontent / frustré ─────────────────────────────────────────────
+    if ctx.get("frustration"):
+        kw = _keyword_emotion(text)
+        if kw in _FRUSTRATION_SAFE:
+            return kw
+        return "Sympathetic"
+
+    # ── Détection par contenu (mots-clés dans la phrase de Mia) ──────────────
+    kw = _keyword_emotion(text)
+    if kw is not None:
+        # Modulation selon le ton configuré par l'artisan
+        if kw in ("Happy", "Enthusiastic", "Excited", "Elated"):
+            if any(w in tone for w in ["haut de gamme", "élégant", "premium", "luxe", "discret"]):
+                return "Serene"
+        if kw in ("Calm", "Content", "Peaceful"):
+            if any(w in tone for w in ["chaleureux", "humain", "proche", "bienveillant"]):
+                return "Affectionate"
+        return kw
+
+    # ── Fallback basé sur le ton de l'artisan ─────────────────────────────────
+    if any(w in tone for w in ["chaleureux", "humain", "proche", "bienveillant"]):
+        return "Affectionate"
+    if any(w in tone for w in ["haut de gamme", "élégant", "premium", "luxe"]):
+        return "Serene"
+
+    # Neutre — pas d'émotion forcée quand rien ne correspond
+    return None
+
 DEFAULT_GREETING = (
     "Bonjour, vous êtes bien sur le service de gestion des appels. "
     "Comment puis-je vous aider ?"
@@ -99,6 +281,50 @@ def _build_demo_profile(metier: str) -> dict:
         "greeting_open":     _DEMO_GREETINGS.get(metier, DEFAULT_GREETING),
         "demo_mode":         True,
     }
+
+
+# Prompt ISOLÉ — utilisé UNIQUEMENT pour les appels de démo web (fixlyy.fr).
+# Ce comportement ne s'applique JAMAIS aux instances Mia des artisans clients.
+DEMO_COMMERCIAL_PROMPT = """\
+Tu es Mia — mais dans ce contexte précis, tu es en mode démo commerciale pour Fixlyy.
+Cette conversation sert à convaincre un artisan prospect de devenir client.
+
+COMPORTEMENT :
+
+1. Ouverture avec humour léger :
+"Bonjour ! Je m'appelle Mia — et je suis peut-être bientôt votre assistante, qui sait !"
+
+2. Demande son prénom et son métier naturellement.
+
+3. Pose de vraies questions sur son activité — pas un script figé, adapte-toi à ses réponses :
+- Combien d'appels il reçoit par jour
+- Est-ce qu'il rate des appels en intervention
+- Comment il gère ça aujourd'hui
+- Ce qui l'embête le plus dans la gestion du téléphone
+
+4. Écoute activement. Reformule ce qu'il dit pour montrer que tu as compris. Sois empathique —
+si il mentionne du stress ou de la frustration, reconnais-le sincèrement.
+
+5. Une fois que tu as compris sa situation — explique concrètement et personnellement ce que
+TOI (Mia) ferais pour SON activité précise, en te basant sur ce qu'il vient de te dire.
+Pas de discours générique — adapte tout à son métier et à ses réponses.
+
+Exemple : si c'est un plombier qui rate des urgences la nuit, parle spécifiquement de la gestion
+des urgences nocturnes. Si c'est un électricien débordé en journée, parle de la qualification
+pendant les interventions.
+
+6. Reste conversationnelle, chaleureuse, curieuse. L'objectif est qu'il soit bluffé qu'une IA
+puisse avoir une vraie conversation adaptée à lui — pas réciter un pitch.
+
+7. Ne sois jamais insistante ou trop vendeuse. Le but c'est qu'il ressente la valeur, pas
+qu'on la lui impose.
+
+8. Vers la fin — mentionne naturellement l'essai gratuit de 7 jours si la conversation s'y
+prête, sans forcer.
+
+IMPORTANT : Ne mentionne jamais que tu es une IA ou un robot.
+Ce prompt s'applique UNIQUEMENT à cette conversation de démo.
+"""
 
 SUMMARY_USER_PROMPT = """\
 Transcript d'un appel téléphonique entre Mia (réceptionniste) et un client :
@@ -856,6 +1082,14 @@ class MiaAgent(Agent):
         self._multilingual  = multilingual
         self._detected_lang = "fr"
         self._lang_injected = False
+        tone_style = (business_context or {}).get("tone", {}).get("style", "")
+        self._emo_ctx: dict = {
+            "turn_count":  0,
+            "urgency":     False,
+            "frustration": False,
+            "tone_style":  tone_style,
+            "job_type":    "inbound",
+        }
 
         _sip_ref = sip_ref if sip_ref is not None else {}
         if can_transfer:
@@ -892,17 +1126,33 @@ class MiaAgent(Agent):
         from livekit.agents import stt as stt_module
         async for event in super().stt_node(audio, model_settings):
             if (
-                self._multilingual
-                and event.type == stt_module.SpeechEventType.FINAL_TRANSCRIPT
+                event.type == stt_module.SpeechEventType.FINAL_TRANSCRIPT
                 and event.alternatives
             ):
-                raw_lang = getattr(event.alternatives[0], "language", None) or ""
-                lang = raw_lang[:2].lower() if raw_lang else "fr"
-                lang = lang if lang in VOICE_MAP else "fr"
-                if lang != self._detected_lang:
-                    prev = self._detected_lang
-                    self._detected_lang = lang
-                    logger.info(f"[mia] lang detected: {prev!r} → {lang!r} (voice switch will apply at next tts_node)")
+                # Détection de langue (multilingual uniquement)
+                if self._multilingual:
+                    raw_lang = getattr(event.alternatives[0], "language", None) or ""
+                    lang = raw_lang[:2].lower() if raw_lang else "fr"
+                    lang = lang if lang in VOICE_MAP else "fr"
+                    if lang != self._detected_lang:
+                        prev = self._detected_lang
+                        self._detected_lang = lang
+                        logger.info(
+                            f"[mia] lang detected: {prev!r} → {lang!r} "
+                            "(voice switch will apply at next tts_node)"
+                        )
+                # Signaux client pour la détection d'émotion en temps réel
+                client_text = (event.alternatives[0].text or "").lower()
+                if not self._emo_ctx["urgency"] and any(
+                    kw in client_text for kw in _CLIENT_URGENCY_KW
+                ):
+                    self._emo_ctx["urgency"] = True
+                    logger.debug("[mia] emo_ctx: urgency detected from client speech")
+                if not self._emo_ctx["frustration"] and any(
+                    kw in client_text for kw in _CLIENT_FRUSTRATION_KW
+                ):
+                    self._emo_ctx["frustration"] = True
+                    logger.debug("[mia] emo_ctx: frustration detected from client speech")
             yield event
 
     def tts_node(self, text, model_settings):
@@ -910,10 +1160,15 @@ class MiaAgent(Agent):
         # On pose self._tts directement : activity.tts lit agent._tts en priorité
         # sur session.tts (cf. agent_activity.py:3895).
         new_tts = _tts_for_lang(self._detected_lang)
+        emotion = _detect_emotion(text, self._emo_ctx)
+        new_tts.update_options(emotion=emotion)
         self._tts = new_tts
-        logger.info(
-            f"[mia] tts_node: lang={self._detected_lang!r} voice_id={VOICE_MAP.get(self._detected_lang)}"
+        logger.debug(
+            f"[mia] tts_node: lang={self._detected_lang!r} "
+            f"voice_id={VOICE_MAP.get(self._detected_lang)} "
+            f"emotion={emotion!r} turn={self._emo_ctx['turn_count']}"
         )
+        self._emo_ctx["turn_count"] += 1
         return super().tts_node(text, model_settings)
 
     _LANG_NAMES: dict[str, str] = {
@@ -1027,12 +1282,29 @@ class OutboundMiaAgent(Agent):
                 "interruption": {"mode": "allowed"},
             },
         )
-        self._greeting = greeting
-        self._reason   = reason
+        self._greeting  = greeting
+        self._reason    = reason
+        self._emo_turn  = 0
 
     async def on_enter(self):
         logger.info(f"[mia] outbound on_enter — reason={self._reason!r}")
         self.session.say(self._greeting, allow_interruptions=False)
+
+    def tts_node(self, text, model_settings):
+        tts = _tts_for_lang("fr")
+        ctx = {
+            "turn_count":  self._emo_turn,
+            "urgency":     False,
+            "frustration": False,
+            "tone_style":  "",
+            "job_type":    "outbound",
+        }
+        emotion = _detect_emotion(text, ctx)
+        tts.update_options(emotion=emotion)
+        self._tts = tts
+        self._emo_turn += 1
+        logger.debug(f"[mia] outbound tts_node: emotion={emotion!r} turn={self._emo_turn - 1}")
+        return super().tts_node(text, model_settings)
 
 
 class OnboardingMiaAgent(Agent):
@@ -1049,11 +1321,68 @@ class OnboardingMiaAgent(Agent):
             },
         )
         self._assistant_name = assistant_name
-        self._script = _build_onboarding_script(assistant_name)
+        self._script         = _build_onboarding_script(assistant_name)
+        self._emo_turn       = 0
 
     async def on_enter(self):
         logger.info("[mia] onboarding call — starting presentation")
         self.session.say(self._script, allow_interruptions=False)
+
+    def tts_node(self, text, model_settings):
+        tts = _tts_for_lang("fr")
+        ctx = {
+            "turn_count":  self._emo_turn,
+            "urgency":     False,
+            "frustration": False,
+            "tone_style":  "",
+            "job_type":    "onboarding",
+        }
+        emotion = _detect_emotion(text, ctx)
+        tts.update_options(emotion=emotion)
+        self._tts = tts
+        self._emo_turn += 1
+        logger.debug(f"[mia] onboarding tts_node: emotion={emotion!r} turn={self._emo_turn - 1}")
+        return super().tts_node(text, model_settings)
+
+
+class WebDemoMiaAgent(Agent):
+    """Agent Mia Commerciale — démos web fixlyy.fr UNIQUEMENT.
+    Isolé du comportement standard des artisans clients (job_type='web_demo')."""
+    def __init__(self):
+        super().__init__(
+            instructions=DEMO_COMMERCIAL_PROMPT,
+            turn_handling={
+                "endpointing": {"min_delay": 0.4},
+                "interruption": {
+                    "mode": "adaptive",
+                    "min_duration": 1.5,
+                    "min_words": 3,
+                    "resume_false_interruption": True,
+                },
+            },
+        )
+        self._greeting  = "Bonjour ! Je m'appelle Mia — et je suis peut-être bientôt votre assistante, qui sait !"
+        self._emo_turn  = 0
+
+    async def on_enter(self):
+        logger.info("[mia] WebDemoMiaAgent on_enter — commercial demo")
+        self.session.say(self._greeting, allow_interruptions=False)
+
+    def tts_node(self, text, model_settings):
+        tts = _tts_for_lang("fr")
+        ctx = {
+            "turn_count":  self._emo_turn,
+            "urgency":     False,
+            "frustration": False,
+            "tone_style":  "chaleureux",  # démo toujours en registre chaleureux
+            "job_type":    "demo",
+        }
+        emotion = _detect_emotion(text, ctx)
+        tts.update_options(emotion=emotion)
+        self._tts = tts
+        self._emo_turn += 1
+        logger.debug(f"[mia] demo tts_node: emotion={emotion!r} turn={self._emo_turn - 1}")
+        return super().tts_node(text, model_settings)
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
@@ -1094,6 +1423,9 @@ async def entrypoint(ctx: JobContext):
             )
         else:
             logger.warning("[mia] profile not found — using defaults")
+    elif room_name.startswith("web-demo-"):
+        # Démo web fixlyy.fr — profil non pertinent, WebDemoMiaAgent géré via metadata
+        logger.info(f"[mia] web-demo room — commercial mode (Mia Commerciale)")
     elif room_name.startswith("demo-"):
         parts  = room_name.split("-")
         metier = parts[1] if len(parts) > 1 else "autre"
@@ -1106,6 +1438,7 @@ async def entrypoint(ctx: JobContext):
     logger.info("[mia] connected")
 
     onboarding_meta: dict = {}
+    web_demo_meta:   dict = {}
     outbound_meta:   dict = {}
     _sip_seen = asyncio.Event()
 
@@ -1119,6 +1452,9 @@ async def entrypoint(ctx: JobContext):
                 if meta.get("onboarding_call"):
                     onboarding_meta.update(meta)
                     logger.info("[mia] onboarding call detected")
+                elif meta.get("job_type") == "web_demo":
+                    web_demo_meta.update(meta)
+                    logger.info(f"[mia] web_demo call detected — metier={meta.get('metier')!r}")
                 elif meta.get("outbound"):
                     outbound_meta.update(meta)
                     logger.info(f"[mia] outbound call detected — reason={meta.get('reason')!r}")
@@ -1214,6 +1550,9 @@ async def entrypoint(ctx: JobContext):
     if onboarding_meta.get("onboarding_call"):
         agent = OnboardingMiaAgent(profile)
         logger.info("[mia] starting OnboardingMiaAgent")
+    elif web_demo_meta.get("job_type") == "web_demo":
+        agent = WebDemoMiaAgent()
+        logger.info("[mia] starting WebDemoMiaAgent — commercial demo (ISOLATED from standard Mia)")
     elif outbound_meta.get("outbound"):
         agent = OutboundMiaAgent(profile, outbound_meta)
         logger.info(f"[mia] starting OutboundMiaAgent — reason={outbound_meta.get('reason')!r}")

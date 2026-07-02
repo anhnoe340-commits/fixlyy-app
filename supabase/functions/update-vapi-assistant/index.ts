@@ -1,6 +1,20 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { logEvent } from '../_shared/audit.ts'
+
+const updateBodySchema = z.object({
+  user_id:             z.string().uuid().optional(),
+  transfer_enabled:    z.boolean().optional(),
+  transfer_phone:      z.string().max(20).optional(),
+  sync_multilingual:   z.boolean().optional(),
+  sync_analysis_plan:  z.boolean().optional(),
+  sync_conversational: z.boolean().optional(),
+  sync_voice:          z.boolean().optional(),
+  sync_server:         z.boolean().optional(),
+  sync_urgency:        z.boolean().optional(),
+  sync_reasons:        z.boolean().optional(),
+}).strict()
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -373,22 +387,13 @@ function normalizePhone(p: string): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
 
-  // Parse body once (needed for user_id in cron-secret path)
-  let body: {
-    user_id?: string
-    transfer_enabled?: boolean
-    transfer_phone?: string
-    sync_multilingual?: boolean
-    sync_analysis_plan?: boolean
-    sync_conversational?: boolean
-    sync_voice?: boolean
-    sync_server?: boolean
-    sync_urgency?: boolean
-    sync_reasons?: boolean
+  // Parse + valider le body une seule fois
+  const rawBody = await req.json().catch(() => null)
+  const parsedBody = updateBodySchema.safeParse(rawBody)
+  if (!parsedBody.success) {
+    return new Response(JSON.stringify({ error: 'invalid_input' }), { status: 400, headers: CORS })
   }
-  try { body = await req.json() } catch {
-    return new Response('Invalid JSON', { status: 400, headers: CORS })
-  }
+  const body = parsedBody.data
 
   // Auth : x-cron-secret (admin/cron) OU JWT utilisateur
   let userId: string

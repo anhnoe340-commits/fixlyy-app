@@ -1,6 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@13?target=deno';
+import { z } from 'https://esm.sh/zod@3';
+
+const bodySchema = z.object({
+  trade:   z.string().max(100).optional(),
+  company: z.string().max(200).optional(),
+});
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2023-10-16' });
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!);
@@ -20,7 +26,14 @@ serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
   if (!user) return new Response(JSON.stringify({ error: 'Non autorisé' }), { status: 401, headers: cors });
 
-  const { trade, company } = await req.json();
+  const rawBody = await req.json().catch(() => null);
+  const parsed = bodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ error: 'invalid_input' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+    });
+  }
+  const { trade, company } = parsed.data;
 
   try {
     // Lookup existing Stripe customer via notre DB — compatible phone-only (sans email)

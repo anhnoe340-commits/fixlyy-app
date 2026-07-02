@@ -1,6 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { logEvent } from '../_shared/audit.ts'
+
+const inviteBodySchema = z.object({
+  email: z.string().email().max(254).trim(),
+  role:  z.enum(['admin', 'member']).optional().default('member'),
+})
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!
@@ -26,16 +32,15 @@ serve(async (req) => {
   const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
   if (authError || !user) return new Response('Unauthorized', { status: 401, headers: CORS })
 
-  let body: { email: string; role?: 'admin' | 'member' }
-  try { body = await req.json() } catch {
-    return new Response('Invalid JSON', { status: 400, headers: CORS })
+  const rawBody = await req.json().catch(() => null)
+  const parsed = inviteBodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? 'Email invalide.'
+    return new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
   }
-  const { email, role = 'member' } = body
-  if (!email?.trim()) {
-    return new Response(JSON.stringify({ error: 'Email requis.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
-  }
+  const { email, role } = parsed.data
 
-  const emailNorm = email.trim().toLowerCase()
+  const emailNorm = email.toLowerCase()
   if (emailNorm === user.email?.toLowerCase()) {
     return new Response(JSON.stringify({ error: 'Vous ne pouvez pas vous inviter vous-même.' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } })
   }

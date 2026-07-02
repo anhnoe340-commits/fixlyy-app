@@ -1,118 +1,133 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { z } from 'https://esm.sh/zod@3'
 import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
+import { corsHeaders } from '../_shared/cors.ts'
 
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
-const VAPI_KEY   = Deno.env.get('VAPI_API_KEY')!
+const LK_URL     = (Deno.env.get('LIVEKIT_CLOUD_URL') ?? '').replace(/^wss?:\/\//, 'https://')
+const LK_KEY     = Deno.env.get('LIVEKIT_CLOUD_API_KEY') ?? ''
+const LK_SECRET  = Deno.env.get('LIVEKIT_CLOUD_API_SECRET') ?? ''
 
-// Assistant Mia configuré comme réceptionniste (prompt inbound normal)
-const MIA_ASSISTANT_ID = Deno.env.get('VAPI_DEFAULT_ASSISTANT_ID') ?? '952f1509-ff70-4b5d-aeb0-eb2c1a050c78'
+// Numéro fixe dédié aux démos web — traçable dans le dashboard fixlyy@fixlyy.fr
+const DEMO_FROM_NUMBER = '+33939248290'
+const DEMO_TRUNK_ID    = 'ST_ZRxsr2kNdKXB'
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+
+async function lkCallToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+  const enc = (o: object) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  const head    = enc({ alg: 'HS256', typ: 'JWT' })
+  const payload = enc({ iss: LK_KEY, sub: 'sip-demo', iat: now, exp: now + 60, nbf: now, sip: { call: true } })
+  const input   = `${head}.${payload}`
+  const key     = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(LK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig    = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  return `${input}.${sigB64}`
 }
 
-const DEMO_COMPANIES: Record<string, { name: string; type: string }> = {
-  plombier:     { name: 'Plomberie Martin',           type: 'plombier / chauffagiste' },
-  chauffagiste: { name: 'Chauffage & Plomberie Martin', type: 'plombier / chauffagiste' },
-  electricien:  { name: 'Électricité Dupont',          type: 'électricien' },
-  serrurier:    { name: 'Serrurerie Express',           type: 'serrurier' },
-  menuisier:    { name: 'Menuiserie Lebrun',            type: 'menuisier' },
-  peintre:      { name: 'Peinture & Déco Moreau',      type: 'peintre / plâtrier' },
-  autre:        { name: 'Artisan Services',             type: 'artisan' },
+function formatE164(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('33') && digits.length === 11) return `+${digits}`
+  if (digits.startsWith('0') && digits.length === 10) return `+33${digits.slice(1)}`
+  return `+${digits}`
 }
+
+const demoSchema = z.object({
+  email:  z.string().email(),
+  phone:  z.string().min(8).max(20),
+  metier: z.string().optional(),
+})
 
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors })
 
   const ip = getClientIp(req)
-  if (!checkRateLimit(`demo:${ip}`, 3, 3600000)) {
-    return TOO_MANY_REQUESTS(cors)
-  }
-
-  const demoSchema = z.object({
-    phone:  z.string().regex(/^\+33[67]\d{8}$/, 'invalid_phone'),
-    email:  z.string().email(),
-    metier: z.string().optional(),
-  })
+  if (!checkRateLimit(ip, 'demo-call', 3, 3_600_000)) return TOO_MANY_REQUESTS(cors)
 
   const rawBody = await req.json().catch(() => null)
-  const result = demoSchema.safeParse(rawBody)
-  if (!result.success) {
-    const field = result.error.issues[0]?.path[0] ?? 'input'
-    const code  = result.error.issues[0]?.message ?? 'invalid_input'
-    const messages: Record<string, string> = {
-      invalid_phone: 'Numéro français mobile attendu (+33 6/7 XX XX XX XX)',
-      invalid_email: 'Adresse email invalide',
-    }
-    return new Response(JSON.stringify({ error: code, message: messages[code] ?? 'Données invalides', field }), {
+  const parsed  = demoSchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ error: 'invalid_input' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  const phone  = result.data.phone
-  const email  = result.data.email.trim().toLowerCase()
-  const metier = (result.data.metier ?? 'autre').trim()
+  const { email, metier = 'autre' } = parsed.data
+  const phone = formatE164(parsed.data.phone)
 
-  const supabase = createClient(SB_URL, SB_SERVICE)
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+    return new Response(JSON.stringify({ error: 'invalid_phone', message: 'Numéro de téléphone invalide.' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
 
-  // Stocker le lead (non-bloquant)
-  supabase.from('demo_leads').insert({ phone, email, metier, ip }).then(() => {}).catch(() => {})
-
-  // Numéro sortant depuis le pool
-  const { data: poolEntry } = await supabase
-    .from('phone_numbers_pool')
-    .select('vapi_phone_number_id, phone_number')
-    .not('status', 'eq', 'quarantine')
-    .not('vapi_phone_number_id', 'is', null)
-    .limit(1)
-    .single()
-
-  if (!poolEntry?.vapi_phone_number_id) {
-    console.error('[demo-call] Aucun numéro Vapi disponible dans le pool')
-    return new Response(JSON.stringify({ error: 'no_number', message: 'Service temporairement indisponible. Réessayez.' }), {
+  if (!LK_URL || !LK_KEY || !LK_SECRET) {
+    console.error('[demo-call] LiveKit credentials manquants')
+    return new Response(JSON.stringify({ error: 'service_unavailable' }), {
       status: 503, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  const company = DEMO_COMPANIES[metier] ?? DEMO_COMPANIES['autre']
+  const supabase = createClient(SB_URL, SB_SERVICE)
 
-  // Mia répond comme réceptionniste — exactement comme pour un vrai appel client
-  // Si l'appelant demande "c'est quoi Fixlyy ?" → Mia explique naturellement
-  const firstMessage = `${company.name}, bonjour ! Comment puis-je vous aider ?`
+  // Stocker le lead (non-bloquant)
+  supabase.from('demo_leads').insert({ phone, email, metier }).then(() => {}).catch(() => {})
 
-  const vapiRes = await fetch('https://api.vapi.ai/call/phone', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${VAPI_KEY}`, 'Content-Type': 'application/json' },
+  const demoId     = crypto.randomUUID().slice(0, 8)
+  const roomName   = `web-demo-${demoId}`
+  const phoneClean = phone.replace(/\D/g, '')
+
+  let token: string
+  try {
+    token = await lkCallToken()
+  } catch (e: any) {
+    console.error('[demo-call] lkCallToken error:', e.message)
+    return new Response(JSON.stringify({ error: 'auth_error' }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  const sipRes = await fetch(`${LK_URL}/twirp/livekit.SIP/CreateSIPParticipant`, {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      assistantId:   MIA_ASSISTANT_ID,
-      phoneNumberId: poolEntry.vapi_phone_number_id,
-      customer:      { number: phone },
-      assistantOverrides: {
-        firstMessage,
-      },
+      sipTrunkId:          DEMO_TRUNK_ID,
+      sipCallTo:           phone,
+      roomName,
+      participantIdentity: `sip_out_${phoneClean}`,
+      participantName:     `Démo web ${phone}`,
+      participantMetadata: JSON.stringify({
+        job_type: 'web_demo',
+        outbound: true,
+        metier,
+      }),
+      from:         DEMO_FROM_NUMBER,
+      playRingtone: true,
     }),
   })
 
-  if (!vapiRes.ok) {
-    const err = await vapiRes.text().catch(() => '')
-    console.error('[demo-call] Vapi error:', vapiRes.status, err)
-    return new Response(JSON.stringify({ error: 'call_failed', message: 'Impossible de déclencher l\'appel. Réessayez.' }), {
+  if (!sipRes.ok) {
+    const err = await sipRes.text().catch(() => '')
+    console.error('[demo-call] LiveKit SIP error:', sipRes.status, err)
+    return new Response(JSON.stringify({ error: 'call_failed', message: "Impossible de lancer l'appel. Réessayez dans quelques instants." }), {
       status: 502, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  const vapiData = await vapiRes.json()
-  console.log(`[demo-call] Appel déclenché : ***${phone.slice(-4)} (${company.name}) callId=${vapiData.id}`)
+  console.log(`[demo-call] SIP outbound OK: room=${roomName} → ***${phone.slice(-4)} metier=${metier}`)
 
-  // Mettre à jour le lead avec l'ID d'appel
-  supabase.from('demo_leads').update({ vapi_call_id: vapiData.id }).eq('phone', phone).eq('email', email).then(() => {}).catch(() => {})
+  // Mettre à jour le lead avec le room name (non-bloquant)
+  supabase.from('demo_leads').update({ vapi_call_id: roomName }).eq('phone', phone).eq('email', email).then(() => {}).catch(() => {})
 
-  return new Response(JSON.stringify({ ok: true, callId: vapiData.id }), {
+  return new Response(JSON.stringify({ ok: true, roomName }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })

@@ -1,6 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { logEvent } from '../_shared/audit.ts'
 import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
+
+const serviceBodySchema = z.object({
+  user_id: z.string().uuid(),
+})
 
 const TWILIO_SID   = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN = Deno.env.get('TWILIO_AUTH_TOKEN')!
@@ -277,9 +282,12 @@ Deno.serve(async (req) => {
   let userId: string
 
   if (authHeader === `Bearer ${SB_SERVICE}`) {
-    const body = await req.json().catch(() => ({}))
-    userId = body?.user_id
-    if (!userId) return new Response(JSON.stringify({ error: 'Missing user_id' }), { status: 400, headers: corsHeaders })
+    const rawBody = await req.json().catch(() => null)
+    const parsed = serviceBodySchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: 'invalid_input' }), { status: 400, headers: corsHeaders })
+    }
+    userId = parsed.data.user_id
   } else {
     try {
       const { data: { user }, error: authErr } = await createClient(SB_URL, Deno.env.get('SUPABASE_ANON_KEY')!).auth.getUser(authHeader.replace('Bearer ', ''))

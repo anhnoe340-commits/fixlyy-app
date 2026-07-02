@@ -1,7 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from 'https://esm.sh/zod@3'
 import { logEvent } from '../_shared/audit.ts'
 import { featureAllowed } from '../_shared/planGate.ts'
+
+const vapiPayloadSchema = z.object({
+  message: z.object({ type: z.string() }).passthrough(),
+}).passthrough()
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!)
 const TWILIO_SID = Deno.env.get('TWILIO_ACCOUNT_SID')!
@@ -13,7 +18,7 @@ const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')
 
 const cors = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 
@@ -252,18 +257,24 @@ async function sendSms(from: string, to: string, body: string) {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
-  // Vérification signature Vapi
-  if (VAPI_WEBHOOK_SECRET) {
-    const incoming = req.headers.get('x-vapi-secret')
-    if (incoming !== VAPI_WEBHOOK_SECRET) {
-      return new Response('Unauthorized', { status: 401 })
-    }
+  // Auth : toujours requis — fail-secure si le secret n'est pas configuré
+  if (!VAPI_WEBHOOK_SECRET) {
+    console.error('[send-call-sms] VAPI_WEBHOOK_SECRET non configuré')
+    return new Response('Service Unavailable', { status: 503 })
+  }
+  if (req.headers.get('x-vapi-secret') !== VAPI_WEBHOOK_SECRET) {
+    return new Response('Unauthorized', { status: 401 })
   }
 
   try {
-    const payload = await req.json()
-    const { message } = payload
-    if (!message) return new Response('no message', { headers: cors })
+    const rawBody = await req.json().catch(() => null)
+    const parsed  = vapiPayloadSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: 'invalid_payload' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    const { message } = parsed.data
 
     // ── assistant-request : date/heure Paris + statut horaires artisan ──
     if (message.type === 'assistant-request') {

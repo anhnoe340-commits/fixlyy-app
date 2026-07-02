@@ -190,20 +190,26 @@ npx vercel deploy --prod --yes
 
 ## Backups
 
-### Backup manuel (plan Free — pas de PITR)
+### Backup automatique — GitHub Actions (hebdomadaire)
 
-Fréquence recommandée : 1x/semaine minimum, la veille de chaque déploiement majeur.
+Workflow : `.github/workflows/backup.yml`
+Déclenchement : **dimanche 3h UTC** (automatique) + déclenchement manuel possible via GitHub Actions → "Run workflow"
+Rétention artifacts : **90 jours** (GitHub Artifacts)
+
+**Prérequis — secrets GitHub à configurer** (`Settings → Secrets → Actions`) :
+- `SUPABASE_URL` : URL du projet Supabase (ex: `https://hxkpmmekaotwmzgqxafp.supabase.co`)
+- `FIXLYY_SERVICE_ROLE_KEY` : service role key
+
+Tables sauvegardées : `profiles`, `calls`, `contacts`, `phone_numbers_pool`, `audit_log`, `subscriptions`, `appointments`, `sms_conversations`
+
+### Backup manuel (si besoin ponctuel)
 
 ```bash
-pg_dump "postgresql://postgres.[PROJECT_REF]:[DB_PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres" \
-  --no-owner --no-acl \
-  -f backup_fixlyy_$(date +%Y%m%d_%H%M).sql
+cd ~/Downloads/fixlyy-app
+SUPABASE_URL=... FIXLYY_SERVICE_ROLE_KEY=... npx tsx scripts/backup-db.ts
 ```
 
-Stocker le fichier dans : `~/Backups/fixlyy/` (local)
-Ou upload sur Google Drive / iCloud.
-
-> Note : envisager la migration vers le plan Pro Supabase ($25/mois) dès 3 premiers clients payants — débloque le PITR et les backups automatiques quotidiens.
+> Note : envisager la migration vers le plan Pro Supabase ($25/mois) dès 3 premiers clients payants — débloque le PITR et les backups automatiques quotidiens natifs (point-in-time recovery jusqu'à 7 jours).
 
 ---
 

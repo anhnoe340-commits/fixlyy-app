@@ -12,7 +12,7 @@ const FCM_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') ?? ''
 const supabase = createClient(SB_URL, SB_SERVICE)
 
 const cors = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://app.fixlyy.fr',
   'Access-Control-Allow-Headers': 'authorization, content-type',
 }
 
