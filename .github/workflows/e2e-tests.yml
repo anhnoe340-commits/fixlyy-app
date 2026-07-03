@@ -13,12 +13,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Install deps
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium --with-deps
       - name: Run E2E tests
-        run: npx playwright test --reporter=github
+        run: pnpm exec playwright test --reporter=github
         env:
           CI: true
       - name: Upload Playwright report

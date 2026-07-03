@@ -16,7 +16,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'], baseURL: 'https://app.fixlyy.fr' } },
-    { name: 'chromium-mobile',  use: { ...devices['iPhone 14'],      baseURL: 'https://app.fixlyy.fr' } },
-    { name: 'website',          use: { ...devices['Desktop Chrome'], baseURL: 'https://fixlyy.fr' } },
+    { name: 'chromium-mobile',  use: { ...devices['iPhone 14'], browserName: 'chromium', baseURL: 'https://app.fixlyy.fr' } },
+    { name: 'website',          use: { ...devices['Desktop Chrome'], baseURL: 'https://fixlyy.fr' }, testMatch: ['**/04-website.spec.ts'] },
   ],
 });
