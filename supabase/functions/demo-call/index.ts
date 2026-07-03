@@ -11,7 +11,8 @@ const LK_SECRET  = Deno.env.get('LIVEKIT_CLOUD_API_SECRET') ?? ''
 
 // Numéro fixe dédié aux démos web — traçable dans le dashboard fixlyy@fixlyy.fr
 const DEMO_FROM_NUMBER = '+33939248290'
-const DEMO_TRUNK_ID    = 'ST_ZRxsr2kNdKXB'
+// Trunk SORTANT partagé fixlyy-outbound-twilio (ST_ZRxsr2kNdKXB est le trunk ENTRANT)
+const DEMO_TRUNK_ID    = 'ST_CspEkTSYvisn'
 
 
 async function lkCallToken(): Promise<string> {
@@ -19,7 +20,7 @@ async function lkCallToken(): Promise<string> {
   const enc = (o: object) =>
     btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
   const head    = enc({ alg: 'HS256', typ: 'JWT' })
-  const payload = enc({ iss: LK_KEY, sub: 'sip-demo', iat: now, exp: now + 60, nbf: now, sip: { call: true } })
+  const payload = enc({ iss: LK_KEY, sub: 'sip-demo', iat: now, exp: now + 60, nbf: now, sip: { admin: true } })
   const input   = `${head}.${payload}`
   const key     = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(LK_SECRET),
