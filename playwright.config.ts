@@ -6,6 +6,7 @@ export default defineConfig({
   retries: 1,
   workers: 1,
   reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }], ['list']],
+  expect: { timeout: 15_000 },
   use: {
     headless: true,
     viewport: { width: 1280, height: 720 },

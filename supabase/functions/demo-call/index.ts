@@ -20,7 +20,7 @@ async function lkCallToken(): Promise<string> {
   const enc = (o: object) =>
     btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
   const head    = enc({ alg: 'HS256', typ: 'JWT' })
-  const payload = enc({ iss: LK_KEY, sub: 'sip-demo', iat: now, exp: now + 60, nbf: now, sip: { admin: true } })
+  const payload = enc({ iss: LK_KEY, sub: 'sip-demo', iat: now, exp: now + 60, nbf: now, sip: { call: true } })
   const input   = `${head}.${payload}`
   const key     = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(LK_SECRET),
