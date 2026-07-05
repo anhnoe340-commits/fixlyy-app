@@ -13,7 +13,7 @@ type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
-  | 'subscription' | 'pricing' | 'notifications'
+  | 'subscription' | 'pricing' | 'notifications' | 'pool-admin'
 
 const BRAND = '#2850c8'
 
@@ -170,6 +170,12 @@ export default function Dashboard() {
         </nav>
 
           {/* Admin — visible uniquement pour Noé */}
+          {user?.email === 'anhnoe340@gmail.com' && (
+            <div className="px-3 pb-2">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-2 mb-1">Admin</p>
+              <NavItem icon={<PoolIcon />} label="Pool numéros" active={page === 'pool-admin'} onClick={() => setPage('pool-admin')} accent={accent} />
+            </div>
+          )}
         {/* Pied de page — utilisateur */}
         <div className="border-t border-white/10 px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -310,6 +316,7 @@ export default function Dashboard() {
           {page === 'timezone' && <TimezonePage accent={accent} />}
           {page === 'subscription' && <SubscriptionPage accent={accent} />}
           {page === 'notifications' && <NotificationsPage accent={accent} />}
+          {page === 'pool-admin' && user?.email === 'anhnoe340@gmail.com' && <PoolAdminPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -339,6 +346,7 @@ const PAGE_LABELS: Record<Page, string> = {
   subscription: 'Abonnement',
   pricing: 'Mes tarifs',
   notifications: 'Notifications',
+  'pool-admin': 'Pool Numéros',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
@@ -5385,3 +5393,174 @@ const LogoutIcon = () => <svg viewBox="0 0 16 16" fill="none" width="14" height=
 const PriceTagIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 2h6l5.5 5.5a2 2 0 010 2.83l-3.17 3.17a2 2 0 01-2.83 0L2 8V2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="5.5" r="1" fill="currentColor"/></svg>
 const BellIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a5 5 0 00-5 5v2.5L2 11h12l-1-1.5V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M6.5 11c0 .828.672 1.5 1.5 1.5s1.5-.672 1.5-1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 2V1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const SmsIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6l-3 2.5V11H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8" cy="6.5" r="0.8" fill="currentColor"/><circle cx="10.5" cy="6.5" r="0.8" fill="currentColor"/></svg>
+const PoolIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="4" width="3" height="9" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="6.5" y="2" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="11.5" y="6" width="3" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+
+// ── Pool Admin Page ────────────────────────────────────────────────────────────
+function PoolAdminPage({ accent }: { accent: string }) {
+  const [stats, setStats] = useState<{ available: number; reserved: number; assigned: number; total: number } | null>(null)
+  const [purchases, setPurchases] = useState<Array<{ id: string; phone_number: string; action: string; triggered_by: string; cost_eur: number | null; created_at: string }>>([])
+  const [alerts, setAlerts] = useState<Array<{ id: string; alert_type: string; severity: string; message: string; created_at: string }>>([])
+  const [loading, setLoading] = useState(true)
+  const [triggerResult, setTriggerResult] = useState<string | null>(null)
+  const [triggering, setTriggering] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    const [poolRes, purchaseRes, alertRes] = await Promise.all([
+      supabase.from('phone_numbers_pool').select('status'),
+      supabase.from('phone_purchase_log').select('id,phone_number,action,triggered_by,cost_eur,created_at').order('created_at', { ascending: false }).limit(20),
+      supabase.from('critical_alerts').select('id,alert_type,severity,message,created_at').in('alert_type', ['pool_empty','pool_low','twilio_balance_low','runaway_replenish']).order('created_at', { ascending: false }).limit(10),
+    ])
+    if (poolRes.data) {
+      const rows = poolRes.data
+      setStats({
+        available: rows.filter(r => r.status === 'available').length,
+        reserved:  rows.filter(r => r.status === 'reserved').length,
+        assigned:  rows.filter(r => r.status === 'assigned').length,
+        total:     rows.length,
+      })
+    }
+    if (purchaseRes.data) setPurchases(purchaseRes.data)
+    if (alertRes.data) setAlerts(alertRes.data)
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function triggerReplenish(dryRun: boolean) {
+    setTriggering(true)
+    setTriggerResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/replenish-phone-pool`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ dry_run: dryRun }),
+      })
+      const json = await res.json()
+      setTriggerResult(JSON.stringify(json, null, 2))
+      if (!dryRun) await load()
+    } catch (e: any) {
+      setTriggerResult(`Erreur: ${e.message}`)
+    }
+    setTriggering(false)
+  }
+
+  const statCard = (label: string, value: number, color: string) => (
+    <div className="rounded-xl p-4" style={{ background: `${color}10`, border: `1px solid ${color}30` }}>
+      <p className="text-2xl font-black" style={{ color }}>{value}</p>
+      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+    </div>
+  )
+
+  const severityColor = (s: string) => s === 'critical' ? '#EF4444' : s === 'high' ? '#F59E0B' : '#6B7280'
+
+  if (loading) return <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Chargement…</div>
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      {/* Stats pool */}
+      <section>
+        <h2 className="font-bold text-gray-700 mb-3 text-sm">État du pool</h2>
+        <div className="grid grid-cols-4 gap-3">
+          {statCard('Disponibles', stats?.available ?? 0, '#10B981')}
+          {statCard('Réservés', stats?.reserved ?? 0, '#F59E0B')}
+          {statCard('Assignés', stats?.assigned ?? 0, accent)}
+          {statCard('Total', stats?.total ?? 0, '#6B7280')}
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          Seuil min : <strong>5</strong> (REPLENISH_THRESHOLD) · Cible : <strong>10</strong> (REPLENISH_TARGET) · Cron : <strong>0 */6 * * *</strong> (alert) + <strong>30 */6 * * *</strong> (replenish)
+        </p>
+      </section>
+
+      {/* Déclenchement manuel */}
+      <section>
+        <h2 className="font-bold text-gray-700 mb-3 text-sm">Déclenchement manuel</h2>
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={() => triggerReplenish(true)}
+            disabled={triggering}
+            className="px-4 py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: '#E0E7FF', color: accent }}
+          >
+            {triggering ? '…' : 'Simuler (dry_run)'}
+          </button>
+          <button
+            onClick={() => {
+              if (!confirm('Acheter de vrais numéros Twilio ? Coût réel engendré.')) return
+              triggerReplenish(false)
+            }}
+            disabled={triggering}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: accent }}
+          >
+            {triggering ? '…' : 'Acheter maintenant'}
+          </button>
+          <button onClick={load} className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:text-gray-700 transition-colors">
+            Rafraîchir
+          </button>
+        </div>
+        {triggerResult && (
+          <pre className="mt-3 p-3 rounded-lg text-xs overflow-x-auto" style={{ background: '#F8F9FF', border: '1px solid #E0E7FF', color: '#374151' }}>
+            {triggerResult}
+          </pre>
+        )}
+      </section>
+
+      {/* Historique achats */}
+      <section>
+        <h2 className="font-bold text-gray-700 mb-3 text-sm">Historique des achats ({purchases.length})</h2>
+        {purchases.length === 0 ? (
+          <p className="text-sm text-gray-400">Aucun achat enregistré.</p>
+        ) : (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #E0E7FF' }}>
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ background: '#F8F9FF' }}>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Numéro</th>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Action</th>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Déclenché par</th>
+                  <th className="text-right p-2.5 font-semibold text-gray-500">Coût</th>
+                  <th className="text-right p-2.5 font-semibold text-gray-500">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchases.map((p, i) => (
+                  <tr key={p.id} style={{ borderTop: i > 0 ? '1px solid #F0F4FF' : undefined }}>
+                    <td className="p-2.5 font-mono text-gray-700">{p.phone_number}</td>
+                    <td className="p-2.5 text-gray-600">{p.action}</td>
+                    <td className="p-2.5 text-gray-500">{p.triggered_by}</td>
+                    <td className="p-2.5 text-right text-gray-600">{p.cost_eur != null ? `${p.cost_eur}€` : '—'}</td>
+                    <td className="p-2.5 text-right text-gray-400">{new Date(p.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Alertes */}
+      {alerts.length > 0 && (
+        <section>
+          <h2 className="font-bold text-gray-700 mb-3 text-sm">Alertes récentes ({alerts.length})</h2>
+          <div className="space-y-2">
+            {alerts.map(a => (
+              <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg text-xs" style={{ background: `${severityColor(a.severity)}08`, border: `1px solid ${severityColor(a.severity)}25` }}>
+                <span className="w-2 h-2 rounded-full flex-shrink-0 mt-0.5" style={{ background: severityColor(a.severity) }} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-gray-700">{a.alert_type}</p>
+                  <p className="text-gray-500 break-words">{a.message}</p>
+                </div>
+                <span className="text-gray-400 flex-shrink-0">{new Date(a.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}

@@ -132,8 +132,46 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, available }), { status: 200 })
     }
 
-    // ── Achat avec fail-safe 2 : plafond par exécution ───────────────────────
     const toBuy = Math.min(TARGET - available, MAX_BUYS_PER_RUN)
+
+    // ── Vérification solde Twilio avant achat ────────────────────────────────
+    // Chaque numéro FR coûte ~2€ (1€ setup + 1€ premier mois)
+    const COST_PER_NUMBER_EUR = 2.00
+    try {
+      const balRes = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Balance.json`,
+        { headers: { Authorization: 'Basic ' + btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`) } }
+      )
+      if (balRes.ok) {
+        const { balance, currency } = await balRes.json()
+        const balanceNum = parseFloat(balance ?? '0')
+        const estimatedCost = toBuy * COST_PER_NUMBER_EUR
+        // Twilio balance est en USD ; ~1.08 USD/EUR. On reste conservateur.
+        const estimatedCostUsd = estimatedCost * 1.10
+        if (balanceNum < estimatedCostUsd) {
+          const alertMsg = `⚠️ Solde Twilio insuffisant pour acheter ${toBuy} numéro(s). Solde: ${balanceNum} ${currency}, coût estimé: ${estimatedCostUsd.toFixed(2)} USD`
+          await sb.from('critical_alerts').insert({
+            alert_type: 'twilio_balance_low',
+            severity: 'high',
+            message: alertMsg,
+            meta: { balance: balanceNum, currency, to_buy: toBuy, estimated_cost_usd: estimatedCostUsd },
+          })
+          await sb.from('edge_function_logs').insert({
+            function_name: 'replenish-phone-pool',
+            status: 'error',
+            duration_ms: Date.now() - startMs,
+            input_meta: { available, threshold: THRESHOLD },
+            output_meta: { balance: balanceNum, estimated_cost_usd: estimatedCostUsd },
+            error_message: alertMsg,
+          })
+          return new Response(JSON.stringify({ error: 'insufficient_balance', balance: balanceNum, estimated_cost_usd: estimatedCostUsd }), { status: 402 })
+        }
+      }
+    } catch {
+      // Non bloquant — si l'API balance est indisponible on continue l'achat
+    }
+
+    // ── Achat avec fail-safe 2 : plafond par exécution ───────────────────────
     const bought: string[] = []
     const errors: string[] = []
 
