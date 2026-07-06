@@ -15,6 +15,24 @@ const DEMO_FROM_NUMBER = '+33939248290'
 const DEMO_TRUNK_ID    = 'ST_CspEkTSYvisn'
 
 
+// Token admin pour AgentDispatch (sip:admin + roomCreate)
+async function lkAdminToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000)
+  const enc = (o: object) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  const head    = enc({ alg: 'HS256', typ: 'JWT' })
+  const payload = enc({ iss: LK_KEY, sub: 'demo-admin', iat: now, exp: now + 60, nbf: now, sip: { admin: true }, roomCreate: true, roomAdmin: true })
+  const input   = `${head}.${payload}`
+  const key     = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(LK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig    = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  return `${input}.${sigB64}`
+}
+
 async function lkCallToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   const enc = (o: object) =>
@@ -124,6 +142,28 @@ Deno.serve(async (req) => {
   }
 
   console.log(`[demo-call] SIP outbound OK: room=${roomName} → ***${phone.slice(-4)} metier=${metier}`)
+
+  // Dispatcher explicitement l'agent vers la room demo (sans dispatch rule, l'agent ne rejoint pas)
+  try {
+    const adminToken = await lkAdminToken()
+    const dispatchRes = await fetch(`${LK_URL}/twirp/livekit.AgentDispatch/CreateDispatch`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room:       roomName,
+        agent_name: '',
+        metadata:   JSON.stringify({ job_type: 'web_demo', metier }),
+      }),
+    })
+    if (!dispatchRes.ok) {
+      const dispatchErr = await dispatchRes.text().catch(() => '')
+      console.error(`[demo-call] AgentDispatch error: ${dispatchRes.status} ${dispatchErr}`)
+    } else {
+      console.log(`[demo-call] AgentDispatch OK: room=${roomName}`)
+    }
+  } catch (e: any) {
+    console.error('[demo-call] AgentDispatch exception:', e.message)
+  }
 
   // Mettre à jour le lead avec le room name (non-bloquant)
   supabase.from('demo_leads').update({ vapi_call_id: roomName }).eq('phone', phone).eq('email', email).then(() => {}).catch(() => {})
