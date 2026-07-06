@@ -9,7 +9,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const TWILIO_SID         = Deno.env.get('TWILIO_ACCOUNT_SID')!
 const TWILIO_TOKEN       = Deno.env.get('TWILIO_AUTH_TOKEN')!
-const TWILIO_ADDRESS_SID = Deno.env.get('TWILIO_ADDRESS_SID') ?? ''
+// Bundle réglementaire France National (approuvé Twilio, adresse Villiers-sur-Marne)
+const TWILIO_BUNDLE_SID         = Deno.env.get('TWILIO_BUNDLE_SID')         ?? 'BU8bded271b7b03c4c47c11dad86f1f30a'
+const TWILIO_BUNDLE_ADDRESS_SID = Deno.env.get('TWILIO_BUNDLE_ADDRESS_SID') ?? 'AD055f44393e4efebbf13a9fe379236465'
 const SB_URL             = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE         = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
 const CRON_SECRET        = Deno.env.get('CRON_SECRET')!
@@ -43,9 +45,10 @@ async function getTwilioBalance(): Promise<{ balance: number; currency: string }
   }
 }
 
-// Cherche jusqu'à `limit*3` numéros nationaux FR et filtre sur le préfixe +339
+// Cherche jusqu'à `limit*3` numéros FR via Local.json et filtre sur le préfixe +339 (09 national)
+// Note: Twilio FR n'expose pas d'endpoint /National.json — les 09 sont retournés via /Local.json
 async function findNational09Numbers(limit: number): Promise<string[]> {
-  const url = new URL(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/AvailablePhoneNumbers/FR/National.json`)
+  const url = new URL(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/AvailablePhoneNumbers/FR/Local.json`)
   url.searchParams.set('VoiceEnabled', 'true')
   url.searchParams.set('SmsEnabled', 'true')
   url.searchParams.set('PageSize', String(limit * 3))  // sur-demander pour compenser le filtre 09
@@ -66,7 +69,9 @@ async function findNational09Numbers(limit: number): Promise<string[]> {
 // Achète un numéro et retourne son SID
 async function purchaseNumber(phoneNumber: string): Promise<string> {
   const params: Record<string, string> = { PhoneNumber: phoneNumber }
-  if (TWILIO_ADDRESS_SID) params.AddressSid = TWILIO_ADDRESS_SID
+  // Twilio FR national requiert BundleSid + l'AddressSid lié au bundle
+  params.BundleSid  = TWILIO_BUNDLE_SID
+  params.AddressSid = TWILIO_BUNDLE_ADDRESS_SID
 
   const res = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers.json`,
@@ -120,7 +125,7 @@ Deno.serve(async (req) => {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const { dry_run = false } = await req.json().catch(() => ({}))
+  const { dry_run = false, force = false, limit } = await req.json().catch(() => ({}))
   const startMs = Date.now()
 
   try {
@@ -132,7 +137,7 @@ Deno.serve(async (req) => {
 
     const available = count ?? 0
 
-    if (available > THRESHOLD) {
+    if (!force && available > THRESHOLD) {
       await sb.from('edge_function_logs').insert({
         function_name: 'purchase-phone-numbers',
         status: 'skipped',
@@ -143,7 +148,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ skipped: true, available, threshold: THRESHOLD }), { status: 200 })
     }
 
-    const toFetch = BATCH_SIZE
+    const toFetch = (limit && Number.isInteger(limit) && limit > 0) ? Math.min(limit, BATCH_SIZE) : BATCH_SIZE
 
     // ── Mode dry_run ──────────────────────────────────────────────────────────
     if (dry_run) {
@@ -288,7 +293,7 @@ Deno.serve(async (req) => {
         }
 
         // 4. Insertion pool — status='available' seulement si tout est OK
-        await sb.from('phone_numbers_pool').insert({
+        const { error: poolErr } = await sb.from('phone_numbers_pool').insert({
           twilio_sid:   twilioSid,
           phone_number: phoneNumber,
           type:         'national',
@@ -296,6 +301,7 @@ Deno.serve(async (req) => {
           purchased_at: new Date().toISOString(),
           notes:        'auto_purchase_cron',
         })
+        if (poolErr) throw new Error(`Pool insert failed: ${poolErr.message}`)
 
         await sb.from('phone_purchase_log').insert({
           phone_number: phoneNumber,
