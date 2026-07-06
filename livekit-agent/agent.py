@@ -215,7 +215,7 @@ def _keyword_emotion(text: str) -> str | None:
     return None
 
 
-def _detect_emotion(text: str, ctx: dict) -> str | None:
+def _detect_emotion(text, ctx: dict) -> str | None:
     """Émotion Cartesia sonic-3.5 adaptée au texte ET au contexte de l'appel.
 
     ctx dict attendu :
@@ -234,6 +234,11 @@ def _detect_emotion(text: str, ctx: dict) -> str | None:
     # ── Phase d'ouverture : première phrase prononcée ──────────────────────────
     if turn == 0:
         return _OPENING_EMOTIONS.get(jtype, "Happy")
+
+    # livekit-agents >= 1.x passe un AsyncIterable[str] au lieu d'une str —
+    # dans ce cas on base l'émotion sur le contexte seul (pas de crash).
+    if not isinstance(text, str):
+        text = ""
 
     # ── Phase de clôture : mots de fin d'appel détectés ───────────────────────
     t_low = text.lower()
@@ -402,6 +407,21 @@ Extrais ces informations en JSON strict (aucun texte autour, aucun commentaire) 
 }}
 IMPORTANT : full_summary et sms_body doivent TOUJOURS être rédigés en français,
 quelle que soit la langue parlée pendant la conversation."""
+
+DEMO_NEEDS_PROMPT = """\
+Transcript d'une démo téléphonique avec Mia (assistante commerciale Fixlyy) et un prospect artisan :
+
+{transcript}
+
+Extrais ces informations en JSON strict (aucun texte autour) :
+{{
+  "metier_evoque": "métier exact de l'artisan (ex: plombier, électricien, menuisier) ou null",
+  "probleme_principal": "problème ou besoin principal exprimé en 1 phrase courte ou null",
+  "volume_activite": "estimation du volume (ex: '5 appels/semaine', 'seul', '3 employés') ou null",
+  "interesse": "oui si intérêt exprimé pour Fixlyy, non sinon",
+  "needs_summary": "résumé commercial en 3 lignes : (1) métier et taille de l'activité, (2) problème principal, (3) niveau d'intérêt et prochaine étape"
+}}
+IMPORTANT : répondre uniquement en français, aucun texte hors du JSON."""
 
 
 # ── LiveKit SIP helpers ───────────────────────────────────────────────────────
@@ -878,6 +898,92 @@ async def post_call_ended(
             logger.info(f"[mia] call-ended posted OK ({resp.status_code})")
     except Exception as e:
         logger.error(f"[mia] post_call_ended failed: {e}")
+
+
+async def generate_demo_needs(transcript: str) -> dict:
+    if not transcript.strip() or not GROQ_API_KEY:
+        return {}
+    prompt = DEMO_NEEDS_PROMPT.format(transcript=transcript)
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 500,
+                },
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            content = resp.json()["choices"][0]["message"]["content"]
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start >= 0 and end > start:
+                return json.loads(content[start:end])
+    except Exception as e:
+        logger.warning(f"[mia] generate_demo_needs failed: {e}")
+    return {}
+
+
+async def handle_web_demo_ended(
+    room_name: str,
+    conversation_items: list,
+    start_time: float,
+    metier: str = "autre",
+) -> None:
+    duration_secs = int(time.time() - start_time)
+    logger.info(f"[mia] web-demo ended — room={room_name} duration={duration_secs}s items={len(conversation_items)}")
+
+    lines = []
+    for item in conversation_items:
+        label = "Mia" if item["role"] == "assistant" else "Prospect"
+        text = item["text"]
+        if item.get("interrupted"):
+            text += " [interrompu]"
+        lines.append(f"{label}: {text}")
+    transcript = "\n".join(lines)
+
+    if not transcript:
+        logger.warning("[mia] demo transcript vide — demo_leads non mis à jour")
+        return
+
+    needs = await generate_demo_needs(transcript)
+    logger.info(f"[mia] demo needs: metier={needs.get('metier_evoque')!r} interesse={needs.get('interesse')!r}")
+
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        logger.warning("[mia] handle_web_demo_ended: SUPABASE credentials manquants")
+        return
+
+    payload = {
+        "call_transcript": transcript[:50000],
+        "needs_summary": needs.get("needs_summary") or "",
+        "call_duration_seconds": duration_secs,
+        "metier_evoque": needs.get("metier_evoque") or metier,
+    }
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.patch(
+                f"{SUPABASE_URL}/rest/v1/demo_leads",
+                headers=headers,
+                params={"room_name": f"eq.{room_name}"},
+                json=payload,
+                timeout=20.0,
+            )
+            if resp.status_code in (200, 204):
+                logger.info(f"[mia] demo_leads PATCH OK: room={room_name}")
+            else:
+                logger.error(f"[mia] demo_leads PATCH failed: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        logger.error(f"[mia] handle_web_demo_ended failed: {e}")
 
 
 async def handle_call_ended(
@@ -1629,7 +1735,14 @@ async def entrypoint(ctx: JobContext):
     def on_participant_disconnected(participant):
         nonlocal caller_number
         identity = getattr(participant, "identity", "") or ""
-        if identity.startswith("sip_") and not identity.startswith("sip_out_"):
+        if identity.startswith("sip_out_") and web_demo_meta.get("job_type") == "web_demo":
+            loop.create_task(handle_web_demo_ended(
+                room_name=room_name,
+                conversation_items=list(conversation_items),
+                start_time=start_time,
+                metier=web_demo_meta.get("metier", "autre"),
+            ))
+        elif identity.startswith("sip_") and not identity.startswith("sip_out_"):
             caller_number = sip_ref.get("caller_number") or identity[len("sip_"):]
             transfer_state = {
                 "to":  sip_ref.get("transferred_to"),
