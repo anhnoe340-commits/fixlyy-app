@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403, headers: { ...CORS, 'Content-Type': 'application/json' } })
   }
 
-  const { dry_run = true } = await req.json().catch(() => ({}))
+  const { dry_run = true, force = false, limit } = await req.json().catch(() => ({}))
 
   // Appel service-to-service avec service_role (jamais exposé au browser)
   const res = await fetch(`${SB_URL}/functions/v1/purchase-phone-numbers`, {
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SB_SERVICE}`,
     },
-    body: JSON.stringify({ dry_run }),
+    body: JSON.stringify({ dry_run, force, ...(limit ? { limit } : {}) }),
   })
 
   const json = await res.json().catch(() => ({}))

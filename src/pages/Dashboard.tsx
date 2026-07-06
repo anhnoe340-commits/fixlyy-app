@@ -5439,7 +5439,7 @@ function PoolAdminPage({ accent }: { accent: string }) {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-pool-trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ dry_run: dryRun }),
+        body: JSON.stringify({ dry_run: dryRun, force: true }),
       })
       const json = await res.json()
       setTriggerResult(JSON.stringify(json, null, 2))
@@ -5505,7 +5505,7 @@ function PoolAdminPage({ accent }: { accent: string }) {
           {statCard('Total',       total,     '#6B7280')}
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Seuil achat : <strong>≤ 3</strong> (PURCHASE_THRESHOLD) · Batch : <strong>5</strong> numéros ·
+          Seuil achat : <strong>&lt; 3</strong> (PURCHASE_THRESHOLD) · Batch : <strong>5</strong> numéros ·
           Type : <strong>09 National</strong> uniquement ·
           Crons : <strong>0 */6</strong> (alert) · <strong>15 */6</strong> (purchase)
         </p>
