@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
   const { dry_run = true } = await req.json().catch(() => ({}))
 
   // Appel service-to-service avec service_role (jamais exposé au browser)
-  const res = await fetch(`${SB_URL}/functions/v1/replenish-phone-pool`, {
+  const res = await fetch(`${SB_URL}/functions/v1/purchase-phone-numbers`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

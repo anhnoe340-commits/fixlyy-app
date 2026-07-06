@@ -5396,48 +5396,49 @@ const SmsIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 0
 const PoolIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="4" width="3" height="9" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="6.5" y="2" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="11.5" y="6" width="3" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
 
 // ── Pool Admin Page ────────────────────────────────────────────────────────────
+type PoolRow = { id: string; phone_number: string; twilio_sid: string; type: string; status: string; notes: string | null; purchased_at: string }
+type PurchaseRow = { id: string; phone_number: string; action: string; triggered_by: string; cost_eur: number | null; created_at: string }
+type AlertRow = { id: string; alert_type: string; severity: string; message: string; created_at: string }
+
 function PoolAdminPage({ accent }: { accent: string }) {
-  const [stats, setStats] = useState<{ available: number; reserved: number; assigned: number; total: number } | null>(null)
-  const [purchases, setPurchases] = useState<Array<{ id: string; phone_number: string; action: string; triggered_by: string; cost_eur: number | null; created_at: string }>>([])
-  const [alerts, setAlerts] = useState<Array<{ id: string; alert_type: string; severity: string; message: string; created_at: string }>>([])
-  const [loading, setLoading] = useState(true)
+  const [poolRows,  setPoolRows]  = useState<PoolRow[]>([])
+  const [purchases, setPurchases] = useState<PurchaseRow[]>([])
+  const [alerts,    setAlerts]    = useState<AlertRow[]>([])
+  const [loading,   setLoading]   = useState(true)
   const [triggerResult, setTriggerResult] = useState<string | null>(null)
-  const [triggering, setTriggering] = useState(false)
+  const [triggering,    setTriggering]    = useState(false)
 
   async function load() {
     setLoading(true)
     const [poolRes, purchaseRes, alertRes] = await Promise.all([
-      supabase.from('phone_numbers_pool').select('status'),
-      supabase.from('phone_purchase_log').select('id,phone_number,action,triggered_by,cost_eur,created_at').order('created_at', { ascending: false }).limit(20),
-      supabase.from('critical_alerts').select('id,alert_type,severity,message,created_at').in('alert_type', ['pool_empty','pool_low','twilio_balance_low','runaway_replenish']).order('created_at', { ascending: false }).limit(10),
+      supabase.from('phone_numbers_pool')
+        .select('id,phone_number,twilio_sid,type,status,notes,purchased_at')
+        .order('purchased_at', { ascending: false })
+        .limit(50),
+      supabase.from('phone_purchase_log')
+        .select('id,phone_number,action,triggered_by,cost_eur,created_at')
+        .order('created_at', { ascending: false }).limit(20),
+      supabase.from('critical_alerts')
+        .select('id,alert_type,severity,message,created_at')
+        .in('alert_type', ['pool_empty','pool_low','twilio_balance_low','runaway_replenish','no_09_numbers_available'])
+        .order('created_at', { ascending: false }).limit(10),
     ])
-    if (poolRes.data) {
-      const rows = poolRes.data
-      setStats({
-        available: rows.filter(r => r.status === 'available').length,
-        reserved:  rows.filter(r => r.status === 'reserved').length,
-        assigned:  rows.filter(r => r.status === 'assigned').length,
-        total:     rows.length,
-      })
-    }
-    if (purchaseRes.data) setPurchases(purchaseRes.data)
-    if (alertRes.data) setAlerts(alertRes.data)
+    if (poolRes.data)    setPoolRows(poolRes.data as PoolRow[])
+    if (purchaseRes.data) setPurchases(purchaseRes.data as PurchaseRow[])
+    if (alertRes.data)   setAlerts(alertRes.data as AlertRow[])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
-  async function triggerReplenish(dryRun: boolean) {
+  async function triggerPurchase(dryRun: boolean) {
     setTriggering(true)
     setTriggerResult(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-pool-trigger`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
         body: JSON.stringify({ dry_run: dryRun }),
       })
       const json = await res.json()
@@ -5449,6 +5450,12 @@ function PoolAdminPage({ accent }: { accent: string }) {
     setTriggering(false)
   }
 
+  const available = poolRows.filter(r => r.status === 'available').length
+  const reserved  = poolRows.filter(r => r.status === 'reserved').length
+  const assigned  = poolRows.filter(r => r.status === 'assigned').length
+  const errors    = poolRows.filter(r => r.status === 'error').length
+  const total     = poolRows.length
+
   const statCard = (label: string, value: number, color: string) => (
     <div className="rounded-xl p-4" style={{ background: `${color}10`, border: `1px solid ${color}30` }}>
       <p className="text-2xl font-black" style={{ color }}>{value}</p>
@@ -5456,23 +5463,51 @@ function PoolAdminPage({ accent }: { accent: string }) {
     </div>
   )
 
+  const statusBadge = (status: string) => {
+    const cfg: Record<string, { label: string; color: string }> = {
+      available: { label: '✅ Actif',    color: '#10B981' },
+      assigned:  { label: '🔗 Assigné',  color: '#3B82F6' },
+      reserved:  { label: '⏳ Réservé',  color: '#F59E0B' },
+      released:  { label: '🔓 Libéré',   color: '#6B7280' },
+      error:     { label: '❌ Erreur',    color: '#EF4444' },
+    }
+    const c = cfg[status] ?? { label: status, color: '#6B7280' }
+    return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: `${c.color}15`, color: c.color }}>{c.label}</span>
+  }
+
+  const typeLabel = (type: string) => {
+    if (type === 'national') return '09 National'
+    if (type === 'local')    return '0X Géo'
+    if (type === 'mobile')   return '06/07 Mobile'
+    return type
+  }
+
+  const isAutoPurchase = (row: PoolRow) => row.notes === 'auto_purchase_cron'
+  const isNew = (row: PoolRow) => {
+    const d = new Date(row.purchased_at)
+    return Date.now() - d.getTime() < 48 * 3600_000
+  }
+
   const severityColor = (s: string) => s === 'critical' ? '#EF4444' : s === 'high' ? '#F59E0B' : '#6B7280'
 
   if (loading) return <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Chargement…</div>
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Stats pool */}
+      {/* Stats */}
       <section>
         <h2 className="font-bold text-gray-700 mb-3 text-sm">État du pool</h2>
-        <div className="grid grid-cols-4 gap-3">
-          {statCard('Disponibles', stats?.available ?? 0, '#10B981')}
-          {statCard('Réservés', stats?.reserved ?? 0, '#F59E0B')}
-          {statCard('Assignés', stats?.assigned ?? 0, accent)}
-          {statCard('Total', stats?.total ?? 0, '#6B7280')}
+        <div className="grid grid-cols-5 gap-3">
+          {statCard('Disponibles', available, '#10B981')}
+          {statCard('Réservés',    reserved,  '#F59E0B')}
+          {statCard('Assignés',    assigned,  accent)}
+          {statCard('Erreurs',     errors,    '#EF4444')}
+          {statCard('Total',       total,     '#6B7280')}
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Seuil min : <strong>5</strong> (REPLENISH_THRESHOLD) · Cible : <strong>10</strong> (REPLENISH_TARGET) · Cron : <strong>0 */6 * * *</strong> (alert) + <strong>30 */6 * * *</strong> (replenish)
+          Seuil achat : <strong>≤ 3</strong> (PURCHASE_THRESHOLD) · Batch : <strong>5</strong> numéros ·
+          Type : <strong>09 National</strong> uniquement ·
+          Crons : <strong>0 */6</strong> (alert) · <strong>15 */6</strong> (purchase)
         </p>
       </section>
 
@@ -5480,24 +5515,16 @@ function PoolAdminPage({ accent }: { accent: string }) {
       <section>
         <h2 className="font-bold text-gray-700 mb-3 text-sm">Déclenchement manuel</h2>
         <div className="flex gap-3 flex-wrap">
-          <button
-            onClick={() => triggerReplenish(true)}
-            disabled={triggering}
+          <button onClick={() => triggerPurchase(true)} disabled={triggering}
             className="px-4 py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-80 disabled:opacity-50"
-            style={{ background: '#E0E7FF', color: accent }}
-          >
+            style={{ background: '#E0E7FF', color: accent }}>
             {triggering ? '…' : 'Simuler (dry_run)'}
           </button>
-          <button
-            onClick={() => {
-              if (!confirm('Acheter de vrais numéros Twilio ? Coût réel engendré.')) return
-              triggerReplenish(false)
-            }}
+          <button onClick={() => { if (!confirm('Acheter 5 vrais numéros 09 Twilio ? Coût réel ~10€.')) return; triggerPurchase(false) }}
             disabled={triggering}
             className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-            style={{ background: accent }}
-          >
-            {triggering ? '…' : 'Acheter maintenant'}
+            style={{ background: accent }}>
+            {triggering ? '…' : 'Acheter 5 numéros 09'}
           </button>
           <button onClick={load} className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:text-gray-700 transition-colors">
             Rafraîchir
@@ -5507,6 +5534,44 @@ function PoolAdminPage({ accent }: { accent: string }) {
           <pre className="mt-3 p-3 rounded-lg text-xs overflow-x-auto" style={{ background: '#F8F9FF', border: '1px solid #E0E7FF', color: '#374151' }}>
             {triggerResult}
           </pre>
+        )}
+      </section>
+
+      {/* Pool actuel */}
+      <section>
+        <h2 className="font-bold text-gray-700 mb-3 text-sm">Numéros du pool ({total})</h2>
+        {poolRows.length === 0 ? (
+          <p className="text-sm text-gray-400">Pool vide.</p>
+        ) : (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #E0E7FF' }}>
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ background: '#F8F9FF' }}>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Numéro</th>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Type</th>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Statut config.</th>
+                  <th className="text-right p-2.5 font-semibold text-gray-500">Ajouté</th>
+                </tr>
+              </thead>
+              <tbody>
+                {poolRows.map((r, i) => (
+                  <tr key={r.id} style={{ borderTop: i > 0 ? '1px solid #F0F4FF' : undefined }}>
+                    <td className="p-2.5">
+                      <span className="font-mono text-gray-700">{r.phone_number}</span>
+                      {isAutoPurchase(r) && isNew(r) && (
+                        <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: '#E0F7FA', color: '#0891B2' }}>🆕 Auto</span>
+                      )}
+                    </td>
+                    <td className="p-2.5 text-gray-600">{typeLabel(r.type)}</td>
+                    <td className="p-2.5">{statusBadge(r.status)}</td>
+                    <td className="p-2.5 text-right text-gray-400">
+                      {new Date(r.purchased_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
@@ -5522,7 +5587,7 @@ function PoolAdminPage({ accent }: { accent: string }) {
                 <tr style={{ background: '#F8F9FF' }}>
                   <th className="text-left p-2.5 font-semibold text-gray-500">Numéro</th>
                   <th className="text-left p-2.5 font-semibold text-gray-500">Action</th>
-                  <th className="text-left p-2.5 font-semibold text-gray-500">Déclenché par</th>
+                  <th className="text-left p-2.5 font-semibold text-gray-500">Source</th>
                   <th className="text-right p-2.5 font-semibold text-gray-500">Coût</th>
                   <th className="text-right p-2.5 font-semibold text-gray-500">Date</th>
                 </tr>
