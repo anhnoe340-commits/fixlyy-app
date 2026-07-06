@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
 
     const available = count ?? 0
 
-    if (!force && available > THRESHOLD) {
+    if (!force && available >= THRESHOLD) {
       await sb.from('edge_function_logs').insert({
         function_name: 'purchase-phone-numbers',
         status: 'skipped',
