@@ -9,10 +9,8 @@ const LK_URL     = (Deno.env.get('LIVEKIT_CLOUD_URL') ?? '').replace(/^wss?:\/\/
 const LK_KEY     = Deno.env.get('LIVEKIT_CLOUD_API_KEY') ?? ''
 const LK_SECRET  = Deno.env.get('LIVEKIT_CLOUD_API_SECRET') ?? ''
 
-// Numéro fixe dédié aux démos web — traçable dans le dashboard fixlyy@fixlyy.fr
-const DEMO_FROM_NUMBER = '+33939248290'
-// Trunk SORTANT partagé fixlyy-outbound-twilio (ST_ZRxsr2kNdKXB est le trunk ENTRANT)
-const DEMO_TRUNK_ID    = 'ST_CspEkTSYvisn'
+const DEMO_FROM_NUMBER = Deno.env.get('DEMO_COMMERCIAL_PHONE_NUMBER') ?? '+33939248290'
+const DEMO_TRUNK_ID    = Deno.env.get('DEMO_LIVEKIT_TRUNK_ID')        ?? 'ST_CspEkTSYvisn'
 
 
 // Token admin pour AgentDispatch (sip:admin + roomCreate)
@@ -166,7 +164,7 @@ Deno.serve(async (req) => {
   }
 
   // Mettre à jour le lead avec le room name (non-bloquant)
-  supabase.from('demo_leads').update({ vapi_call_id: roomName }).eq('phone', phone).eq('email', email).then(() => {}).catch(() => {})
+  supabase.from('demo_leads').update({ room_name: roomName }).eq('phone', phone).eq('email', email).then(() => {}).catch(() => {})
 
   return new Response(JSON.stringify({ ok: true, roomName }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
