@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 import httpx
 from datetime import datetime, timezone
@@ -922,7 +923,10 @@ async def generate_demo_needs(transcript: str) -> dict:
             start = content.find("{")
             end = content.rfind("}") + 1
             if start >= 0 and end > start:
-                return json.loads(content[start:end])
+                # Nettoyer les caractères de contrôle qui cassent json.loads
+                raw = content[start:end]
+                raw = re.sub(r'[\x00-\x1f\x7f]', lambda m: ' ' if m.group() in '\t\n\r' else '', raw)
+                return json.loads(raw)
     except Exception as e:
         logger.warning(f"[mia] generate_demo_needs failed: {e}")
     return {}
