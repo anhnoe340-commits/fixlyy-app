@@ -13,7 +13,7 @@ type Page =
   | 'today' | 'calls' | 'contacts' | 'agenda' | 'stats' | 'messages'
   | 'greeting' | 'inbound-reasons' | 'outbound-reasons' | 'call-transfer' | 'post-processing' | 'employees'
   | 'business-details' | 'hours' | 'assistant' | 'webhooks' | 'integrations' | 'timezone'
-  | 'subscription' | 'pricing' | 'notifications' | 'pool-admin' | 'demo-leads'
+  | 'subscription' | 'pricing' | 'notifications' | 'pool-admin'
 
 const BRAND = '#2850c8'
 
@@ -174,7 +174,6 @@ export default function Dashboard() {
             <div className="px-3 pb-2">
               <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 px-2 mb-1">Admin</p>
               <NavItem icon={<PoolIcon />} label="Pool numéros" active={page === 'pool-admin'} onClick={() => setPage('pool-admin')} accent={accent} />
-              <NavItem icon={<LeadsIcon />} label="Leads Démo" active={page === 'demo-leads'} onClick={() => setPage('demo-leads')} accent={accent} />
             </div>
           )}
         {/* Pied de page — utilisateur */}
@@ -318,7 +317,6 @@ export default function Dashboard() {
           {page === 'subscription' && <SubscriptionPage accent={accent} />}
           {page === 'notifications' && <NotificationsPage accent={accent} />}
           {page === 'pool-admin' && user?.email === 'anhnoe340@gmail.com' && <PoolAdminPage accent={accent} />}
-          {page === 'demo-leads' && user?.email === 'anhnoe340@gmail.com' && <DemoLeadsPage accent={accent} />}
         </main>
       </div>
     </div>
@@ -349,7 +347,6 @@ const PAGE_LABELS: Record<Page, string> = {
   pricing: 'Mes tarifs',
   notifications: 'Notifications',
   'pool-admin': 'Pool Numéros',
-  'demo-leads': 'Leads Démo',
 }
 
 // ── Nav Components ────────────────────────────────────────────────────────────
@@ -5397,191 +5394,9 @@ const PriceTagIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 2h6l
 const BellIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a5 5 0 00-5 5v2.5L2 11h12l-1-1.5V7a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M6.5 11c0 .828.672 1.5 1.5 1.5s1.5-.672 1.5-1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8 2V1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
 const SmsIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H6l-3 2.5V11H3a1 1 0 01-1-1V3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><circle cx="5.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8" cy="6.5" r="0.8" fill="currentColor"/><circle cx="10.5" cy="6.5" r="0.8" fill="currentColor"/></svg>
 const PoolIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="4" width="3" height="9" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="6.5" y="2" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="11.5" y="6" width="3" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>
+// ── Pool Admin Page ────────────────────────────────────────────────────────────
+// (LeadsIcon kept for potential future use)
 const LeadsIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1.5 13c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M11 7.5l1.5 1.5L14.5 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-
-// ── Demo Leads Page ────────────────────────────────────────────────────────────
-type DemoLead = {
-  id: string
-  email: string | null
-  phone: string | null
-  metier: string | null
-  metier_evoque: string | null
-  room_name: string | null
-  call_transcript: string | null
-  needs_summary: string | null
-  call_duration_seconds: number | null
-  called_at: string | null
-  created_at: string
-}
-
-function DemoLeadsPage({ accent }: { accent: string }) {
-  const [leads, setLeads] = useState<DemoLead[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('')
-  const [selected, setSelected] = useState<DemoLead | null>(null)
-
-  async function load() {
-    setLoading(true)
-    const { data } = await supabase
-      .from('demo_leads')
-      .select('id,email,phone,metier,metier_evoque,room_name,call_transcript,needs_summary,call_duration_seconds,called_at,created_at')
-      .order('created_at', { ascending: false })
-      .limit(100)
-    setLeads((data ?? []) as DemoLead[])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const metiers = Array.from(new Set(leads.map(l => l.metier_evoque || l.metier).filter(Boolean))) as string[]
-  const filtered = filter ? leads.filter(l => (l.metier_evoque || l.metier) === filter) : leads
-
-  function exportCSV() {
-    const rows = [
-      ['Email', 'Téléphone', 'Métier', 'Métier évoqué', 'Durée (s)', 'Résumé', 'Date'],
-      ...filtered.map(l => [
-        l.email ?? '', l.phone ?? '', l.metier ?? '', l.metier_evoque ?? '',
-        String(l.call_duration_seconds ?? ''), (l.needs_summary ?? '').replace(/\n/g, ' '),
-        l.created_at ? new Date(l.created_at).toLocaleDateString('fr-FR') : '',
-      ])
-    ]
-    const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n')
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    a.download = `leads-demo-${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
-  }
-
-  function fmtDuration(s: number | null) {
-    if (!s) return '—'
-    const m = Math.floor(s / 60), sec = s % 60
-    return m > 0 ? `${m}min ${sec}s` : `${sec}s`
-  }
-
-  const withTranscript = leads.filter(l => l.call_transcript).length
-  const withSummary = leads.filter(l => l.needs_summary).length
-
-  if (loading) return <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Chargement…</div>
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-5">
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Leads total', value: leads.length, color: accent },
-          { label: 'Avec transcript', value: withTranscript, color: '#10B981' },
-          { label: 'Avec résumé', value: withSummary, color: '#8B5CF6' },
-          { label: 'Filtrés', value: filtered.length, color: '#6B7280' },
-        ].map(s => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: `${s.color}10`, border: `1px solid ${s.color}30` }}>
-            <p className="text-2xl font-black" style={{ color: s.color }}>{s.value}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Contrôles */}
-      <div className="flex gap-3 items-center flex-wrap">
-        <select
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          className="text-sm rounded-lg border border-gray-200 px-3 py-2 text-gray-700 bg-white"
-        >
-          <option value="">Tous les métiers</option>
-          {metiers.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <button onClick={load} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors rounded-lg border border-gray-200">
-          Rafraîchir
-        </button>
-        <button onClick={exportCSV} className="px-3 py-2 text-sm font-semibold rounded-lg transition-opacity hover:opacity-80"
-          style={{ background: `${accent}15`, color: accent }}>
-          Exporter CSV
-        </button>
-      </div>
-
-      {/* Table */}
-      {filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">Aucun lead démo enregistré.</p>
-      ) : (
-        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #E0E7FF' }}>
-          <table className="w-full text-xs">
-            <thead>
-              <tr style={{ background: '#F8F9FF' }}>
-                <th className="text-left p-2.5 font-semibold text-gray-500">Contact</th>
-                <th className="text-left p-2.5 font-semibold text-gray-500">Métier</th>
-                <th className="text-left p-2.5 font-semibold text-gray-500">Résumé</th>
-                <th className="text-right p-2.5 font-semibold text-gray-500">Durée</th>
-                <th className="text-right p-2.5 font-semibold text-gray-500">Date</th>
-                <th className="p-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((l, i) => (
-                <tr key={l.id} style={{ borderTop: i > 0 ? '1px solid #F0F4FF' : undefined }}>
-                  <td className="p-2.5">
-                    <p className="text-gray-700 font-medium">{l.email ?? '—'}</p>
-                    <p className="text-gray-400 font-mono">{l.phone ?? ''}</p>
-                  </td>
-                  <td className="p-2.5">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                      style={{ background: `${accent}15`, color: accent }}>
-                      {l.metier_evoque || l.metier || '—'}
-                    </span>
-                  </td>
-                  <td className="p-2.5 max-w-xs">
-                    <p className="text-gray-600 line-clamp-2">{l.needs_summary || '—'}</p>
-                  </td>
-                  <td className="p-2.5 text-right text-gray-500">{fmtDuration(l.call_duration_seconds)}</td>
-                  <td className="p-2.5 text-right text-gray-400">
-                    {l.created_at ? new Date(l.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}
-                  </td>
-                  <td className="p-2.5 text-right">
-                    {l.call_transcript && (
-                      <button onClick={() => setSelected(l)}
-                        className="text-[10px] font-semibold px-2 py-1 rounded transition-opacity hover:opacity-70"
-                        style={{ background: `${accent}15`, color: accent }}>
-                        Transcript
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal transcript */}
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setSelected(null)}>
-          <div className="rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-            style={{ background: '#fff', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
-            onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="font-bold text-gray-800">{selected.email}</h3>
-                <p className="text-xs text-gray-400">{selected.metier_evoque || selected.metier} · {fmtDuration(selected.call_duration_seconds)}</p>
-              </div>
-              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-gray-600 text-lg font-bold">×</button>
-            </div>
-            {selected.needs_summary && (
-              <div className="mb-4 p-3 rounded-lg text-sm text-gray-700 whitespace-pre-wrap"
-                style={{ background: `${accent}08`, border: `1px solid ${accent}20` }}>
-                <p className="text-[10px] font-bold text-gray-400 mb-1">RÉSUMÉ DES BESOINS</p>
-                {selected.needs_summary}
-              </div>
-            )}
-            <div className="p-3 rounded-lg text-xs text-gray-600 font-mono whitespace-pre-wrap leading-relaxed"
-              style={{ background: '#F8F9FF', border: '1px solid #E0E7FF', maxHeight: '50vh', overflowY: 'auto' }}>
-              {selected.call_transcript}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── Pool Admin Page ────────────────────────────────────────────────────────────
 type PoolRow = { id: string; phone_number: string; twilio_sid: string; type: string; status: string; notes: string | null; purchased_at: string }

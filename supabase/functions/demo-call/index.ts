@@ -95,8 +95,10 @@ Deno.serve(async (req) => {
 
   const supabase = createClient(SB_URL, SB_SERVICE)
 
-  // Stocker le lead (non-bloquant)
-  supabase.from('demo_leads').insert({ phone, email, metier }).then(() => {}).catch(() => {})
+  // Stocker le lead — upsert sur phone pour éviter les doublons si le prospect rappelle
+  supabase.from('demo_leads')
+    .upsert({ phone, email, metier }, { onConflict: 'phone', ignoreDuplicates: false })
+    .then(() => {}).catch(() => {})
 
   const demoId     = crypto.randomUUID().slice(0, 8)
   const roomName   = `web-demo-${demoId}`
