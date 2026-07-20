@@ -1796,6 +1796,8 @@ class WebDemoMiaAgent(Agent):
         self._emo_turn      = 0
         self._detected_lang = "fr"
         self._injected_lang = "fr"  # langue déjà présente dans le contexte LLM (pas d'injection initiale)
+        self._pending_lang  = None  # candidat détecté par Deepgram, pas encore confirmé
+        self._pending_count = 0     # nb de tours consécutifs où ce candidat a été détecté
 
     async def on_enter(self):
         logger.info("[mia] WebDemoMiaAgent on_enter — commercial demo")
@@ -1810,27 +1812,44 @@ class WebDemoMiaAgent(Agent):
             ):
                 client_text = (event.alternatives[0].text or "").lower()
 
-                # 1) Détection directe via Deepgram language metadata
-                #    Peu fiable sur les énoncés courts ("ouais", "ok") — Deepgram peut les
-                #    classer dans la mauvaise langue. On ignore ce signal en dessous de 3 mots ;
-                #    le scan de mots-clés explicites ci-dessous reste, lui, actif sans condition.
-                if len(client_text.split()) >= 3:
-                    raw_lang = getattr(event.alternatives[0], "language", None) or ""
-                    detected = raw_lang[:2].lower() if raw_lang else self._detected_lang
-                    detected = detected if detected in VOICE_MAP else "fr"
-                else:
-                    detected = self._detected_lang
-
-                # 2) Scan de mots-clés explicites ("parle anglais", "in english", etc.)
-                #    Prioritaire sur la détection Deepgram — couvre "vas-y en anglais" (fr détecté par Deepgram)
+                # 1) Scan de mots-clés explicites ("parle anglais", "in english", etc.) — switch immédiat,
+                #    sans ambiguïté possible sur l'intention du prospect.
+                keyword_target = None
                 for kw, target in _DEMO_LANG_REQUEST_MAP.items():
                     if kw in client_text:
-                        detected = target
+                        keyword_target = target
                         break
+
+                if keyword_target is not None:
+                    detected = keyword_target
+                    self._pending_lang  = None
+                    self._pending_count = 0
+                else:
+                    # 2) Détection passive via Deepgram language metadata — peu fiable sur un tour
+                    #    isolé (ex: "ouais" pris pour de l'anglais, "non ça va oui" pour de l'espagnol).
+                    #    On exige la même langue non-fr détectée sur 2 tours consécutifs avant de
+                    #    basculer, pour filtrer le bruit de classification sur des phrases courtes/informelles.
+                    raw_lang      = getattr(event.alternatives[0], "language", None) or ""
+                    raw_detected  = raw_lang[:2].lower() if raw_lang else self._detected_lang
+                    raw_detected  = raw_detected if raw_detected in VOICE_MAP else "fr"
+
+                    if raw_detected == self._detected_lang:
+                        self._pending_lang  = None
+                        self._pending_count = 0
+                        detected = self._detected_lang
+                    elif raw_detected == self._pending_lang:
+                        self._pending_count += 1
+                        detected = raw_detected if self._pending_count >= 2 else self._detected_lang
+                    else:
+                        self._pending_lang  = raw_detected
+                        self._pending_count = 1
+                        detected = self._detected_lang
 
                 if detected != self._detected_lang:
                     prev = self._detected_lang
                     self._detected_lang = detected
+                    self._pending_lang  = None
+                    self._pending_count = 0
                     logger.info(f"[mia] demo lang switch: {prev!r} → {detected!r}")
             yield event
 
