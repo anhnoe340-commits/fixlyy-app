@@ -207,6 +207,13 @@ _DEMO_LANG_REQUEST_MAP: dict[str, str] = {
     "french":      "fr",
 }
 
+# Marqueurs indiquant que Mia vient de prononcer la mention multilingue (Phase 5 du
+# prompt démo) — déverrouille le switch de langue dans WebDemoMiaAgent.stt_node/llm_node.
+_MULTILINGUAL_UNLOCK_MARKERS: tuple[str, ...] = (
+    "autres langues",
+    "plusieurs langues",
+)
+
 
 def _keyword_emotion(text: str) -> str | None:
     """Retourne l'émotion la plus appropriée selon le contenu de la phrase de Mia,
@@ -1798,6 +1805,7 @@ class WebDemoMiaAgent(Agent):
         self._injected_lang = "fr"  # langue déjà présente dans le contexte LLM (pas d'injection initiale)
         self._pending_lang  = None  # candidat détecté par Deepgram, pas encore confirmé
         self._pending_count = 0     # nb de tours consécutifs où ce candidat a été détecté
+        self._lang_switch_unlocked = False  # activé seulement quand Mia annonce le multilingue (Phase 5)
 
     async def on_enter(self):
         logger.info("[mia] WebDemoMiaAgent on_enter — commercial demo")
@@ -1811,6 +1819,14 @@ class WebDemoMiaAgent(Agent):
                 and event.alternatives
             ):
                 client_text = (event.alternatives[0].text or "").lower()
+
+                # Le switch de langue est verrouillé tant que Mia n'a pas elle-même annoncé
+                # être multilingue (Phase 5 du prompt, cf. tts_node). Avant ça, la conversation
+                # doit rester en français sans accroc — aucune détection, passive ou par mot-clé,
+                # ne doit pouvoir faire dévier la démo pendant le tutoiement/la qualification.
+                if not self._lang_switch_unlocked:
+                    yield event
+                    continue
 
                 # 1) Scan de mots-clés explicites ("parle anglais", "in english", etc.) — switch immédiat,
                 #    sans ambiguïté possible sur l'intention du prospect.
@@ -1854,6 +1870,20 @@ class WebDemoMiaAgent(Agent):
             yield event
 
     async def llm_node(self, chat_ctx, tools, model_settings):
+        # Déverrouille le switch de langue dès que Mia a elle-même prononcé la mention
+        # multilingue (Phase 5 du prompt) dans un tour précédent. On lit chat_ctx (messages
+        # déjà finalisés) plutôt que le flux tts_node — bien plus fiable, car le texte transmis
+        # à tts_node est souvent un AsyncIterable[str] et non une string exploitable directement.
+        if not self._lang_switch_unlocked:
+            for msg in chat_ctx.messages():
+                if msg.role != "assistant":
+                    continue
+                content = (msg.text_content or "").lower()
+                if any(marker in content for marker in _MULTILINGUAL_UNLOCK_MARKERS):
+                    self._lang_switch_unlocked = True
+                    logger.info("[mia] demo multilingual switch unlocked (Phase 5 mentionnée)")
+                    break
+
         if self._detected_lang != self._injected_lang:
             prev_injected       = self._injected_lang
             self._injected_lang = self._detected_lang
