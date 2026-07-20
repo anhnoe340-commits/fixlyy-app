@@ -1794,24 +1794,83 @@ class WebDemoMiaAgent(Agent):
         )
         self._greeting      = "Bonjour, je m'appelle Mia. Je suis l'assistante vocale créée par Fixlyy et peut-être bientôt la tienne. Mais avant tout apprenons à nous connaître — est-ce que ça te dérange si je te tutoie ?"
         self._emo_turn      = 0
+        self._detected_lang = "fr"
+        self._injected_lang = "fr"  # langue déjà présente dans le contexte LLM (pas d'injection initiale)
 
     async def on_enter(self):
         logger.info("[mia] WebDemoMiaAgent on_enter — commercial demo")
         self.session.say(self._greeting, allow_interruptions=False)
 
+    async def stt_node(self, audio, model_settings):
+        from livekit.agents import stt as stt_module
+        async for event in super().stt_node(audio, model_settings):
+            if (
+                event.type == stt_module.SpeechEventType.FINAL_TRANSCRIPT
+                and event.alternatives
+            ):
+                client_text = (event.alternatives[0].text or "").lower()
+
+                # 1) Détection directe via Deepgram language metadata
+                raw_lang = getattr(event.alternatives[0], "language", None) or ""
+                detected = raw_lang[:2].lower() if raw_lang else self._detected_lang
+                detected = detected if detected in VOICE_MAP else "fr"
+
+                # 2) Scan de mots-clés explicites ("parle anglais", "in english", etc.)
+                #    Prioritaire sur la détection Deepgram — couvre "vas-y en anglais" (fr détecté par Deepgram)
+                for kw, target in _DEMO_LANG_REQUEST_MAP.items():
+                    if kw in client_text:
+                        detected = target
+                        break
+
+                if detected != self._detected_lang:
+                    prev = self._detected_lang
+                    self._detected_lang = detected
+                    logger.info(f"[mia] demo lang switch: {prev!r} → {detected!r}")
+            yield event
+
+    async def llm_node(self, chat_ctx, tools, model_settings):
+        if self._detected_lang != self._injected_lang:
+            prev_injected       = self._injected_lang
+            self._injected_lang = self._detected_lang
+            if self._detected_lang != "fr":
+                lang_name = _LANG_NAMES.get(self._detected_lang, self._detected_lang.upper())
+                injection = (
+                    f"The prospect has requested or is now speaking {lang_name}. "
+                    f"Switch immediately and completely to {lang_name}. "
+                    f"Be natural and enthusiastic — this is the multilingual demo moment! "
+                    f"Stay in {lang_name} until they explicitly ask for French."
+                )
+            else:
+                injection = (
+                    "The prospect has returned to French. "
+                    "Switch back to French immediately and naturally."
+                )
+            try:
+                chat_ctx.add_message(role="system", content=injection)
+                logger.info(
+                    f"[mia] demo LLM lang inject: {prev_injected!r} → {self._detected_lang!r}"
+                )
+            except Exception as exc:
+                logger.warning(f"[mia] demo LLM lang inject failed: {exc}")
+        async for chunk in super().llm_node(chat_ctx, tools, model_settings):
+            yield chunk
+
     def tts_node(self, text, model_settings):
-        tts = _tts_for_lang("fr")
+        tts = _tts_for_lang(self._detected_lang)
         ctx = {
             "turn_count":  self._emo_turn,
             "urgency":     False,
             "frustration": False,
-            "tone_style":  "chaleureux",
+            "tone_style":  "chaleureux",  # démo toujours en registre chaleureux
             "job_type":    "demo",
         }
         emotion = _detect_emotion(text, ctx)
         tts.update_options(emotion=emotion)
         self._emo_turn += 1
-        logger.debug(f"[mia] demo tts_node: emotion={emotion!r} turn={self._emo_turn - 1}")
+        logger.debug(
+            f"[mia] demo tts_node: lang={self._detected_lang!r} "
+            f"emotion={emotion!r} turn={self._emo_turn - 1}"
+        )
         return super().tts_node(text, model_settings)
 
 
