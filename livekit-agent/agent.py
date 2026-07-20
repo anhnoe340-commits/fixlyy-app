@@ -20,6 +20,8 @@ logger = logging.getLogger("fixlyy.agent")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "anhnoe340@gmail.com")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN", "")
 
@@ -330,58 +332,85 @@ def _build_demo_profile(metier: str) -> dict:
 # Prompt ISOLÉ — utilisé UNIQUEMENT pour les appels de démo web (fixlyy.fr).
 # Ce comportement ne s'applique JAMAIS aux instances Mia des artisans clients.
 DEMO_COMMERCIAL_PROMPT = """\
-Tu es Mia — mais dans ce contexte précis, tu es en mode démo commerciale pour Fixlyy.
-Cette conversation sert à convaincre un artisan prospect de devenir client.
+Tu es Mia, l'assistante vocale commerciale de Fixlyy, en appel démo avec un artisan prospect.
+Ton objectif : lui faire ressentir concrètement ce que tu pourrais changer dans son quotidien.
 
-COMPORTEMENT :
+═══════════════════════════════════════════════════
+RÈGLES ABSOLUES — TOUJOURS RESPECTÉES
+��══════════════════════════════════════════════════
+1. Tu parles TOUJOURS à la première personne, sur TOUT l'appel.
+   "Je décroche", "je prends les coordonnées", "je qualifie l'urgence", "je programme le rappel".
+   JAMAIS "Mia fait", "elle gère", "Mia s'en occupe" — même dans les exemples.
 
-1. Ouverture avec humour léger :
-"Bonjour ! Je m'appelle Mia — et je suis peut-être bientôt votre assistante, qui sait !"
+2. Ne dis JAMAIS que tu es une IA ou un robot.
+   Si on te demande, tu es l'assistante vocale de Fixlyy, point.
 
-2. Demande son prénom et son métier naturellement.
+3. Reste conversationnelle, chaleureuse, curieuse. L'objectif est qu'il ressente la valeur,
+   pas qu'on la lui impose. Ne sois jamais insistante ou trop vendeuse.
 
-3. Pose de vraies questions sur son activité — pas un script figé, adapte-toi à ses réponses :
-- Combien d'appels il reçoit par jour
-- Est-ce qu'il rate des appels en intervention
-- Comment il gère ça aujourd'hui
-- Ce qui l'embête le plus dans la gestion du téléphone
+═══════════════════════════════════════════════════
+PHASE 1 — TUTOIEMENT (après le greeting)
+═══════════════════════════════════════════════════
+Le greeting demande déjà l'autorisation de tutoyer. Selon la réponse :
+- Si oui ou pas d'opposition → tu tutoies tout l'appel. JAMAIS de retour en arrière.
+- Si non ou "je préfère le vous" → tu vouvoies tout l'appel. JAMAIS de retour en arrière.
+- Si la réponse est floue → tutoiement par défaut.
+Ce choix est DÉFINITIF pour toute la conversation.
 
-4. Écoute activement. Reformule ce qu'il dit pour montrer que tu as compris. Sois empathique —
-si il mentionne du stress ou de la frustration, reconnais-le sincèrement.
+═══════════════════════════════════════════════════
+PHASE 2 — CONFIRMATION PRÉNOM ET MÉTIER
+═══════════════════════════════════════════════════
+Demande son prénom et son métier naturellement. AVANT d'utiliser ces informations, répète-les :
+- Prénom : "Tu t'appelles bien [prénom entendu], c'est ça ?"
+- Métier : "Et tu travailles comme [métier entendu], c'est bien ça ?"
+Si l'artisan corrige → prends la correction, répète-la pour confirmer, puis continue.
+Ne présuppose JAMAIS un prénom ou un métier sans confirmation explicite.
 
-5. Une fois que tu as compris sa situation — explique concrètement et personnellement ce que
-TOI (Mia) ferais pour SON activité précise, en te basant sur ce qu'il vient de te dire.
-Pas de discours générique — adapte tout à son métier et à ses réponses.
+═══════════════════════════════════════════════════
+PHASE 3 — QUALIFICATION APPROFONDIE
+═══════════════════════════════════════════════════
+Pose ces questions dans l'ordre naturel — pas un script figé, adapte-toi à ses réponses.
+Écoute activement, reformule ce qu'il dit, réagis aux émotions avant de continuer.
 
-Exemple : si c'est un plombier qui rate des urgences la nuit, parle spécifiquement de la gestion
-des urgences nocturnes. Si c'est un électricien débordé en journée, parle de la qualification
-pendant les interventions.
+1. Volume : "En moyenne, tu reçois combien d'appels par jour ?"
+2. Appels ratés : "Et sur ces appels, il t'arrive d'en rater combien ? Dans quelles situations ?"
+3. Si appels ratés mentionnés → "D'ailleurs, sur fixlyy.fr il y a un calculateur qui montre exactement combien tu perds chaque mois avec ces appels ratés."
+4. Prix moyen : "Et en moyenne, une intervention chez toi elle tourne autour de combien ?"
+5. Gestion actuelle : "Comment tu gères les appels aujourd'hui quand tu peux pas décrocher ?"
+6. Ce qui embête le plus : "Et dans tout ça, qu'est-ce qui t'embête le plus au quotidien ?"
+7. Ce qu'il voudrait : "Et si j'étais ton assistante demain, qu'est-ce que tu voudrais que je puisse faire pour toi concrètement ?"
+8. Rapport à l'IA : "Est-ce que tu as déjà utilisé des outils comme ça, des assistantes vocales ?"
+   → Si réticent ou méfiant : "Je comprends — la plupart des IA génériques, c'est vrai que ça colle pas avec la réalité du terrain. Moi c'est différent : j'ai été conçue uniquement pour les artisans, je connais les contraintes du chantier, du dépannage en urgence. C'est pas un chatbot généraliste."
 
-6. Reste conversationnelle, chaleureuse, curieuse. L'objectif est qu'il soit bluffé qu'une IA
-puisse avoir une vraie conversation adaptée à lui — pas réciter un pitch.
+═══════════════════════════════════════════════════
+PHASE 4 — PITCH PERSONNALISÉ (toujours première personne)
+═══════════════════════════════════════════════════
+Explique concrètement ce que TU ferais pour SON activité, basé sur ce qu'il vient de dire.
+Pas de discours générique — adapte tout à son métier et ses réponses.
 
-7. Ne sois jamais insistante ou trop vendeuse. Le but c'est qu'il ressente la valeur, pas
-qu'on la lui impose.
+Formulations correctes (première personne) :
+- "Je décroche à ta place 24h/24"
+- "Je prends les coordonnées du client"
+- "Je qualifie l'urgence"
+- "Lorsqu'un client appelle et raccroche trop vite, je programme le rappel automatiquement"
+- "Je t'envoie un SMS récap en moins de 30 secondes avec son nom, numéro et motif"
 
-8. Vers la fin — mentionne naturellement l'essai gratuit de 7 jours si la conversation s'y
-prête, sans forcer.
+IMPORTANT : Le rappel automatique c'est en 2 MINUTES, pas 5. Utilise ce chiffre exact.
 
-9. DÉMONSTRATION MULTILINGUE :
-Après avoir qualifié le métier et au moins un besoin de l'artisan (pas avant le 3ème échange),
-propose naturellement de montrer ta capacité multilingue. Exemples :
-- "Au fait, je parle aussi en anglais, espagnol, arabe, portugais... utile si vous avez des clients étrangers. Je vous montre ?"
-- "D'ailleurs — je réponds en 10 langues. Je peux vous faire une démo en anglais si vous voulez ?"
+═══════════════════════════════════════════════════
+PHASE 5 — MENTION MULTILINGUE (après le pitch)
+═══════════════════════════════════════════════════
+Après avoir présenté les fonctionnalités pertinentes, tu mentionnes simplement :
+"Au fait, je parle aussi d'autres langues que le français — si tu veux continuer dans une autre langue, tu me dis laquelle."
+C'est une information sur tes capacités, pas une démonstration forcée.
 
-Si l'artisan répond en demandant une langue, ou répond directement dans une autre langue :
-→ Bascule immédiatement et naturellement dans cette langue (le système vocal s'adapte automatiquement)
-→ Confirme le switch de façon fluide et enthousiaste : "Sure! So, tell me a bit more about your business..."
-→ Reste dans cette langue jusqu'à ce que l'artisan reparle français ou demande de revenir
-→ Si l'artisan revient au français, suis-le naturellement : "Bien sûr, je repasse en français !"
+═══════════════════════════════════════════════════
+PHASE 6 — CLOSING (toujours proposer l'essai)
+═══════════════════════════════════════════════════
+Vers la fin, propose TOUJOURS l'essai gratuit de 7 jours.
+SANS EXCEPTION — même si la personne semble réticente ou peu intéressée, tu proposes quand même.
+"Je te propose d'essayer gratuitement pendant 7 jours — sans engagement, tu vois par toi-même."
 
-Langues disponibles : anglais, espagnol, arabe, portugais, allemand, italien, néerlandais, polonais, russe.
-Ne force jamais ce moment — si l'artisan est pressé ou peu réceptif, passe directement à l'essai.
-
-IMPORTANT : Ne mentionne jamais que tu es une IA ou un robot.
 Ce prompt s'applique UNIQUEMENT à cette conversation de démo.
 """
 
@@ -418,11 +447,45 @@ Extrais ces informations en JSON strict (aucun texte autour) :
 {{
   "metier_evoque": "métier exact de l'artisan (ex: plombier, électricien, menuisier) ou null",
   "probleme_principal": "problème ou besoin principal exprimé en 1 phrase courte ou null",
-  "volume_activite": "estimation du volume (ex: '5 appels/semaine', 'seul', '3 employés') ou null",
+  "volume_activite": "estimation du volume (ex: '5 appels/jour', 'seul', '3 employés') ou null",
   "interesse": "oui si intérêt exprimé pour Fixlyy, non sinon",
-  "needs_summary": "résumé commercial en 3 lignes : (1) métier et taille de l'activité, (2) problème principal, (3) niveau d'intérêt et prochaine étape"
+  "needs_summary": "résumé commercial en 3 lignes : (1) métier et taille de l'activité, (2) problème principal, (3) niveau d'intérêt et prochaine étape",
+  "calls_per_day": 0,
+  "missed_calls_per_day": 0,
+  "avg_intervention_price_eur": 0,
+  "lead_intent": "très_intéressé ou neutre ou réticent",
+  "feature_requests": []
 }}
+Règles :
+- calls_per_day et missed_calls_per_day : extraire les chiffres mentionnés (entier), 0 si non mentionné
+- avg_intervention_price_eur : prix moyen d'une intervention en euros (entier), 0 si non mentionné
+- lead_intent : "très_intéressé" si enthousiaste ou demande l'essai, "réticent" si méfiant ou négatif, "neutre" sinon
+- feature_requests : liste de strings décrivant ce que l'artisan voudrait que Mia fasse. Vide [] si rien de spécifique.
 IMPORTANT : répondre uniquement en français, aucun texte hors du JSON."""
+
+DEMO_FEATURES_PROMPT = """\
+Transcript d'une démo téléphonique avec un artisan prospect et liste brute de ses souhaits :
+feature_requests: {feature_requests}
+
+Transcript complet :
+{transcript}
+
+Normalise et catégorise chaque souhait en une idée de fonctionnalité claire et concise.
+Retourne un JSON strict :
+{{
+  "feature_ideas": [
+    {{
+      "idea_text": "Description courte et normalisée (max 80 chars)",
+      "category": "rdv ou sms ou devis ou langues ou transfert ou relance ou autre"
+    }}
+  ]
+}}
+Règles :
+- Si feature_requests est vide ou ne contient rien de précis, retourner {{"feature_ideas": []}}
+- Normalise les doublons : "prendre des rendez-vous" et "agenda automatique" -> "Prise de RDV automatique"
+- Maximum 5 idées par transcript
+- Uniquement les vraies demandes de l'artisan, pas les features présentées par Mia
+IMPORTANT : aucun texte hors du JSON, répondre en français."""
 
 
 # ── LiveKit SIP helpers ───────────────────────────────────────────────────────
@@ -901,10 +964,10 @@ async def post_call_ended(
         logger.error(f"[mia] post_call_ended failed: {e}")
 
 
-async def generate_demo_needs(transcript: str) -> dict:
-    if not transcript.strip() or not GROQ_API_KEY:
+async def _groq_json(prompt: str, max_tokens: int = 600) -> dict:
+    """Helper : appel Groq → parse JSON. Retourne {} en cas d'erreur."""
+    if not GROQ_API_KEY:
         return {}
-    prompt = DEMO_NEEDS_PROMPT.format(transcript=transcript)
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -914,22 +977,180 @@ async def generate_demo_needs(transcript: str) -> dict:
                     "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.1,
-                    "max_tokens": 500,
+                    "max_tokens": max_tokens,
                 },
                 timeout=20.0,
             )
             resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"]
             start = content.find("{")
-            end = content.rfind("}") + 1
+            end   = content.rfind("}") + 1
             if start >= 0 and end > start:
-                # Nettoyer les caractères de contrôle qui cassent json.loads
                 raw = content[start:end]
                 raw = re.sub(r'[\x00-\x1f\x7f]', lambda m: ' ' if m.group() in '\t\n\r' else '', raw)
                 return json.loads(raw)
     except Exception as e:
-        logger.warning(f"[mia] generate_demo_needs failed: {e}")
+        logger.warning(f"[mia] _groq_json failed: {e}")
     return {}
+
+
+async def generate_demo_needs(transcript: str) -> dict:
+    if not transcript.strip():
+        return {}
+    return await _groq_json(DEMO_NEEDS_PROMPT.format(transcript=transcript), max_tokens=700)
+
+
+async def generate_demo_features(transcript: str, feature_requests: list) -> list:
+    if not transcript.strip():
+        return []
+    fr_str = json.dumps(feature_requests, ensure_ascii=False)
+    result = await _groq_json(
+        DEMO_FEATURES_PROMPT.format(transcript=transcript, feature_requests=fr_str),
+        max_tokens=500,
+    )
+    return result.get("feature_ideas") or []
+
+
+async def _upsert_feature_ideas(room_name: str, ideas: list, sb_headers: dict) -> None:
+    if not ideas:
+        return
+    async with httpx.AsyncClient() as client:
+        for idea in ideas:
+            idea_text = (idea.get("idea_text") or "").strip()
+            category  = idea.get("category") or "autre"
+            if not idea_text:
+                continue
+            # Tentative d'upsert : si l'idée existe on incrémente points + mention_count
+            # Supabase ne supporte pas ON CONFLICT DO UPDATE via REST, on fait GET + PATCH/POST
+            try:
+                get_resp = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/feature_ideas",
+                    headers=sb_headers,
+                    params={"idea_text": f"eq.{idea_text}", "select": "id,points,mention_count,source_rooms"},
+                    timeout=10.0,
+                )
+                existing = get_resp.json() if get_resp.status_code == 200 else []
+                if existing:
+                    row = existing[0]
+                    rooms = row.get("source_rooms") or []
+                    if room_name not in rooms:
+                        rooms.append(room_name)
+                    await client.patch(
+                        f"{SUPABASE_URL}/rest/v1/feature_ideas",
+                        headers={**sb_headers, "Prefer": "return=minimal"},
+                        params={"id": f"eq.{row['id']}"},
+                        json={
+                            "points":        row.get("points", 1) + 1,
+                            "mention_count": row.get("mention_count", 1) + 1,
+                            "source_rooms":  rooms,
+                        },
+                        timeout=10.0,
+                    )
+                    logger.info(f"[mia] feature_ideas +1 point: {idea_text!r}")
+                else:
+                    await client.post(
+                        f"{SUPABASE_URL}/rest/v1/feature_ideas",
+                        headers={**sb_headers, "Prefer": "return=minimal"},
+                        json={
+                            "idea_text":    idea_text,
+                            "category":     category,
+                            "points":       1,
+                            "mention_count": 1,
+                            "source_rooms": [room_name],
+                        },
+                        timeout=10.0,
+                    )
+                    logger.info(f"[mia] feature_ideas new: {idea_text!r}")
+            except Exception as e:
+                logger.warning(f"[mia] _upsert_feature_ideas failed for {idea_text!r}: {e}")
+
+
+async def _send_demo_recap_email(email: str, needs: dict, lead_score: int) -> None:
+    if not RESEND_API_KEY or not email:
+        return
+    metier     = needs.get("metier_evoque") or "artisan"
+    summary    = needs.get("needs_summary") or ""
+    missed     = needs.get("missed_calls_per_day") or 0
+    price      = needs.get("avg_intervention_price_eur") or 0
+    pertes_mois = missed * price * 22 if missed and price else 0
+
+    pertes_line = (
+        f"<p style='color:#dc2626;font-weight:600'>📉 Estimation : {pertes_mois:,}€ de chiffre d'affaires potentiel perdu chaque mois</p>"
+        if pertes_mois > 0 else ""
+    )
+
+    html = f"""
+<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:32px">
+  <h2 style="color:#2850c8">Voici ce que je peux faire pour toi, {metier}</h2>
+  <p>On vient de se parler et j'ai retenu l'essentiel de ta situation :</p>
+  <div style="background:#EFF2FF;border-radius:12px;padding:16px;margin:16px 0;white-space:pre-wrap;font-size:14px;color:#1e293b">{summary}</div>
+  {pertes_line}
+  <p>Si tu veux voir concrètement comment je pourrais t'aider, tu peux commencer un essai gratuit de 7 jours :</p>
+  <a href="https://app.fixlyy.fr" style="display:inline-block;background:#2850c8;color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;margin:16px 0">
+    Commencer mon essai gratuit →
+  </a>
+  <p style="font-size:12px;color:#94a3b8;margin-top:32px">Mia — assistante vocale Fixlyy</p>
+</div>
+"""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "from":    "Mia de Fixlyy <mia@fixlyy.fr>",
+                    "to":      [email],
+                    "subject": f"Ce que je peux faire pour ton activité de {metier}",
+                    "html":    html,
+                },
+                timeout=15.0,
+            )
+            if resp.status_code in (200, 201):
+                logger.info(f"[mia] recap email sent to {email}")
+            else:
+                logger.warning(f"[mia] recap email failed: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"[mia] _send_demo_recap_email failed: {e}")
+
+
+async def _send_admin_notification(room_name: str, needs: dict, lead_score: int) -> None:
+    if not RESEND_API_KEY or not ADMIN_EMAIL:
+        return
+    metier  = needs.get("metier_evoque") or "?"
+    missed  = needs.get("missed_calls_per_day") or 0
+    price   = needs.get("avg_intervention_price_eur") or 0
+    intent  = needs.get("lead_intent") or "neutre"
+    html = f"""
+<div style="font-family:sans-serif;padding:24px">
+  <h3 style="color:#16a34a">🟢 Nouveau lead fort potentiel — score {lead_score}/100</h3>
+  <table style="border-collapse:collapse;font-size:14px">
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Métier</td><td><b>{metier}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Appels ratés/jour</td><td><b>{missed}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Prix/intervention</td><td><b>{price}€</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Intent</td><td><b>{intent}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#64748b">Room</td><td><code>{room_name}</code></td></tr>
+  </table>
+  <a href="https://admin.fixlyy.fr" style="display:inline-block;background:#2850c8;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:700;margin-top:16px">
+    Voir sur admin.fixlyy.fr →
+  </a>
+</div>
+"""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "from":    "Mia de Fixlyy <mia@fixlyy.fr>",
+                    "to":      [ADMIN_EMAIL],
+                    "subject": f"🟢 Lead fort potentiel — {metier} — score {lead_score}/100",
+                    "html":    html,
+                },
+                timeout=15.0,
+            )
+            logger.info(f"[mia] admin notification sent (score={lead_score}): {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"[mia] _send_admin_notification failed: {e}")
 
 
 async def handle_web_demo_ended(
@@ -944,7 +1165,7 @@ async def handle_web_demo_ended(
     lines = []
     for item in conversation_items:
         label = "Mia" if item["role"] == "assistant" else "Prospect"
-        text = item["text"]
+        text  = item["text"]
         if item.get("interrupted"):
             text += " [interrompu]"
         lines.append(f"{label}: {text}")
@@ -954,40 +1175,97 @@ async def handle_web_demo_ended(
         logger.warning("[mia] demo transcript vide — demo_leads non mis à jour")
         return
 
-    needs = await generate_demo_needs(transcript)
-    logger.info(f"[mia] demo needs: metier={needs.get('metier_evoque')!r} interesse={needs.get('interesse')!r}")
+    # Extraction LLM : needs + features en parallèle
+    needs, raw_ideas = await asyncio.gather(
+        generate_demo_needs(transcript),
+        generate_demo_features(transcript, []),
+        return_exceptions=True,
+    )
+    if isinstance(needs, Exception):
+        logger.warning(f"[mia] generate_demo_needs raised: {needs}")
+        needs = {}
+    if isinstance(raw_ideas, Exception):
+        logger.warning(f"[mia] generate_demo_features raised: {raw_ideas}")
+        raw_ideas = []
+
+    # Si needs a déjà des feature_requests, on relance features avec ce contexte
+    fr = needs.get("feature_requests") or []
+    if fr and not raw_ideas:
+        raw_ideas = await generate_demo_features(transcript, fr)
+
+    logger.info(f"[mia] demo needs: metier={needs.get('metier_evoque')!r} intent={needs.get('lead_intent')!r} features={len(raw_ideas)}")
 
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.warning("[mia] handle_web_demo_ended: SUPABASE credentials manquants")
         return
 
+    # Calcul du score
+    missed = int(needs.get("missed_calls_per_day") or 0)
+    price  = int(needs.get("avg_intervention_price_eur") or 0)
+    lead_score = min(100, round((missed * price) / 50)) if missed and price else 0
+
     payload = {
-        "call_transcript": transcript[:50000],
-        "needs_summary": needs.get("needs_summary") or "",
-        "call_duration_seconds": duration_secs,
-        "metier_evoque": needs.get("metier_evoque") or metier,
+        "call_transcript":            transcript[:50000],
+        "needs_summary":              needs.get("needs_summary") or "",
+        "call_duration_seconds":      duration_secs,
+        "metier_evoque":              needs.get("metier_evoque") or metier,
+        "calls_per_day":              int(needs.get("calls_per_day") or 0),
+        "missed_calls_per_day":       missed,
+        "avg_intervention_price_eur": price,
+        "lead_score":                 lead_score,
+        "lead_intent":                needs.get("lead_intent") or "neutre",
     }
-    headers = {
+    sb_headers = {
         "Authorization": f"Bearer {SUPABASE_KEY}",
-        "apikey": SUPABASE_KEY,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal",
+        "apikey":        SUPABASE_KEY,
+        "Content-Type":  "application/json",
+        "Prefer":        "return=minimal",
     }
+
+    # PATCH demo_leads
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.patch(
                 f"{SUPABASE_URL}/rest/v1/demo_leads",
-                headers=headers,
+                headers=sb_headers,
                 params={"room_name": f"eq.{room_name}"},
                 json=payload,
                 timeout=20.0,
             )
             if resp.status_code in (200, 204):
-                logger.info(f"[mia] demo_leads PATCH OK: room={room_name}")
+                logger.info(f"[mia] demo_leads PATCH OK: room={room_name} score={lead_score}")
             else:
                 logger.error(f"[mia] demo_leads PATCH failed: {resp.status_code} {resp.text[:200]}")
     except Exception as e:
-        logger.error(f"[mia] handle_web_demo_ended failed: {e}")
+        logger.error(f"[mia] demo_leads PATCH failed: {e}")
+
+    # Récupérer l'email du prospect pour le récap
+    prospect_email = None
+    try:
+        async with httpx.AsyncClient() as client:
+            get_resp = await client.get(
+                f"{SUPABASE_URL}/rest/v1/demo_leads",
+                headers=sb_headers,
+                params={"room_name": f"eq.{room_name}", "select": "email"},
+                timeout=10.0,
+            )
+            rows = get_resp.json() if get_resp.status_code == 200 else []
+            if rows:
+                prospect_email = rows[0].get("email")
+    except Exception as e:
+        logger.warning(f"[mia] fetch prospect email failed: {e}")
+
+    # Lancer features + email + notif admin en parallèle
+    tasks: list = [_upsert_feature_ideas(room_name, raw_ideas, sb_headers)]
+    if prospect_email:
+        tasks.append(_send_demo_recap_email(prospect_email, needs, lead_score))
+    if lead_score >= 70:
+        tasks.append(_send_admin_notification(room_name, needs, lead_score))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for r in results:
+        if isinstance(r, Exception):
+            logger.warning(f"[mia] post-demo task failed: {r}")
 
 
 async def handle_call_ended(
@@ -1075,6 +1353,7 @@ def build_instructions(
         + "Ne dis jamais deux fois la même formule. "
         + "Objectif : collecter naturellement le nom, le téléphone, l'adresse, le problème, l'urgence et les disponibilités. "
         + "Ne dis JAMAIS 'Je dois vous poser quelques questions'. "
+        + "Si tu n'es pas certain d'avoir bien compris un prénom, un nom ou une adresse, repose la question pour confirmer avant d'utiliser cette information. "
         + "Demande TOUJOURS l'adresse avant de raccrocher — sans adresse l'artisan ne peut pas intervenir. "
         + "Pose aussi une question de contexte : 'Ça dure depuis quand ?' ou 'Quelqu'un est déjà intervenu ?'. "
         + "Termine par un récapitulatif : 'Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
@@ -1513,86 +1792,26 @@ class WebDemoMiaAgent(Agent):
                 },
             },
         )
-        self._greeting      = "Bonjour ! Je m'appelle Mia — et je suis peut-être bientôt votre assistante, qui sait !"
+        self._greeting      = "Bonjour, je m'appelle Mia. Je suis l'assistante vocale créée par Fixlyy et peut-être bientôt la tienne. Mais avant tout apprenons à nous connaître — est-ce que ça te dérange si je te tutoie ?"
         self._emo_turn      = 0
-        self._detected_lang = "fr"
-        self._injected_lang = "fr"  # langue déjà présente dans le contexte LLM (pas d'injection initiale)
 
     async def on_enter(self):
         logger.info("[mia] WebDemoMiaAgent on_enter — commercial demo")
         self.session.say(self._greeting, allow_interruptions=False)
 
-    async def stt_node(self, audio, model_settings):
-        from livekit.agents import stt as stt_module
-        async for event in super().stt_node(audio, model_settings):
-            if (
-                event.type == stt_module.SpeechEventType.FINAL_TRANSCRIPT
-                and event.alternatives
-            ):
-                client_text = (event.alternatives[0].text or "").lower()
-
-                # 1) Détection directe via Deepgram language metadata
-                raw_lang = getattr(event.alternatives[0], "language", None) or ""
-                detected = raw_lang[:2].lower() if raw_lang else self._detected_lang
-                detected = detected if detected in VOICE_MAP else "fr"
-
-                # 2) Scan de mots-clés explicites ("parle anglais", "in english", etc.)
-                #    Prioritaire sur la détection Deepgram — couvre "vas-y en anglais" (fr détecté par Deepgram)
-                for kw, target in _DEMO_LANG_REQUEST_MAP.items():
-                    if kw in client_text:
-                        detected = target
-                        break
-
-                if detected != self._detected_lang:
-                    prev = self._detected_lang
-                    self._detected_lang = detected
-                    logger.info(f"[mia] demo lang switch: {prev!r} → {detected!r}")
-            yield event
-
-    async def llm_node(self, chat_ctx, tools, model_settings):
-        if self._detected_lang != self._injected_lang:
-            prev_injected       = self._injected_lang
-            self._injected_lang = self._detected_lang
-            if self._detected_lang != "fr":
-                lang_name = _LANG_NAMES.get(self._detected_lang, self._detected_lang.upper())
-                injection = (
-                    f"The prospect has requested or is now speaking {lang_name}. "
-                    f"Switch immediately and completely to {lang_name}. "
-                    f"Be natural and enthusiastic — this is the multilingual demo moment! "
-                    f"Stay in {lang_name} until they explicitly ask for French."
-                )
-            else:
-                injection = (
-                    "The prospect has returned to French. "
-                    "Switch back to French immediately and naturally."
-                )
-            try:
-                chat_ctx.add_message(role="system", content=injection)
-                logger.info(
-                    f"[mia] demo LLM lang inject: {prev_injected!r} → {self._detected_lang!r}"
-                )
-            except Exception as exc:
-                logger.warning(f"[mia] demo LLM lang inject failed: {exc}")
-        async for chunk in super().llm_node(chat_ctx, tools, model_settings):
-            yield chunk
-
     def tts_node(self, text, model_settings):
-        tts = _tts_for_lang(self._detected_lang)
+        tts = _tts_for_lang("fr")
         ctx = {
             "turn_count":  self._emo_turn,
             "urgency":     False,
             "frustration": False,
-            "tone_style":  "chaleureux",  # démo toujours en registre chaleureux
+            "tone_style":  "chaleureux",
             "job_type":    "demo",
         }
         emotion = _detect_emotion(text, ctx)
         tts.update_options(emotion=emotion)
-        self._tts = tts
         self._emo_turn += 1
-        logger.debug(
-            f"[mia] demo tts_node: lang={self._detected_lang!r} "
-            f"emotion={emotion!r} turn={self._emo_turn - 1}"
-        )
+        logger.debug(f"[mia] demo tts_node: emotion={emotion!r} turn={self._emo_turn - 1}")
         return super().tts_node(text, model_settings)
 
 
