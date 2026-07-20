@@ -1811,9 +1811,15 @@ class WebDemoMiaAgent(Agent):
                 client_text = (event.alternatives[0].text or "").lower()
 
                 # 1) Détection directe via Deepgram language metadata
-                raw_lang = getattr(event.alternatives[0], "language", None) or ""
-                detected = raw_lang[:2].lower() if raw_lang else self._detected_lang
-                detected = detected if detected in VOICE_MAP else "fr"
+                #    Peu fiable sur les énoncés courts ("ouais", "ok") — Deepgram peut les
+                #    classer dans la mauvaise langue. On ignore ce signal en dessous de 3 mots ;
+                #    le scan de mots-clés explicites ci-dessous reste, lui, actif sans condition.
+                if len(client_text.split()) >= 3:
+                    raw_lang = getattr(event.alternatives[0], "language", None) or ""
+                    detected = raw_lang[:2].lower() if raw_lang else self._detected_lang
+                    detected = detected if detected in VOICE_MAP else "fr"
+                else:
+                    detected = self._detected_lang
 
                 # 2) Scan de mots-clés explicites ("parle anglais", "in english", etc.)
                 #    Prioritaire sur la détection Deepgram — couvre "vas-y en anglais" (fr détecté par Deepgram)
