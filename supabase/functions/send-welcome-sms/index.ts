@@ -8,7 +8,7 @@ const TWILIO_FROM = Deno.env.get('TWILIO_PHONE_NUMBER') || '+33939245471'
 const APP_URL     = Deno.env.get('APP_URL') || 'https://app.fixlyy.fr'
 const CRON_SECRET = Deno.env.get('CRON_SECRET')!
 
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type, x-cron-secret' }
+const cors = { 'Access-Control-Allow-Origin': 'https://app.fixlyy.fr', 'Access-Control-Allow-Headers': 'content-type, x-cron-secret' }
 
 function formatFrPhone(e164: string): string {
   const local = e164.replace('+33', '0')

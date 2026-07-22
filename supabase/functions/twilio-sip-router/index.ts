@@ -29,7 +29,7 @@ async function validateTwilioSignature(
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*' } })
+    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': 'https://app.fixlyy.fr' } })
   }
 
   if (req.method !== 'POST') {

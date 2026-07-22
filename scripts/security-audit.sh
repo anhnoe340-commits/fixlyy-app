@@ -23,7 +23,7 @@ echo "Date: $(date)"
 echo ""
 
 # ------------------------------------------------------------------------------
-# CHECK 01 — npm audit fixlyy-app (HIGH/CRITICAL => FAIL)
+# CHECK 01 — npm/pnpm audit fixlyy-app (HIGH/CRITICAL en prod => FAIL)
 # ------------------------------------------------------------------------------
 run_npm_audit() {
   local dir="$1"
@@ -31,9 +31,13 @@ run_npm_audit() {
     echo "SKIP"
     return
   fi
-  # npm audit --json ; on compte high + critical
+  # Détecte le gestionnaire de paquets réel du projet (pnpm-lock.yaml vs package-lock.json)
   local out
-  out=$(cd "$dir" && npm audit --audit-level=high --json 2>/dev/null)
+  if [ -f "${dir}/pnpm-lock.yaml" ]; then
+    out=$(cd "$dir" && pnpm audit --prod --audit-level=high --json 2>/dev/null)
+  elif [ -f "${dir}/package-lock.json" ]; then
+    out=$(cd "$dir" && npm audit --audit-level=high --json 2>/dev/null)
+  fi
   if [ -z "$out" ]; then
     echo "SKIP"
     return
@@ -75,7 +79,7 @@ fi
 # ------------------------------------------------------------------------------
 SECRET_HITS=$(grep -rnE "sk_live|rk_live_|AKIA|password\s*=\s*['\"]" \
   "${APP_DIR}/src" "${APP_DIR}/supabase" "${APP_DIR}/scripts" 2>/dev/null \
-  | grep -viE "node_modules|\.md:|example|mock|test|placeholder|process\.env|Deno\.env|import\.meta\.env" \
+  | grep -viE "node_modules|\.md:|example|mock|test|placeholder|process\.env|Deno\.env|import\.meta\.env|security-audit\.sh:" \
   | head -5)
 
 if [ -z "$SECRET_HITS" ]; then
