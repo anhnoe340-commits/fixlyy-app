@@ -35,10 +35,19 @@ Deno.serve(async (req) => {
     const { email, phone } = result.data;
     const cleanPhone = phone ? phone.replace(/[^\d\s+\-().]/g, '').trim() : null;
 
-    await supabase.from('demo_leads').insert({
-      email: email.trim().toLowerCase(),
-      phone: cleanPhone,
-    });
+    // Upsert sur phone (comme demo-call/index.ts) pour éviter l'erreur de
+    // contrainte unique quand un même numéro resoumet le formulaire.
+    const { error } = await supabase.from('demo_leads').upsert(
+      { email: email.trim().toLowerCase(), phone: cleanPhone },
+      { onConflict: 'phone', ignoreDuplicates: false },
+    );
+
+    if (error) {
+      console.error('[capture-demo-lead] upsert error:', error.message);
+      return new Response(JSON.stringify({ error: 'Une erreur est survenue' }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' },
