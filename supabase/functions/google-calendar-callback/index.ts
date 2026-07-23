@@ -32,7 +32,7 @@ serve(async (req) => {
     })
 
     if (!tokenRes.ok) {
-      console.error('Token exchange failed:', await tokenRes.text())
+      console.error('Token exchange failed, status:', tokenRes.status)
       return Response.redirect(`${APP_URL}?gcal=error`, 302)
     }
 
