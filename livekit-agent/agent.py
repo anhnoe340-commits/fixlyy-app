@@ -8,7 +8,7 @@ import os
 import re
 import time
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli, function_tool
 from livekit.agents import Agent, AgentSession
@@ -440,7 +440,8 @@ Extrais ces informations en JSON strict (aucun texte autour, aucun commentaire) 
   "bant_budget": "montant mentionné (ex: '300€', 'pas de budget fixé') ou null",
   "bant_authority": "oui si décideur, non si doit consulter quelqu'un, inconnu si non mentionné",
   "bant_need": "faible, moyen ou élevé selon l'urgence du besoin exprimé",
-  "bant_timeline": "aujourd'hui, cette semaine, ce mois ou inconnu"
+  "bant_timeline": "aujourd'hui, cette semaine, ce mois ou inconnu",
+  "devis_requested": "oui UNIQUEMENT si le client demande explicitement un devis ou une estimation écrite pour des travaux précis, non si c'est juste une question de tarif générale ou un renseignement de prix sans intention de devis"
 }}
 IMPORTANT : full_summary et sms_body doivent TOUJOURS être rédigés en français,
 quelle que soit la langue parlée pendant la conversation."""
@@ -602,9 +603,14 @@ async def fetch_artisan_profile(user_id: str) -> dict:
 
 
 async def fetch_active_unavailabilities(user_id: str) -> list:
+    """Récupère les indisponibilités actives maintenant ET à venir (30 prochains
+    jours), pour que Mia puisse répondre correctement à une demande de RDV sur
+    une date future où l'artisan/un membre sera indisponible — pas seulement
+    l'instant présent."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return []
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(days=30)
     url = f"{SUPABASE_URL}/rest/v1/unavailabilities"
     headers = {
         "apikey": SUPABASE_KEY,
@@ -612,18 +618,34 @@ async def fetch_active_unavailabilities(user_id: str) -> list:
     }
     params = {
         "profile_id": f"eq.{user_id}",
-        "start_at":   f"lte.{now_iso}",
-        "end_at":     f"gte.{now_iso}",
+        "start_at":   f"lte.{horizon.isoformat()}",
+        "end_at":     f"gte.{now.isoformat()}",
         "select":     "team_member_name,start_at,end_at",
     }
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, headers=headers, params=params, timeout=3.0)
             resp.raise_for_status()
-            return resp.json() or []
+            rows = resp.json() or []
     except Exception as e:
         logger.warning(f"[mia] fetch_active_unavailabilities failed: {e}")
         return []
+
+    out = []
+    for r in rows:
+        try:
+            start = datetime.fromisoformat(r["start_at"].replace("Z", "+00:00"))
+            end   = datetime.fromisoformat(r["end_at"].replace("Z", "+00:00"))
+        except Exception:
+            continue
+        active_now = start <= now <= end
+        period = f"du {start.strftime('%d/%m')} au {end.strftime('%d/%m')}"
+        out.append({
+            "team_member_name": r.get("team_member_name"),
+            "active_now": active_now,
+            "period": period,
+        })
+    return out
 
 
 def _fmt_services(services: list) -> str:
@@ -697,6 +719,24 @@ def _fmt_blacklist(bl: list) -> str:
     return "  " + " | ".join(entries[:20])
 
 
+def _fmt_suppliers(suppliers: list) -> str:
+    if not suppliers:
+        return ""
+    entries = []
+    for s in suppliers:
+        name = s.get("name", "")
+        typ  = s.get("type", "")
+        note = s.get("note", "")
+        if name:
+            line = name
+            if typ:
+                line += f" ({typ})"
+            if note:
+                line += f" — {note}"
+            entries.append(line)
+    return "  " + " | ".join(entries[:20])
+
+
 def _fmt_zones(zones: dict) -> str:
     if not zones:
         return ""
@@ -713,11 +753,39 @@ def _fmt_zones(zones: dict) -> str:
     return "\n".join(f"  {p}" for p in parts)
 
 
-def build_business_context_block(bc: dict, unavailabilities: list) -> str:
-    if not bc:
-        return ""
+def _normalize_phone(p: str) -> str:
+    return "".join(ch for ch in (p or "") if ch.isdigit())[-9:]
+
+
+def build_business_context_block(bc: dict | None, unavailabilities: list, caller_number: str = "") -> str:
+    # Ne jamais court-circuiter sur bc vide : les indisponibilités (table séparée)
+    # et les instructions par défaut (situations difficiles) doivent s'appliquer
+    # même si l'artisan n'a rempli aucune des 14 sections.
+    bc = bc or {}
 
     parts: list[str] = []
+
+    # Reconnaissance de l'appelant PAR NUMÉRO (avant toute question) — blacklist
+    # et clients réguliers, comparés directement au numéro SIP entrant plutôt
+    # que de dépendre uniquement de ce que le client dit à l'oral.
+    caller_norm = _normalize_phone(caller_number)
+    if caller_norm:
+        for b in bc.get("blacklist", []):
+            if _normalize_phone(b.get("phone", "")) == caller_norm:
+                parts.append(
+                    f"NUMÉRO APPELANT RECONNU : ce numéro correspond à un contact blacklisté ({b.get('name','')}). "
+                    "Dis que l'artisan n'est pas disponible actuellement, sans donner plus de détail."
+                )
+                break
+        for c in bc.get("regular_clients", []):
+            if _normalize_phone(c.get("phone", "")) == caller_norm:
+                svc = c.get("service", "")
+                parts.append(
+                    f"NUMÉRO APPELANT RECONNU : client régulier ({c.get('name','')}"
+                    + (f", service habituel : {svc}" if svc else "") +
+                    "). Mentionne que tu le reconnais dès le début de l'appel et traite sa demande en priorité."
+                )
+                break
 
     # Horaires
     schedule = bc.get("schedule", {})
@@ -736,16 +804,32 @@ def build_business_context_block(bc: dict, unavailabilities: list) -> str:
         if notes:
             parts.append(f"  Note horaires : {notes}")
 
-    # Indisponibilités actives
-    if unavailabilities:
+    # Indisponibilités actives (maintenant) et à venir (30 prochains jours)
+    now_active = [u for u in unavailabilities if u.get("active_now")]
+    upcoming    = [u for u in unavailabilities if not u.get("active_now")]
+    if now_active:
         who_list = []
-        for u in unavailabilities:
+        for u in now_active:
             who = u.get("team_member_name") or "l'artisan"
             who_list.append(who)
         parts.append(
             "INDISPONIBILITÉS EN CE MOMENT : " + ", ".join(set(who_list)) +
             "\n  → Si quelqu'un est indisponible, propose le prochain créneau libre. "
-            "Ne donne jamais la raison de l'indisponibilité."
+            "Ne donne jamais la raison de l'indisponibilité. "
+            "Une urgence prime toujours sur une indisponibilité : si le client décrit une urgence réelle, "
+            "propose le rappel ou transfert le plus rapide possible malgré l'indisponibilité affichée."
+        )
+    if upcoming:
+        up_lines = []
+        for u in upcoming:
+            who = u.get("team_member_name") or "l'artisan"
+            period = u.get("period", "")
+            up_lines.append(f"{who} indisponible {period}".strip())
+        parts.append(
+            "INDISPONIBILITÉS À VENIR (30 prochains jours) :\n  "
+            + " | ".join(up_lines) +
+            "\n  → Si le client demande un rendez-vous sur une de ces périodes, préviens que ce créneau ne "
+            "convient pas et propose une autre date, sans détailler la raison de l'indisponibilité."
         )
 
     # Prestations
@@ -758,7 +842,25 @@ def build_business_context_block(bc: dict, unavailabilities: list) -> str:
     team = bc.get("team", [])
     team_block = _fmt_team(team)
     if team_block:
-        parts.append("ÉQUIPE :\n" + team_block)
+        active_members = [m.get("name") for m in team if m.get("name") and m.get("active", True)]
+        example = (
+            "\n  Exemple : le client demande Julien, Julien est marqué indisponible ou fait partie des "
+            "indisponibilités en ce moment → propose un autre membre disponible dans la liste ci-dessus sans jamais "
+            "dire pourquoi Julien n'est pas là ('Julien n'est pas disponible, mais Sophie peut s'en occuper, ça vous "
+            "va ?'). "
+            + ("Si AUCUN membre de l'équipe n'est disponible, ne propose pas de créneau précis : prends un message "
+               "complet (nom, téléphone, adresse, problème) et informe le client qu'il sera rappelé dès que possible."
+               if not active_members else "")
+        )
+        parts.append("ÉQUIPE :\n" + team_block + example)
+
+    # Fournisseurs
+    suppliers_block = _fmt_suppliers(bc.get("suppliers", []))
+    if suppliers_block:
+        parts.append(
+            "FOURNISSEURS DE L'ARTISAN — si l'un d'eux appelle ou est mentionné, reconnais-le et traite l'appel en "
+            "conséquence (ce n'est pas un client) :\n" + suppliers_block
+        )
 
     # Clients réguliers
     clients = _fmt_regular_clients(bc.get("regular_clients", []))
@@ -802,17 +904,21 @@ def build_business_context_block(bc: dict, unavailabilities: list) -> str:
             "NE JAMAIS MENTIONNER ces concurrents ni commenter :\n  " + competitors
         )
 
-    # Situations difficiles
+    # Situations difficiles — instruction par défaut toujours présente, complétée
+    # par la config de l'artisan si elle existe.
     diff = bc.get("difficult_situations", {})
-    diff_lines = []
+    diff_lines = [
+        "  Par défaut (si rien de plus spécifique n'est indiqué ci-dessous) : reste calme et poli, recadre "
+        "fermement sans jamais raccrocher toi-même, et si le ton reste agressif malgré tout, propose un rappel "
+        "par l'artisan directement."
+    ]
     if diff.get("aggressive"):
         diff_lines.append(f"  Client agressif → {diff['aggressive']}")
     if diff.get("complaint"):
         diff_lines.append(f"  Réclamation → {diff['complaint']}")
     if diff.get("threat"):
         diff_lines.append(f"  Menace d'avis → {diff['threat']}")
-    if diff_lines:
-        parts.append("GESTION SITUATIONS DIFFICILES :\n" + "\n".join(diff_lines))
+    parts.append("GESTION SITUATIONS DIFFICILES :\n" + "\n".join(diff_lines))
 
     # Objectifs commerciaux
     goals = bc.get("commercial_goals", {})
@@ -1295,14 +1401,33 @@ async def handle_call_ended(
     transcript = "\n".join(lines)
 
     if not transcript:
-        logger.warning("[mia] transcript vide — call-ended non envoyé")
+        # Appel trop court pour avoir un contenu exploitable — envoyer quand même
+        # un signal minimal à l'artisan plutôt que rien du tout.
+        logger.warning("[mia] transcript vide — envoi d'un signal minimal (pas de résumé)")
+        structured = {
+            "reason": "Appel reçu et raccroché rapidement",
+            "full_summary": "Aucune information n'a pu être collectée durant cet appel très court.",
+        }
+        ts = transfer_state or {}
+        await post_call_ended(
+            user_id=user_id,
+            caller_number=caller_number,
+            transcript="(appel trop court, aucune parole échangée)",
+            duration_seconds=duration_secs,
+            structured=structured,
+            transferred_to=ts.get("to"),
+            transferred_at=ts.get("at"),
+            has_devis_mention=False,
+        )
         return
 
     structured = await generate_summary(transcript)
     logger.info(f"[mia] structured summary: {structured.get('reason', '(vide)')!r}")
 
-    devis_keywords = ("devis", "estimation", "tarif", "prix pour")
-    has_devis = any(kw in transcript.lower() for kw in devis_keywords)
+    # Détection resserrée : intention réelle de devis jugée par le LLM sur le
+    # contexte complet (pas un simple mot-clé "tarif"/"prix" qui se déclenchait
+    # sur n'importe quelle question de prix générale).
+    has_devis = structured.get("devis_requested", "").strip().lower() == "oui"
 
     ts = transfer_state or {}
     await post_call_ended(
@@ -1360,16 +1485,45 @@ def build_instructions(
         + "Ne dis jamais deux fois la même formule. "
         + "Objectif : collecter naturellement le nom, le téléphone, l'adresse, le problème, l'urgence et les disponibilités. "
         + "Ne dis JAMAIS 'Je dois vous poser quelques questions'. "
-        + "Si tu n'es pas certain d'avoir bien compris un prénom, un nom ou une adresse, repose la question pour confirmer avant d'utiliser cette information. "
+        + "Si le client donne plusieurs informations en une seule phrase (nom, problème, adresse, etc.), "
+        + "extrais-les toutes immédiatement et ne repose jamais de question sur une information déjà donnée. "
+        + "Si le client corrige une information déjà donnée, mets-la à jour immédiatement sans repartir de zéro "
+        + "ni redemander les autres informations déjà confirmées. "
+        + "Si tu n'es pas certain d'avoir bien compris un prénom, un nom, une adresse ou un chiffre — même sans "
+        + "signal explicite d'incertitude — épelle-le ou reformule-le systématiquement pour confirmation avant de "
+        + "l'utiliser dans ton récapitulatif. "
         + "Demande TOUJOURS l'adresse avant de raccrocher — sans adresse l'artisan ne peut pas intervenir. "
+        + "Si le client refuse explicitement de donner son adresse après une seule relance, n'insiste pas une "
+        + "troisième fois : note qu'il n'a pas souhaité la communiquer, informe-le que l'artisan le rappellera "
+        + "pour l'obtenir, et poursuis l'appel normalement. "
         + "Pose aussi une question de contexte : 'Ça dure depuis quand ?' ou 'Quelqu'un est déjà intervenu ?'. "
-        + "Termine par un récapitulatif : 'Je récapitule : vous êtes [Nom], au [Adresse], pour [Problème]. "
-        + "On vous rappelle [délai]. C'est bien ça ?' puis 'Merci, à très vite !'. "
+        + "Si les informations arrivent dans le désordre sur plusieurs échanges, reformule au fur et à mesure. "
+        + "Si le client demande une date ou une heure précise pour un rendez-vous, vérifie-la par rapport aux "
+        + "horaires et aux indisponibilités indiqués dans le contexte de l'activité avant de la confirmer ; si la "
+        + "période demandée est couverte par une indisponibilité, préviens-le et propose une autre date. "
+        + "Si le client rappelle pour modifier un rendez-vous déjà pris (pas pour en prendre un nouveau), utilise "
+        + "la fonction modify_appointment avec la nouvelle date/heure — ne recrée jamais un rendez-vous en double. "
+        + "Termine toujours par un récapitulatif complet : 'Je récapitule : vous êtes [Nom], au [Adresse], pour "
+        + "[Problème]. On vous rappelle [délai]. C'est bien ça ?' puis 'Merci, à très vite !'. "
         + f"Si on te demande si tu es une IA : 'Je suis l'assistante de {company_name}, je transmets votre demande à l'artisan.' "
-        + "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel."
+        + "Ne mentionne jamais que tu es une IA, un robot ou un assistant virtuel. "
+        + "Si le client décrit une situation nécessitant une intervention rapide (urgence réelle : fuite active, "
+        + "panne de chauffage en hiver, panne électrique grave, serrure bloquée en urgence, etc.), marque-la "
+        + "clairement comme prioritaire même si tu ne peux pas transférer l'appel : dis 'Je note que c'est urgent, "
+        + "je transmets immédiatement à l'artisan', et fais figurer 'URGENT' en premier mot de ton récapitulatif final. "
+        + "Si le client insiste fortement sur une urgence, demande une confirmation rapide avant de la traiter comme "
+        + "telle : 'Pouvez-vous me confirmer que c'est une urgence en cours, pas quelque chose qui peut attendre un "
+        + "rappel ?' — traite-la comme urgente seulement si la réponse confirme, sinon traite l'appel normalement. "
+        + "Si le sujet abordé sort du cadre de ton rôle (météo, actualité, discussion générale), recadre poliment : "
+        + "'Je suis là pour vos besoins en [métier], je ne peux pas vous aider sur ce sujet — avez-vous un besoin "
+        + "d'intervention ou de dépannage ?'. "
+        + "Si le client reste silencieux plusieurs secondes après une question, relance doucement : "
+        + "'Vous êtes toujours là ? Prenez votre temps.'"
     )
 
-    if "garage" in company_type.lower() or "mécan" in company_type.lower():
+    ct = company_type.lower()
+
+    if "garage" in ct or "mécan" in ct:
         base += (
             " Contexte garage automobile : tu connais les termes du métier —"
             " révision, vidange, courroie de distribution, plaquettes de frein,"
@@ -1380,13 +1534,57 @@ def build_instructions(
             " ne démarre plus), précise que son appel sera traité en priorité."
         )
 
+    if "plomb" in ct:
+        base += (
+            " Contexte plomberie : tu connais les termes du métier —"
+            " fuite, joint, robinetterie, chasse d'eau, siphon, canalisation bouchée,"
+            " ballon d'eau chaude, chauffe-eau, groupe de sécurité, mitigeur, wc,"
+            " raccord, purge, détartrage, dégorgement, pression d'eau."
+            " Urgences typiques : fuite active, canalisation qui inonde,"
+            " chasse d'eau qui déborde en continu, absence totale d'eau chaude en hiver."
+        )
+
+    if "électric" in ct or "electric" in ct:
+        base += (
+            " Contexte électricité : tu connais les termes du métier —"
+            " disjoncteur, tableau électrique, différentiel, court-circuit, prise,"
+            " va-et-vient, mise aux normes, tableau qui saute, panne de courant partielle,"
+            " luminaire, interrupteur, câblage, terre, surtension."
+            " Urgences typiques : disjoncteur qui saute en boucle, absence totale de courant,"
+            " odeur de brûlé, étincelles, tableau électrique qui chauffe."
+        )
+
+    if "serrur" in ct:
+        base += (
+            " Contexte serrurerie : tu connais les termes du métier —"
+            " serrure bloquée, clé cassée dans la serrure, porte claquée, verrou,"
+            " cylindre, barillet, porte blindée, ouverture de porte, changement de serrure."
+            " Urgences typiques : porte claquée avec personne bloquée dehors ou dedans,"
+            " clé cassée dans la serrure, effraction récente nécessitant un changement immédiat."
+        )
+
+    if "chauffag" in ct:
+        base += (
+            " Contexte chauffage : tu connais les termes du métier —"
+            " chaudière, radiateur, panne de chauffage, entretien annuel, ballon,"
+            " thermostat, purge de radiateur, pression de chaudière, code erreur chaudière,"
+            " circuit de chauffage, ramonage."
+            " Urgences typiques : panne de chauffage en hiver, chaudière en panne totale,"
+            " fuite sur le circuit de chauffage, code erreur bloquant sur la chaudière."
+        )
+
     if can_transfer:
         base += (
             " Si le client décrit une urgence réelle nécessitant une intervention immédiate"
             " (fuite d'eau active, panne de chauffage en hiver, panne électrique grave,"
-            " serrure bloquée en urgence, voiture en panne sur la route, etc.), dis : 'Votre situation est urgente."
+            " serrure bloquée en urgence, voiture en panne sur la route, etc.), confirme rapidement en une question"
+            " si ce n'est pas déjà évident (ex. le client insiste sans détail précis) : 'Pouvez-vous me confirmer que"
+            " c'est une urgence en cours, pas quelque chose qui peut attendre ?'. Dès que l'urgence est établie, dis :"
+            " 'Votre situation est urgente."
             f" Je vous mets en contact direct avec {company_name}. Ne raccrochez pas.'"
-            " puis appelle la fonction transfer_urgent_call."
+            " puis appelle la fonction transfer_urgent_call. Une urgence prime toujours sur une indisponibilité"
+            " signalée dans le contexte de l'activité — transfère ou propose le rappel le plus rapide possible"
+            " malgré une indisponibilité affichée, sans jamais en donner la raison."
         )
 
     if pricing:
@@ -1499,6 +1697,72 @@ def _make_transfer_tool(
     return transfer_urgent_call
 
 
+def _make_modify_appointment_tool(user_id: str, caller_number: str):
+    """Outil permettant à Mia de consulter et modifier le rendez-vous existant
+    d'un client rappelant, en le retrouvant par son numéro de téléphone."""
+
+    @function_tool
+    async def modify_appointment(new_date: str, new_time: str | None = None) -> str:
+        """
+        Recherche le rendez-vous en attente le plus récent pour ce client (par son
+        numéro d'appel) et le déplace vers new_date (format libre, ex: '2026-08-02'
+        ou 'le 2 août') et new_time si précisé. À utiliser quand le client rappelle
+        pour changer un rendez-vous déjà pris — jamais pour en créer un nouveau.
+        """
+        if not SUPABASE_URL or not SUPABASE_KEY or not caller_number:
+            return "Je ne peux pas accéder à votre rendez-vous pour le moment. L'artisan vous rappellera."
+
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                lookup = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/appointments",
+                    headers=headers,
+                    params={
+                        "artisan_id":  f"eq.{user_id}",
+                        "client_phone": f"eq.{caller_number}",
+                        "status":      "eq.pending",
+                        "order":       "appointment_date.desc",
+                        "limit":       "1",
+                        "select":      "id,appointment_date,appointment_time",
+                    },
+                    timeout=5.0,
+                )
+                lookup.raise_for_status()
+                rows = lookup.json() or []
+                if not rows:
+                    return (
+                        "Je ne trouve pas de rendez-vous existant à votre nom. "
+                        "Voulez-vous que je prenne un nouveau rendez-vous ?"
+                    )
+
+                appt_id = rows[0]["id"]
+                update = await client.patch(
+                    f"{SUPABASE_URL}/rest/v1/appointments",
+                    headers=headers,
+                    params={"id": f"eq.{appt_id}"},
+                    json={
+                        "appointment_date": new_date,
+                        "appointment_time": new_time or "A confirmer",
+                    },
+                    timeout=5.0,
+                )
+                update.raise_for_status()
+                logger.info(f"[mia] appointment {appt_id} moved to {new_date} {new_time or ''}")
+                return f"C'est modifié : votre rendez-vous est maintenant prévu le {new_date}" + (
+                    f" à {new_time}." if new_time else "."
+                )
+        except Exception as e:
+            logger.error(f"[mia] modify_appointment failed: {e}")
+            return "Je n'ai pas pu modifier le rendez-vous. L'artisan vous rappellera pour l'ajuster directement."
+
+    return modify_appointment
+
+
 class MiaAgent(Agent):
     def __init__(
         self,
@@ -1512,6 +1776,7 @@ class MiaAgent(Agent):
         user_id: str = "",
         business_context: dict | None = None,
         unavailabilities: list | None = None,
+        caller_number: str = "",
     ):
         company_name   = profile.get("company_name")   or "votre artisan"
         company_type   = profile.get("company_type")   or "artisan"
@@ -1541,10 +1806,11 @@ class MiaAgent(Agent):
         }
 
         _sip_ref = sip_ref if sip_ref is not None else {}
+        tools = []
         if can_transfer:
-            tools = [_make_transfer_tool(transfer_phone, twilio_from, room_name, _sip_ref)]
-        else:
-            tools = []
+            tools.append(_make_transfer_tool(transfer_phone, twilio_from, room_name, _sip_ref))
+        if user_id and caller_number:
+            tools.append(_make_modify_appointment_tool(user_id, caller_number))
 
         base_instructions = build_instructions(
             assistant_name, company_name, company_type,
@@ -1553,6 +1819,7 @@ class MiaAgent(Agent):
         ctx_block = build_business_context_block(
             business_context or {},
             unavailabilities or [],
+            caller_number,
         )
         instructions = base_instructions + ctx_block
 
@@ -1956,6 +2223,11 @@ async def entrypoint(ctx: JobContext):
             fetch_active_unavailabilities(user_id),
         )
         business_context = profile.pop("business_context", None) or {}
+        # business_context.services (dashboard "Mon activité", les 14 sections) est la
+        # source de vérité si l'artisan l'a configurée — évite d'injecter deux blocs
+        # de tarifs potentiellement contradictoires (service_pricing legacy + services).
+        if business_context.get("services"):
+            pricing = []
         multilingual = True
         if profile:
             logger.info(
@@ -2117,6 +2389,7 @@ async def entrypoint(ctx: JobContext):
             user_id=user_id,
             business_context=business_context,
             unavailabilities=unavailabilities,
+            caller_number=sip_ref.get("caller_number", ""),
         )
 
     await session.start(agent, room=ctx.room)
