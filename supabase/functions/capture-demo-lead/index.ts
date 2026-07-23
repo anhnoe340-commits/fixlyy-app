@@ -8,10 +8,20 @@ const supabase = createClient(
   Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!,
 );
 
+// z.preprocess normalise un champ absent/null en chaîne vide, pour que le
+// message custom min(1, ...) se déclenche aussi bien sur "clé absente" que
+// sur "chaîne vide" (sinon un champ absent échoue sur le type-check générique
+// de zod avant même d'atteindre .min(), avec un message par défaut inexploitable).
 const schema = z.object({
-  email: z.string().email().max(254),
-  phone: z.string().max(20).optional(),
+  phone: z.preprocess(v => v ?? '', z.string().trim().min(1, 'telephone_requis').max(20)),
+  email: z.preprocess(v => v ?? '', z.string().trim().min(1, 'email_requis').max(254).email('email_invalide')),
 });
+
+const ERROR_MESSAGES: Record<string, string> = {
+  email_requis:     "L'email est requis",
+  email_invalide:   "L'email est invalide",
+  telephone_requis: 'Le numéro de téléphone est requis',
+};
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req);
@@ -27,13 +37,15 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     const result = schema.safeParse(body);
     if (!result.success) {
-      return new Response(JSON.stringify({ error: 'email_invalide' }), {
+      const code = result.error.issues[0]?.message ?? 'requete_invalide';
+      const message = ERROR_MESSAGES[code] ?? 'Requête invalide';
+      return new Response(JSON.stringify({ error: message }), {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
       });
     }
 
     const { email, phone } = result.data;
-    const cleanPhone = phone ? phone.replace(/[^\d\s+\-().]/g, '').trim() : null;
+    const cleanPhone = phone.replace(/[^\d\s+\-().]/g, '').trim();
 
     // Upsert sur phone (comme demo-call/index.ts) pour éviter l'erreur de
     // contrainte unique quand un même numéro resoumet le formulaire.
