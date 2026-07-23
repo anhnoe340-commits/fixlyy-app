@@ -259,8 +259,9 @@ serve(async (req) => {
       .eq(step.column, user_id)
     // Ignorer "relation does not exist" (table optionnelle selon l'état du compte)
     if (error && !error.message.includes('does not exist')) {
+      console.error(`[delete-account] delete_${step.table} error:`, error.message)
       return new Response(
-        JSON.stringify({ success: false, step: `delete_${step.table}`, error: error.message }),
+        JSON.stringify({ success: false, step: `delete_${step.table}`, error: 'Une erreur est survenue' }),
         { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } },
       )
     }
@@ -272,8 +273,9 @@ serve(async (req) => {
     .eq('id', user_id)
 
   if (profileDeleteError) {
+    console.error('[delete-account] delete_profiles error:', profileDeleteError.message)
     return new Response(
-      JSON.stringify({ success: false, step: 'delete_profiles', error: profileDeleteError.message }),
+      JSON.stringify({ success: false, step: 'delete_profiles', error: 'Une erreur est survenue' }),
       { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } },
     )
   }
@@ -281,8 +283,9 @@ serve(async (req) => {
   // ── ÉTAPE 6 — AUTH (en dernier, après suppression des données) ───────────────
   const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(user_id)
   if (authDeleteError) {
+    console.error('[delete-account] delete_auth error:', authDeleteError.message)
     return new Response(
-      JSON.stringify({ success: false, step: 'delete_auth', error: authDeleteError.message }),
+      JSON.stringify({ success: false, step: 'delete_auth', error: 'Une erreur est survenue' }),
       { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } },
     )
   }
