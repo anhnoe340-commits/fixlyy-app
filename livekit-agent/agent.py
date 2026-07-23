@@ -742,11 +742,21 @@ def _fmt_zones(zones: dict) -> str:
         return ""
     inc = zones.get("included", [])
     exc = zones.get("excluded", [])
+    if not inc and not exc:
+        return ""
     parts = []
     if inc:
         parts.append("Zones couvertes : " + ", ".join(inc))
     if exc:
-        parts.append("Zones exclues : " + ", ".join(exc))
+        parts.append(
+            "Zones EXCLUES (uniquement ces zones précises, ex. un arrondissement ou un quartier donné — "
+            "ne généralise JAMAIS une exclusion précise à toute une ville ou tout un secteur) : " + ", ".join(exc)
+        )
+        parts.append(
+            "Compare l'adresse donnée par le client mot à mot à cette liste d'exclusions précises. Si l'adresse "
+            "ne correspond pas explicitement et entièrement à une zone listée comme exclue, elle est couverte — "
+            "ne refuse jamais une intervention par prudence ou par ressemblance partielle de nom de ville."
+        )
     notes = zones.get("notes", "")
     if notes:
         parts.append(notes)
