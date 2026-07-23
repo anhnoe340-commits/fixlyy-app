@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'voice-preview', 3, 60_000)) return TOO_MANY_REQUESTS(cors)
+  if (!(await checkRateLimit(ip, 'voice-preview', 3, 60_000))) return TOO_MANY_REQUESTS(cors)
 
   try {
     const { voice, text } = await req.json()

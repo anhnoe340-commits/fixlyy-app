@@ -32,7 +32,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'notify-human-help', 5, 60_000)) return TOO_MANY_REQUESTS(cors)
+  if (!(await checkRateLimit(ip, 'notify-human-help', 5, 60_000))) return TOO_MANY_REQUESTS(cors)
 
   try {
     const auth = req.headers.get('Authorization')

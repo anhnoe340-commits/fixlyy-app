@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors })
 
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'demo-call', 3, 3_600_000)) return TOO_MANY_REQUESTS(cors)
+  if (!(await checkRateLimit(ip, 'demo-call', 3, 3_600_000))) return TOO_MANY_REQUESTS(cors)
 
   const rawBody = await req.json().catch(() => null)
   const parsed  = demoSchema.safeParse(rawBody)

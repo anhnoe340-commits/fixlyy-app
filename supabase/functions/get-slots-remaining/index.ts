@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'get-slots-remaining', 10, 60_000)) return TOO_MANY_REQUESTS(cors)
+  if (!(await checkRateLimit(ip, 'get-slots-remaining', 10, 60_000))) return TOO_MANY_REQUESTS(cors)
 
   const supabase = createClient(SB_URL, SB_SERVICE)
   const month    = new Date().toISOString().slice(0, 7) // YYYY-MM

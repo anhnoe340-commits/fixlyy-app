@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
 
   // Rate limit : 3 exports / heure
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'export-data', 3, 3_600_000)) return TOO_MANY_REQUESTS(CORS)
+  if (!(await checkRateLimit(ip, 'export-data', 3, 3_600_000))) return TOO_MANY_REQUESTS(CORS)
 
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { ...CORS, 'Content-Type': 'application/json' } })

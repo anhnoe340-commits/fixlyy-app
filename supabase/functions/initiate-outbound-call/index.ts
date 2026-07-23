@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
 
   // Rate limit : max 10 appels sortants / min par IP
   const ip      = getClientIp(req)
-  const allowed = checkRateLimit(`outbound:${ip}`, 10, 60000)
+  const allowed = await checkRateLimit(`outbound:${ip}`, 10, 60000)
   if (!allowed) return TOO_MANY_REQUESTS(cors)
 
   // Auth JWT artisan

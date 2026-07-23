@@ -275,7 +275,7 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization') ?? ''
   if (authHeader !== `Bearer ${SB_SERVICE}`) {
     const ip = getClientIp(req)
-    if (!checkRateLimit(ip, 5, 60000)) return TOO_MANY_REQUESTS(corsHeaders)
+    if (!(await checkRateLimit(ip, 5, 60000))) return TOO_MANY_REQUESTS(corsHeaders)
   }
 
   const startMs = Date.now()

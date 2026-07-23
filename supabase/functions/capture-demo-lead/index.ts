@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const ip = getClientIp(req);
-  if (!checkRateLimit(ip, 'capture-demo-lead', 5, 60_000)) {
+  if (!(await checkRateLimit(ip, 'capture-demo-lead', 5, 60_000))) {
     return TOO_MANY_REQUESTS(cors);
   }
 

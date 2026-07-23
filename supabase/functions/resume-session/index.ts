@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   // Endpoint public qui déclenche un envoi SMS OTP — rate limit par IP pour
   // éviter le SMS bombing sur un resume_token connu/intercepté.
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'resume-session', 5, 60_000)) return TOO_MANY_REQUESTS(corsHeaders)
+  if (!(await checkRateLimit(ip, 'resume-session', 5, 60_000))) return TOO_MANY_REQUESTS(corsHeaders)
 
   const url = new URL(req.url)
   const token = url.searchParams.get('token')

@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
   const ip = getClientIp(req)
-  if (!checkRateLimit(ip, 'sms-reply', 10, 60_000)) return TOO_MANY_REQUESTS(CORS)
+  if (!(await checkRateLimit(ip, 'sms-reply', 10, 60_000))) return TOO_MANY_REQUESTS(CORS)
 
   try {
     const authHeader = req.headers.get('Authorization')
