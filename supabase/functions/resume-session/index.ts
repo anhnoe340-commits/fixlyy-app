@@ -1,5 +1,6 @@
 // Valide un resume_token et retourne les infos user pour reprise d'onboarding
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkRateLimit, getClientIp, TOO_MANY_REQUESTS } from '../_shared/rateLimit.ts'
 
 const SB_URL     = Deno.env.get('SUPABASE_URL')!
 const SB_SERVICE = Deno.env.get('FIXLYY_SERVICE_ROLE_KEY')!
@@ -14,6 +15,11 @@ const corsHeaders = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  // Endpoint public qui déclenche un envoi SMS OTP — rate limit par IP pour
+  // éviter le SMS bombing sur un resume_token connu/intercepté.
+  const ip = getClientIp(req)
+  if (!checkRateLimit(ip, 'resume-session', 5, 60_000)) return TOO_MANY_REQUESTS(corsHeaders)
 
   const url = new URL(req.url)
   const token = url.searchParams.get('token')
